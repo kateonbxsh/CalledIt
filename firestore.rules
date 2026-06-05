@@ -1,0 +1,117 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/adminConfig/$(request.auth.uid));
+    }
+
+    function username() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? me().data.username
+        : '';
+    }
+
+    function canReadBet() {
+      return signedIn() && (
+        resource.data.visibility == 'public' ||
+        resource.data.creatorId == request.auth.uid ||
+        username() in resource.data.invitedUsernames ||
+        isAdmin()
+      );
+    }
+
+    function canResolveBet() {
+      return signedIn()
+        && canReadBet()
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly([
+            'status',
+            'resolution',
+            'resolvedAt',
+            'resolvedBy',
+            'chanceSummary',
+            'predictionCount',
+            'totalCoinsStaked',
+            'updatedAt'
+          ]);
+    }
+
+    function canApplyResolutionToUser() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['coinBalance', 'rating', 'rank', 'stats', 'updatedAt']);
+    }
+
+    function canApplyPredictionResult() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['status', 'correct', 'coinDelta', 'ratingDelta', 'resolvedAt', 'winningOptionId']);
+    }
+
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/usernames/$(name));
+      allow update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow update: if signedIn() && (
+        (
+          request.auth.uid == userId
+          && request.resource.data.diff(resource.data).changedKeys()
+            .hasOnly(['displayName', 'photoURL', 'bio', 'updatedAt', 'lastRefillAt', 'coinBalance'])
+        ) ||
+        canApplyResolutionToUser()
+      );
+      allow delete: if false;
+    }
+
+    match /bets/{betId} {
+      allow read: if canReadBet();
+      allow create: if signedIn()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.status == 'open';
+      allow update: if isAdmin() || canResolveBet();
+      allow delete: if false;
+    }
+
+    match /predictions/{predictionId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.stake >= 10;
+      allow update: if canApplyPredictionResult();
+      allow delete: if false;
+    }
+
+    match /chanceSnapshots/{snapshotId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    match /activity/{activityId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /adminConfig/{uid} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+  }
+}
