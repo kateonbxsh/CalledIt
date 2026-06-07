@@ -436,7 +436,26 @@ export function BetDetailPage() {
 
                 <div>
                   <p className="mb-1.5 text-xs font-semibold text-ink/50">Stake</p>
-                  <input className="w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint" type="number" min={10} max={maxStake} value={stake} onChange={(e) => setStake(Number(e.target.value))} />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStake((s) => Math.max(10, s - 10))}
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-lg font-bold text-ink/60 transition hover:bg-field active:scale-95"
+                    >−</button>
+                    <input
+                      className="w-full rounded-xl border border-line bg-field px-3 py-2.5 text-center outline-none focus:border-mint"
+                      type="number"
+                      min={10}
+                      max={maxStake}
+                      value={stake}
+                      onChange={(e) => setStake(Number(e.target.value))}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setStake((s) => Math.min(maxStake, s + 10))}
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-lg font-bold text-ink/60 transition hover:bg-field active:scale-95"
+                    >+</button>
+                  </div>
                   <p className="mt-1 flex items-center gap-1 text-xs text-ink/45">
                     Max <CoinAmount amount={maxStake} className="text-xs" />
                   </p>

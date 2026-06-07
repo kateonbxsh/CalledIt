@@ -7,6 +7,18 @@ import { getLeaderboard } from '../services/userService';
 import type { UserProfile } from '../types';
 import { rankForRating, rankRanges } from '../utils/ranks';
 
+const podiumGradients = [
+  'from-[#d49a25]/20 via-[#f5c842]/10 to-transparent border-[#d49a25]/30',  // 1st — gold
+  'from-[#8c98a5]/15 via-[#c0ccd4]/8 to-transparent border-[#8c98a5]/25',   // 2nd — silver
+  'from-[#8f5f3d]/15 via-[#c49070]/8 to-transparent border-[#8f5f3d]/25',   // 3rd — bronze
+];
+
+const podiumNumbers = [
+  <span key="1" className="text-[#d49a25] font-black text-lg">🥇</span>,
+  <span key="2" className="text-[#8c98a5] font-black text-lg">🥈</span>,
+  <span key="3" className="text-[#8f5f3d] font-black text-lg">🥉</span>,
+];
+
 export function LeaderboardPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,40 +32,64 @@ export function LeaderboardPage() {
   return (
     <>
       <PageHeader title="Leaderboard" />
-      <div className="mb-4 rounded-md border border-line bg-white p-3">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-sm font-black">Rating/ELO ranges</p>
-          <p className="text-xs font-semibold text-ink/55">1000 starts Bronze</p>
-        </div>
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
-          {rankRanges.map((item) => (
-            <div key={item.rank} className="flex items-center justify-between gap-1 rounded-md border border-line bg-field px-1.5 py-1">
-              <RankBadge rank={item.rank} />
-              <span className="truncate text-[10px] font-semibold text-ink/55">{item.range.replace(' ELO', '')}</span>
-            </div>
-          ))}
-        </div>
+
+      {/* Rank legend — compact horizontal strip */}
+      <div className="mb-5 flex flex-wrap gap-1.5">
+        {rankRanges.map((r) => (
+          <div key={r.rank} className="flex items-center gap-1.5 rounded-xl border border-line bg-white px-2.5 py-1.5 shadow-soft">
+            <RankBadge rank={r.rank} />
+            <span className="text-xs text-ink/45 whitespace-nowrap">{r.range.replace(' ELO', '')}</span>
+          </div>
+        ))}
       </div>
-      <div className="overflow-hidden rounded-md border border-line bg-white">
+
+      {/* Player list */}
+      <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
         {loading ? (
-          <div className="h-56 animate-pulse bg-white" />
+          <div className="space-y-px">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-16 animate-pulse bg-white" />
+            ))}
+          </div>
         ) : (
-          <div className="divide-y divide-line">
+          <div className="divide-y divide-line/60">
             {users.map((user, index) => {
               const rank = rankForRating(user.rating);
+              const isPodium = index < 3;
+              const gradient = isPodium ? podiumGradients[index] : null;
+
               return (
-                <div key={user.uid} className="grid grid-cols-[36px_44px_1fr_auto] items-center gap-3 p-3 sm:p-4">
-                  <span className="text-sm font-bold text-ink/50">#{index + 1}</span>
-                  <Avatar name={user.displayName} src={user.photoURL} />
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{user.displayName}</p>
-                    <p className="truncate text-sm text-ink/55">@{user.username}</p>
+                <div
+                  key={user.uid}
+                  className={`relative flex items-center gap-3 px-4 py-3 ${
+                    isPodium ? `bg-gradient-to-r ${gradient} border-l-2` : ''
+                  }`}
+                >
+                  {/* Position */}
+                  <div className="w-8 shrink-0 text-center">
+                    {isPodium
+                      ? podiumNumbers[index]
+                      : <span className="text-sm font-bold text-ink/35">#{index + 1}</span>
+                    }
                   </div>
-                  <div className="text-right">
+
+                  {/* Avatar */}
+                  <Avatar name={user.displayName} src={user.photoURL} round />
+
+                  {/* Name + username */}
+                  <div className="min-w-0 flex-1">
+                    <p className={`truncate font-bold ${isPodium ? 'text-ink' : 'text-ink/80'}`}>
+                      {user.displayName}
+                    </p>
+                    <p className="truncate text-xs text-ink/40">@{user.username}</p>
+                  </div>
+
+                  {/* Right side: rank badge + ELO + coins */}
+                  <div className="shrink-0 text-right">
                     <div className="mb-1 flex justify-end">
                       <RankBadge rank={rank} />
                     </div>
-                    <p className="text-sm font-black">{user.rating} ELO</p>
+                    <p className="text-sm font-black text-ink/80">{user.rating} ELO</p>
                     <CoinAmount amount={user.coinBalance} className="justify-end text-xs" />
                   </div>
                 </div>
