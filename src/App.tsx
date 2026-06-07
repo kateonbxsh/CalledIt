@@ -6,6 +6,7 @@ import { AuthPage } from './pages/AuthPage';
 import { BetDetailPage } from './pages/BetDetailPage';
 import { CreateBetPage } from './pages/CreateBetPage';
 import { FeedPage } from './pages/FeedPage';
+import { FriendGroupsPage } from './pages/FriendGroupsPage';
 import { HowToPlayPage } from './pages/HowToPlayPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { MyBetsPage } from './pages/MyBetsPage';
@@ -36,6 +37,7 @@ export function App() {
         <Route path="private" element={<FeedPage scope="private" />} />
         <Route path="mine" element={<MyBetsPage />} />
         <Route path="history" element={<PredictionHistoryPage />} />
+        <Route path="groups" element={<FriendGroupsPage />} />
         <Route path="create" element={<CreateBetPage />} />
         <Route path="bets/:betId" element={<BetDetailPage />} />
         <Route path="leaderboard" element={<LeaderboardPage />} />

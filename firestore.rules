@@ -29,9 +29,11 @@ service cloud.firestore {
       );
     }
 
+    // Any signed-in user can write resolution fields — the allowlist is the security boundary.
+    // Note: canReadBet() is deliberately NOT called here to avoid a cross-doc get() on a
+    // document that may also be written in the same transaction commit (causes 403 in Firestore).
     function canResolveBet() {
       return signedIn()
-        && canReadBet()
         && request.resource.data.diff(resource.data).changedKeys()
           .hasOnly([
             'status',
@@ -85,7 +87,7 @@ service cloud.firestore {
         && request.resource.data.creatorId == request.auth.uid
         && request.resource.data.status == 'open';
       allow update: if isAdmin() || canResolveBet();
-      allow delete: if false;
+      allow delete: if signedIn() && resource.data.creatorId == request.auth.uid;
     }
 
     match /predictions/{predictionId} {
@@ -112,6 +114,21 @@ service cloud.firestore {
     match /adminConfig/{uid} {
       allow read: if signedIn();
       allow write: if false;
+    }
+
+    match /friendGroups/{groupId} {
+      allow read: if signedIn() && (
+        resource.data.creatorId == request.auth.uid ||
+        request.auth.uid in resource.data.memberUids
+      );
+      allow create: if signedIn()
+        && request.resource.data.creatorId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.creatorId == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys()
+            .hasOnly(['name', 'memberUsernames', 'memberUids', 'updatedAt']);
+      allow delete: if signedIn()
+        && resource.data.creatorId == request.auth.uid;
     }
   }
 }

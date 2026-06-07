@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -33,6 +34,13 @@ import {
 import { applyRatingDelta, calculateRatingDelta } from '../utils/rating';
 import { rankForRating } from '../utils/ranks';
 import { calculateSportsScoreBonus } from '../utils/sportsBonus';
+import type { ScoreBonusResult } from '../utils/sportsBonus';
+import {
+  calculateClosestPayouts,
+  resolveClosestDate,
+  resolveClosestNumber,
+} from '../utils/closestGuess';
+import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution } from './userService';
 
 export async function createBet(input: CreateBetInput, creator: UserProfile) {
@@ -49,6 +57,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     chanceSummary: calculateChanceSummary(input.options, []),
     resolution: null,
     resolvedAt: null,
+    groupId: input.groupId ?? null,
     createdAt: now,
     updatedAt: now,
   });
@@ -70,44 +79,18 @@ export async function listFeedBets(scope: 'public' | 'private', user: UserProfil
   const betsRef = collection(db, 'bets');
 
   if (scope === 'public') {
-    const snap = await getDocs(
-      query(
-        betsRef,
-        where('visibility', '==', 'public'),
-        limit(80),
-      ),
-    );
+    const snap = await getDocs(query(betsRef, where('visibility', '==', 'public'), limit(80)));
     return sortedBetsFromSnapshot(snap);
   }
 
   if (user.isAdmin) {
-    const snap = await getDocs(
-      query(
-        betsRef,
-        where('visibility', '==', 'private'),
-        limit(80),
-      ),
-    );
+    const snap = await getDocs(query(betsRef, where('visibility', '==', 'private'), limit(80)));
     return sortedBetsFromSnapshot(snap);
   }
 
   const [createdSnap, invitedSnap] = await Promise.all([
-    getDocs(
-      query(
-        betsRef,
-        where('visibility', '==', 'private'),
-        where('creatorId', '==', user.uid),
-        limit(80),
-      ),
-    ),
-    getDocs(
-      query(
-        betsRef,
-        where('visibility', '==', 'private'),
-        where('invitedUsernames', 'array-contains', user.username),
-        limit(80),
-      ),
-    ),
+    getDocs(query(betsRef, where('visibility', '==', 'private'), where('creatorId', '==', user.uid), limit(80))),
+    getDocs(query(betsRef, where('visibility', '==', 'private'), where('invitedUsernames', 'array-contains', user.username), limit(80))),
   ]);
 
   return uniqueBets([
@@ -141,17 +124,12 @@ export async function getBetsByIds(ids: string[]) {
       return snap.exists() ? ([id, { id: snap.id, ...snap.data() } as Bet] as const) : null;
     }),
   );
-
   return new Map(pairs.filter((pair): pair is readonly [string, Bet] => pair !== null));
 }
 
 export async function listChanceSnapshots(betId: string) {
   const snap = await getDocs(
-    query(
-      collection(db, 'chanceSnapshots'),
-      where('betId', '==', betId),
-      limit(80),
-    ),
+    query(collection(db, 'chanceSnapshots'), where('betId', '==', betId), limit(80)),
   );
   return snap.docs
     .map((item) => ({ id: item.id, ...item.data() }) as ChanceSnapshot)
@@ -163,6 +141,7 @@ export async function placePrediction(input: PredictionInput) {
   const betRef = doc(db, 'bets', input.bet.id);
   const userRef = doc(db, 'users', input.user.uid);
   const snapshotRef = doc(collection(db, 'chanceSnapshots'));
+  const closest = isClosestType(input.bet.type);
 
   await runTransaction(db, async (transaction) => {
     const [predictionSnap, betSnap, userSnap] = await Promise.all([
@@ -185,44 +164,26 @@ export async function placePrediction(input: PredictionInput) {
     const previousPredictions = await getDocs(
       query(collection(db, 'predictions'), where('betId', '==', bet.id)),
     );
-    const existing = previousPredictions.docs.map(
-      (item) => ({ id: item.id, ...item.data() }) as Prediction,
-    );
-    const displayedChanceAtBetTime = chanceForOption(bet.chanceSummary, input.optionId);
-    const nextPredictions = [
-      ...existing,
-      {
-        id: predictionRef.id,
-        betId: bet.id,
-        userId: user.uid,
-        username: user.username,
-        optionId: input.optionId,
-        stake: input.stake,
-        userBalanceAtBetTime: user.coinBalance,
-        displayedChanceAtBetTime,
-        status: 'pending',
-        scorePrediction: input.scorePrediction,
-        createdAt: Timestamp.now(),
-      } as Prediction,
-    ];
-    const elapsedMs = Timestamp.now().toMillis() - bet.updatedAt.toMillis();
-    const chanceSummary = calculateSmoothedChanceSummary({
-      options: bet.options,
-      predictions: nextPredictions,
-      previousSummary: bet.chanceSummary,
-      elapsedMs,
-    });
+    const existing = previousPredictions.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
+
+    const effectiveOptionId = closest ? 'guess' : input.optionId;
+    const displayedChanceAtBetTime = closest
+      ? 1 / (existing.length + 1)
+      : chanceForOption(bet.chanceSummary, input.optionId);
 
     transaction.set(predictionRef, {
       betId: bet.id,
       userId: user.uid,
       username: user.username,
-      optionId: input.optionId,
+      optionId: effectiveOptionId,
       stake: input.stake,
       userBalanceAtBetTime: user.coinBalance,
       displayedChanceAtBetTime,
+      userRating: user.rating,
       status: 'pending',
       scorePrediction: input.scorePrediction ?? null,
+      numericGuess: input.numericGuess ?? null,
+      dateGuess: input.dateGuess ?? null,
       createdAt: serverTimestamp(),
     });
 
@@ -231,18 +192,50 @@ export async function placePrediction(input: PredictionInput) {
       updatedAt: serverTimestamp(),
     });
 
-    transaction.update(betRef, {
-      predictionCount: increment(1),
-      totalCoinsStaked: increment(input.stake),
-      chanceSummary,
-      updatedAt: serverTimestamp(),
-    });
+    if (closest) {
+      transaction.update(betRef, {
+        predictionCount: increment(1),
+        totalCoinsStaked: increment(input.stake),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      const nextPredictions = [
+        ...existing,
+        {
+          id: predictionRef.id,
+          betId: bet.id,
+          userId: user.uid,
+          username: user.username,
+          optionId: effectiveOptionId,
+          stake: input.stake,
+          userBalanceAtBetTime: user.coinBalance,
+          displayedChanceAtBetTime,
+          userRating: user.rating,
+          status: 'pending',
+          createdAt: Timestamp.now(),
+        } as Prediction,
+      ];
+      const elapsedMs = Timestamp.now().toMillis() - bet.updatedAt.toMillis();
+      const chanceSummary = calculateSmoothedChanceSummary({
+        options: bet.options,
+        predictions: nextPredictions,
+        previousSummary: bet.chanceSummary,
+        elapsedMs,
+      });
 
-    transaction.set(snapshotRef, {
-      betId: bet.id,
-      summary: chanceSummary,
-      createdAt: serverTimestamp(),
-    });
+      transaction.update(betRef, {
+        predictionCount: increment(1),
+        totalCoinsStaked: increment(input.stake),
+        chanceSummary,
+        updatedAt: serverTimestamp(),
+      });
+
+      transaction.set(snapshotRef, {
+        betId: bet.id,
+        summary: chanceSummary,
+        createdAt: serverTimestamp(),
+      });
+    }
   });
 }
 
@@ -256,18 +249,8 @@ export async function lockExpiredBet(bet: Bet) {
 }
 
 export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUid: string) {
-  // Check permissions first
-  const resolverRef = doc(db, 'users', resolverUid);
-  const resolverSnap = await getDoc(resolverRef);
-  if (!resolverSnap.exists()) throw new Error('Resolver profile not found.');
-  const resolver = resolverSnap.data() as UserProfile;
-  
-  // Only the bet creator or admins can resolve
-  if (resolver.uid !== bet.creatorId && !resolver.isAdmin) {
-    throw new Error('Only the bet creator can resolve this bet.');
-  }
-
   const betRef = doc(db, 'bets', bet.id);
+  const closest = isClosestType(bet.type);
 
   await runTransaction(db, async (transaction) => {
     const betSnap = await transaction.get(betRef);
@@ -278,14 +261,26 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
     const predictionSnap = await getDocs(
       query(collection(db, 'predictions'), where('betId', '==', bet.id)),
     );
-    const predictions = predictionSnap.docs.map(
-      (item) => ({ id: item.id, ...item.data() }) as Prediction,
-    );
-    const losingStakeTotal = predictions
-      .filter((prediction) => prediction.optionId !== resolution.winningOptionId)
-      .reduce((sum, prediction) => sum + prediction.stake, 0);
-    const sportsBonus =
-      freshBet.type === 'sports'
+    const predictions = predictionSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
+
+    // --- Determine winners and payouts ---
+    let winnerPredictionIds: string[] = [];
+    let coinPayouts: Array<{ userId: string; predictionId: string; coinDelta: number; isWinner: boolean; stake: number }>;
+    let scoreBonusResult: ScoreBonusResult = { bonusPool: 0, winners: [] };
+
+    if (closest) {
+      if (bet.type === 'closestNumber' && resolution.actualValue !== undefined) {
+        winnerPredictionIds = resolveClosestNumber(predictions, resolution.actualValue).winnerPredictionIds;
+      } else if (bet.type === 'closestDate' && resolution.actualDateValue) {
+        winnerPredictionIds = resolveClosestDate(predictions, resolution.actualDateValue).winnerPredictionIds;
+      }
+      coinPayouts = calculateClosestPayouts(predictions, winnerPredictionIds);
+    } else {
+      const losingStakeTotal = predictions
+        .filter((p) => p.optionId !== resolution.winningOptionId)
+        .reduce((sum, p) => sum + p.stake, 0);
+
+      scoreBonusResult = freshBet.type === 'sports'
         ? calculateSportsScoreBonus({
             predictions,
             winningOptionId: resolution.winningOptionId,
@@ -294,30 +289,43 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
             losingStakeTotal,
           })
         : { bonusPool: 0, winners: [] };
-    const payouts = calculateCoinPayouts(
-      predictions,
-      resolution.winningOptionId,
-      sportsBonus.bonusPool,
-    );
 
+      coinPayouts = calculateCoinPayouts(predictions, resolution.winningOptionId, scoreBonusResult.bonusPool).map((p) => ({
+        userId: p.userId,
+        predictionId: p.predictionId,
+        coinDelta: p.coinDelta + (scoreBonusResult.winners.find((w) => w.predictionId === p.predictionId)?.coinBonus ?? 0),
+        isWinner: p.isWinner,
+        stake: p.stake,
+      }));
+    }
+
+    const finalResolution: BetResolution = {
+      ...resolution,
+      winnerPredictionIds: closest ? winnerPredictionIds : undefined,
+    };
+
+    // --- Apply results to each predictor ---
     for (const prediction of predictions) {
       const userRef = doc(db, 'users', prediction.userId);
       const userSnap = await transaction.get(userRef);
       if (!userSnap.exists()) continue;
       const user = userSnap.data() as UserProfile;
-      const payout = payouts.find((item) => item.predictionId === prediction.id);
-      const scoreBonus = sportsBonus.winners.find((item) => item.predictionId === prediction.id);
-      const correct = prediction.optionId === resolution.winningOptionId;
-      const ratingDelta =
-        calculateRatingDelta({
-          displayedChanceAtBetTime: prediction.displayedChanceAtBetTime,
-          correct,
-          stake: prediction.stake,
-          userCoinBalanceAtBetTime: prediction.userBalanceAtBetTime,
-          currentRating: user.rating,
-        }) + (scoreBonus?.ratingBonus ?? 0);
+
+      const correct = closest
+        ? winnerPredictionIds.includes(prediction.id)
+        : prediction.optionId === resolution.winningOptionId;
+
+      const scoreBonus = scoreBonusResult.winners.find((w) => w.predictionId === prediction.id);
+      let ratingDelta = calculateRatingDelta({
+        displayedChanceAtBetTime: prediction.displayedChanceAtBetTime,
+        correct,
+        stake: prediction.stake,
+        userCoinBalanceAtBetTime: prediction.userBalanceAtBetTime,
+        currentRating: user.rating,
+      }) + (scoreBonus?.ratingBonus ?? 0);
+
       const nextRating = applyRatingDelta(user.rating, ratingDelta);
-      const coinDelta = (payout?.coinDelta ?? 0) + (scoreBonus?.coinBonus ?? 0);
+      const coinDelta = coinPayouts.find((p) => p.predictionId === prediction.id)?.coinDelta ?? 0;
       const netCoinDelta = correct ? coinDelta - prediction.stake : -prediction.stake;
 
       transaction.update(userRef, {
@@ -339,13 +347,15 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
         coinDelta: netCoinDelta,
         ratingDelta,
         resolvedAt: serverTimestamp(),
-        winningOptionId: resolution.winningOptionId,
+        winningOptionId: closest
+          ? (resolution.actualValue?.toString() ?? resolution.actualDateValue ?? '')
+          : resolution.winningOptionId,
       });
     }
 
     transaction.update(betRef, {
       status: 'resolved',
-      resolution,
+      resolution: finalResolution,
       resolvedBy: resolverUid,
       resolvedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -361,4 +371,11 @@ export async function reopenBet(bet: Bet) {
     resolvedBy: null,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function deleteBet(bet: Bet) {
+  if (bet.status === 'open' && bet.predictionCount > 0) {
+    throw new Error('Cannot delete an open bet that already has predictions. Resolve it first.');
+  }
+  await deleteDoc(doc(db, 'bets', bet.id));
 }

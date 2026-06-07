@@ -7,11 +7,14 @@ import {
   YAxis,
 } from 'recharts';
 import type { Bet, ChanceSnapshot } from '../types';
+import { isClosestType } from '../utils/betTypes';
 import { asDate } from '../utils/format';
 
 const colors = ['#2f7d63', '#d95f46', '#3b75af', '#d49a25', '#6f5ca8'];
 
 export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSnapshot[] }) {
+  if (isClosestType(bet.type)) return null;
+
   const data = snapshots.map((snapshot) => {
     const point: Record<string, string | number> = {
       time: asDate(snapshot.createdAt).toLocaleDateString(undefined, {

@@ -1,6 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
-export type BetType = 'binary' | 'multi' | 'sports' | 'overUnder' | 'date';
+export type BetType = 'binary' | 'multi' | 'sports' | 'overUnder' | 'date' | 'closestNumber' | 'closestDate';
 export type BetVisibility = 'public' | 'private';
 export type BetStatus = 'open' | 'locked' | 'resolved';
 export type Rank =
@@ -76,12 +76,16 @@ export interface Bet {
   resolution?: BetResolution | null;
   resolvedBy?: string;
   resolvedAt?: Timestamp | null;
+  groupId?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
 export interface BetResolution {
   winningOptionId: string;
+  winnerPredictionIds?: string[];
+  actualValue?: number;
+  actualDateValue?: string;
   actualHomeScore?: number;
   actualAwayScore?: number;
   note?: string;
@@ -96,6 +100,7 @@ export interface Prediction {
   stake: number;
   userBalanceAtBetTime: number;
   displayedChanceAtBetTime: number;
+  userRating?: number;
   status?: 'pending' | 'won' | 'lost';
   correct?: boolean;
   coinDelta?: number;
@@ -106,6 +111,8 @@ export interface Prediction {
     home: number;
     away: number;
   };
+  numericGuess?: number;
+  dateGuess?: string;
   createdAt: Timestamp;
 }
 
@@ -130,6 +137,7 @@ export interface CreateBetInput {
   homeTeam?: string;
   awayTeam?: string;
   imageUrl?: string;
+  groupId?: string;
 }
 
 export interface PredictionInput {
@@ -141,4 +149,17 @@ export interface PredictionInput {
     home: number;
     away: number;
   };
+  numericGuess?: number;
+  dateGuess?: string;
+}
+
+export interface FriendGroup {
+  id: string;
+  name: string;
+  creatorId: string;
+  creatorUsername: string;
+  memberUsernames: string[];
+  memberUids: string[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }

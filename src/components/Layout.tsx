@@ -8,6 +8,7 @@ import {
   LogOut,
   Medal,
   User,
+  Users,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Avatar } from './Avatar';
@@ -17,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 const navItems = [
   { to: '/', label: 'Feed', icon: Home },
   { to: '/private', label: 'Private', icon: Lock },
+  { to: '/groups', label: 'Groups', icon: Users },
   { to: '/create', label: 'Create', icon: CirclePlus },
   { to: '/mine', label: 'My Bets', icon: BarChart3 },
   { to: '/history', label: 'History', icon: History },
