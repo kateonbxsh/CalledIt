@@ -32,7 +32,7 @@ export function FeedPage({ scope }: { scope: 'public' | 'private' }) {
         ]);
         await Promise.all(nextBets.map(lockExpiredBet));
         if (active) {
-          setBets(nextBets);
+          setBets(nextBets.filter((b) => b.status === 'open'));
           setPredictions(nextPredictions);
           setGroups(nextGroups);
         }

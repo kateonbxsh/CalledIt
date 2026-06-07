@@ -1,3 +1,11 @@
+import {
+  BarChart2,
+  CalendarDays,
+  Hash,
+  HelpCircle,
+  Swords,
+  TrendingUp,
+} from 'lucide-react';
 import type { BetType } from '../types';
 
 export const betTypeOptions: Array<{
@@ -13,6 +21,19 @@ export const betTypeOptions: Array<{
   { type: 'closestNumber', label: 'Closest Number', description: 'Guess the number, closest wins' },
   { type: 'closestDate', label: 'Closest Date', description: 'Guess the date, closest wins' },
 ];
+
+export const betTypeMeta: Record<
+  BetType,
+  { icon: React.ElementType; color: string; bg: string }
+> = {
+  binary:        { icon: HelpCircle,   color: 'text-mint',   bg: 'bg-mint/12'   },
+  sports:        { icon: Swords,       color: 'text-sky',    bg: 'bg-sky/12'    },
+  overUnder:     { icon: TrendingUp,   color: 'text-citrus', bg: 'bg-citrus/12' },
+  date:          { icon: CalendarDays, color: 'text-plum',   bg: 'bg-plum/12'   },
+  multi:         { icon: BarChart2,    color: 'text-coral',  bg: 'bg-coral/12'  },
+  closestNumber: { icon: Hash,         color: 'text-aqua',   bg: 'bg-aqua/12'   },
+  closestDate:   { icon: CalendarDays, color: 'text-aqua',   bg: 'bg-aqua/12'   },
+};
 
 export function betTypeLabel(type: BetType) {
   return betTypeOptions.find((item) => item.type === type)?.label ?? 'Bet';

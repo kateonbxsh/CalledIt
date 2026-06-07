@@ -376,16 +376,32 @@ export function BetDetailPage() {
               </div>
             ) : canPredict ? (
               <form className="space-y-3" onSubmit={submitPrediction}>
-                {/* Standard option picker */}
+                {/* Option tile picker */}
                 {!closest ? (
-                  <label className="block text-sm font-medium">
-                    Pick
-                    <select className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={selected} onChange={(e) => setSelected(e.target.value)}>
-                      {bet.options.map((option) => (
-                        <option key={option.id} value={option.id}>{option.label}</option>
-                      ))}
-                    </select>
-                  </label>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold text-ink/50">Your pick</p>
+                    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(bet.options.length, 2)}, 1fr)` }}>
+                      {bet.options.map((option) => {
+                        const chance = chanceForOption(bet.chanceSummary, option.id);
+                        const isSelected = selected === option.id;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => setSelected(option.id)}
+                            className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${
+                              isSelected
+                                ? 'border-ink bg-ink text-white'
+                                : 'border-line bg-field hover:border-ink/30 hover:bg-white'
+                            }`}
+                          >
+                            <p className={`truncate text-xs ${isSelected ? 'text-white/70' : 'text-ink/50'}`}>{option.label}</p>
+                            <p className={`mt-0.5 text-base font-black ${isSelected ? 'text-white' : 'text-ink'}`}>{percent(chance)}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ) : null}
 
                 {/* Closest number guess */}
@@ -393,7 +409,7 @@ export function BetDetailPage() {
                   <label className="block text-sm font-medium">
                     Your number guess
                     <input
-                      className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
+                      className="mt-1 w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
                       type="number"
                       step="any"
                       value={numericGuess}
@@ -409,7 +425,7 @@ export function BetDetailPage() {
                   <label className="block text-sm font-medium">
                     Your date guess
                     <input
-                      className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
+                      className="mt-1 w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
                       type="date"
                       value={dateGuess}
                       onChange={(e) => setDateGuess(e.target.value)}
@@ -418,38 +434,38 @@ export function BetDetailPage() {
                   </label>
                 ) : null}
 
-                <label className="block text-sm font-medium">
-                  Stake
-                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="number" min={10} max={maxStake} value={stake} onChange={(e) => setStake(Number(e.target.value))} />
-                  <span className="mt-1 flex items-center gap-1 text-xs text-ink/55">
-                    Max now <CoinAmount amount={maxStake} className="text-xs" />
-                  </span>
-                </label>
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold text-ink/50">Stake</p>
+                  <input className="w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint" type="number" min={10} max={maxStake} value={stake} onChange={(e) => setStake(Number(e.target.value))} />
+                  <p className="mt-1 flex items-center gap-1 text-xs text-ink/45">
+                    Max <CoinAmount amount={maxStake} className="text-xs" />
+                  </p>
+                </div>
 
-                {!closest ? (
-                  <div className="rounded-md border border-line bg-field p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold text-ink/65">Estimate if {selectedOption?.label ?? 'this pick'} wins</span>
-                      <span className="text-xs font-black text-ink/45">{percent(selectedChance)}</span>
+                {!closest && selectedChance > 0 ? (
+                  <div className="rounded-xl bg-field px-3 py-2.5 text-xs text-ink/60">
+                    <div className="flex items-center justify-between">
+                      <span>Est. profit if <span className="font-semibold text-ink/80">{selectedOption?.label}</span> wins</span>
+                      <CoinAmount amount={estimatedProfit} className="text-xs" />
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink/55">
-                      <span className="inline-flex items-center gap-1">Profit about <CoinAmount amount={estimatedProfit} className="text-xs" /></span>
-                      <span className="inline-flex items-center gap-1">Return about <CoinAmount amount={estimatedReturn} className="text-xs" /></span>
+                    <div className="mt-1 flex items-center justify-between text-ink/45">
+                      <span>Total return</span>
+                      <CoinAmount amount={estimatedReturn} className="text-xs" />
                     </div>
                   </div>
                 ) : null}
 
                 {bet.type === 'sports' && bet.allowExactScore ? (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-ink/55">Score prediction</p>
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold text-ink/50">Score prediction (optional bonus)</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <input className="rounded-md border border-line bg-field px-3 py-2" type="number" min={0} placeholder={bet.homeTeam || 'Team 1'} value={homeScore} onChange={(e) => setHomeScore(e.target.value)} />
-                      <input className="rounded-md border border-line bg-field px-3 py-2" type="number" min={0} placeholder={bet.awayTeam || 'Team 2'} value={awayScore} onChange={(e) => setAwayScore(e.target.value)} />
+                      <input className="rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint" type="number" min={0} placeholder={bet.homeTeam || 'Team 1'} value={homeScore} onChange={(e) => setHomeScore(e.target.value)} />
+                      <input className="rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint" type="number" min={0} placeholder={bet.awayTeam || 'Team 2'} value={awayScore} onChange={(e) => setAwayScore(e.target.value)} />
                     </div>
                   </div>
                 ) : null}
 
-                <button disabled={busy} className="w-full rounded-md bg-ink px-4 py-3 font-semibold text-white disabled:opacity-60">
+                <button disabled={busy} className="w-full rounded-xl bg-ink px-4 py-3 font-bold text-white disabled:opacity-60">
                   {busy ? 'Submitting…' : 'Submit prediction'}
                 </button>
               </form>
