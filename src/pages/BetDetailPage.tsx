@@ -80,6 +80,7 @@ export function BetDetailPage() {
   );
   const maxStake = profile ? maxStakeForBalance(profile.coinBalance) : 0;
   const canPredict = bet?.status === 'open' && !myPrediction;
+  const canResolve = profile && bet && (profile.isAdmin || profile.uid === bet.creatorId);
   const selectedChance = bet ? chanceForOption(bet.chanceSummary, selected) : 0;
   const estimatedProfit = selectedChance > 0 ? Math.max(0, Math.floor(stake * (1 / selectedChance - 1))) : 0;
   const estimatedReturn = stake + estimatedProfit;
@@ -189,7 +190,7 @@ export function BetDetailPage() {
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-black tracking-normal sm:text-3xl">{bet.title}</h1>
             <p className="mt-1 text-sm text-ink/65">
-              {bet.category || 'General'} - {bet.status} - deadline {relativeTime(bet.deadline)}
+              {bet.category || 'General'} - {bet.status} {bet.deadline ? `- deadline ${relativeTime(bet.deadline)}` : '- no deadline'}
             </p>
           </div>
         </div>
@@ -219,7 +220,11 @@ export function BetDetailPage() {
           </div>
 
           <div className="animate-soft-enter rounded-md border border-line bg-white p-4">
-            <p className="whitespace-pre-wrap text-sm leading-6 text-ink/75">{bet.description}</p>
+            {bet.description ? (
+              <p className="whitespace-pre-wrap text-sm leading-6 text-ink/75">{bet.description}</p>
+            ) : (
+              <p className="text-sm text-ink/50 italic">No description provided</p>
+            )}
           </div>
           <div className="rounded-md border border-line bg-white p-4">
             <h2 className="mb-3 font-bold">Option Breakdown</h2>
@@ -317,7 +322,9 @@ export function BetDetailPage() {
 
           <section className="rounded-md border border-line bg-white p-4">
             <h2 className="mb-3 font-bold">Resolve</h2>
-            {bet.status === 'resolved' ? (
+            {!canResolve ? (
+              <p className="text-sm text-ink/60">Only the bet creator can resolve this bet.</p>
+            ) : bet.status === 'resolved' ? (
               <p className="text-sm text-ink/70">
                 Winning option: {bet.options.find((option) => option.id === bet.resolution?.winningOptionId)?.label}
               </p>

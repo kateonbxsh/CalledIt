@@ -38,11 +38,11 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
           <span className="rounded-full bg-field px-2 py-1 font-semibold text-ink/60">
             {betTypeLabel(bet.type)}
           </span>
-          <span className="text-ink/50">{relativeTime(bet.deadline)}</span>
+          {bet.deadline && <span className="text-ink/50">{relativeTime(bet.deadline)}</span>}
         </div>
 
         <h2 className="truncate text-base font-black sm:text-lg">{bet.title}</h2>
-        <p className="mt-1 line-clamp-1 text-sm text-ink/60">{bet.description}</p>
+        <p className="mt-1 line-clamp-1 text-sm text-ink/60">{bet.description || '—'}</p>
 
         <div className="mt-3 grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 text-xs text-ink/55">
           <span className="inline-flex items-center gap-1">

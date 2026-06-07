@@ -42,7 +42,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     creatorId: creator.uid,
     creatorUsername: creator.username,
     invitedUsernames: input.invitedUsernames.map((name) => name.trim().toLowerCase()).filter(Boolean),
-    deadline: Timestamp.fromDate(input.deadline),
+    deadline: input.deadline ? Timestamp.fromDate(input.deadline) : null,
     status: 'open',
     predictionCount: 0,
     totalCoinsStaked: 0,
@@ -178,7 +178,7 @@ export async function placePrediction(input: PredictionInput) {
     const bet = { id: betSnap.id, ...betSnap.data() } as Bet;
     const user = userSnap.data() as UserProfile;
     if (bet.status !== 'open') throw new Error('This bet is not open.');
-    if (Timestamp.now().toMillis() >= bet.deadline.toMillis()) throw new Error('The deadline has passed.');
+    if (bet.deadline && Timestamp.now().toMillis() >= bet.deadline.toMillis()) throw new Error('The deadline has passed.');
     if (input.stake < 10) throw new Error('Minimum stake is 10 coins.');
     if (input.stake > user.coinBalance) throw new Error('Insufficient coins.');
 
@@ -248,7 +248,7 @@ export async function placePrediction(input: PredictionInput) {
 
 export async function lockExpiredBet(bet: Bet) {
   if (bet.status !== 'open') return;
-  if (Date.now() < bet.deadline.toMillis()) return;
+  if (!bet.deadline || Date.now() < bet.deadline.toMillis()) return;
   await updateDoc(doc(db, 'bets', bet.id), {
     status: 'locked',
     updatedAt: serverTimestamp(),
@@ -256,6 +256,17 @@ export async function lockExpiredBet(bet: Bet) {
 }
 
 export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUid: string) {
+  // Check permissions first
+  const resolverRef = doc(db, 'users', resolverUid);
+  const resolverSnap = await getDoc(resolverRef);
+  if (!resolverSnap.exists()) throw new Error('Resolver profile not found.');
+  const resolver = resolverSnap.data() as UserProfile;
+  
+  // Only the bet creator or admins can resolve
+  if (resolver.uid !== bet.creatorId && !resolver.isAdmin) {
+    throw new Error('Only the bet creator can resolve this bet.');
+  }
+
   const betRef = doc(db, 'bets', bet.id);
 
   await runTransaction(db, async (transaction) => {

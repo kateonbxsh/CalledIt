@@ -56,7 +56,7 @@ export interface Bet {
   id: string;
   type: BetType;
   title: string;
-  description: string;
+  description?: string;
   category: string;
   creatorId: string;
   creatorUsername: string;
@@ -68,7 +68,7 @@ export interface Bet {
   homeTeam?: string;
   awayTeam?: string;
   imageUrl?: string;
-  deadline: Timestamp;
+  deadline?: Timestamp;
   status: BetStatus;
   predictionCount: number;
   totalCoinsStaked: number;
@@ -119,9 +119,9 @@ export interface ChanceSnapshot {
 export interface CreateBetInput {
   type: BetType;
   title: string;
-  description: string;
+  description?: string;
   category: string;
-  deadline: Date;
+  deadline?: Date;
   visibility: BetVisibility;
   invitedUsernames: string[];
   options: BetOption[];

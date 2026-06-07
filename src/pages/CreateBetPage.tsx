@@ -42,8 +42,8 @@ export function CreateBetPage() {
     }
     if (type === 'sports') {
       const base: BetOption[] = [
-        { id: 'home', label: homeTeam || 'Team A', teamSide: 'home' },
-        { id: 'away', label: awayTeam || 'Team B', teamSide: 'away' },
+        { id: 'home', label: homeTeam || 'Team/Player 1', teamSide: 'home' },
+        { id: 'away', label: awayTeam || 'Team/Player 2', teamSide: 'away' },
       ];
       if (allowDraw) base.push({ id: 'draw', label: 'Draw', teamSide: 'draw' });
       return base;
@@ -80,9 +80,9 @@ export function CreateBetPage() {
         {
           type,
           title,
-          description,
+          description: description || undefined,
           category,
-          deadline: new Date(deadline),
+          deadline: deadline ? new Date(deadline) : undefined,
           visibility,
           invitedUsernames: invited.split(',').map((name) => name.trim()).filter(Boolean),
           options,
@@ -144,8 +144,8 @@ export function CreateBetPage() {
           </label>
           <label className="block text-sm font-medium">
             Description
-            <textarea className="mt-1 min-h-28 w-full rounded-md border border-line bg-field px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} required />
-            <span className="mt-1 block text-xs text-ink/50">Add context, rules, or what counts as a win</span>
+            <textarea className="mt-1 min-h-28 w-full rounded-md border border-line bg-field px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} />
+            <span className="mt-1 block text-xs text-ink/50">Optional: Add context, rules, or what counts as a win</span>
           </label>
           <div>
             <label className="block text-sm font-medium">
@@ -180,8 +180,8 @@ export function CreateBetPage() {
             </label>
             <label className="block text-sm font-medium">
               Deadline
-              <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="datetime-local" value={deadline} onChange={(event) => setDeadline(event.target.value)} required />
-              <span className="mt-1 block text-xs text-ink/50">Predictions close at this time</span>
+              <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="datetime-local" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+              <span className="mt-1 block text-xs text-ink/50">Optional: If not set, the bet stays open indefinitely</span>
             </label>
           </div>
           {type === 'multi' ? (
@@ -209,14 +209,14 @@ export function CreateBetPage() {
             <div className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm font-medium">
-                  Team A
-                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={homeTeam} onChange={(event) => setHomeTeam(event.target.value)} required />
-                  <span className="mt-1 block text-xs text-ink/50">Home or first team</span>
+                  Team/Player 1
+                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={homeTeam} onChange={(event) => setHomeTeam(event.target.value)} placeholder="e.g., Manchester United" required />
+                  <span className="mt-1 block text-xs text-ink/50">The actual team or player name</span>
                 </label>
                 <label className="block text-sm font-medium">
-                  Team B
-                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={awayTeam} onChange={(event) => setAwayTeam(event.target.value)} required />
-                  <span className="mt-1 block text-xs text-ink/50">Away or second team</span>
+                  Team/Player 2
+                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={awayTeam} onChange={(event) => setAwayTeam(event.target.value)} placeholder="e.g., Liverpool" required />
+                  <span className="mt-1 block text-xs text-ink/50">The actual team or player name</span>
                 </label>
               </div>
               <label className="flex items-center gap-2 text-sm">
