@@ -1,9 +1,10 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Layout } from './components/Layout';
 import { useAuth } from './contexts/AuthContext';
 import { AuthPage } from './pages/AuthPage';
 import { BetDetailPage } from './pages/BetDetailPage';
+import { CompleteProfilePage } from './pages/CompleteProfilePage';
 import { CreateBetPage } from './pages/CreateBetPage';
 import { FeedPage } from './pages/FeedPage';
 import { FriendGroupsPage } from './pages/FriendGroupsPage';
@@ -15,9 +16,13 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 
 function PrivateRoute({ children }: { children: ReactNode }) {
-  const { authUser, loading } = useAuth();
+  const { authUser, profile, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <div className="p-6 text-sm text-ink/70">Loading...</div>;
   if (!authUser) return <Navigate to="/auth" replace />;
+  if (!profile && location.pathname !== '/complete-profile') {
+    return <Navigate to="/complete-profile" replace />;
+  }
   return children;
 }
 
@@ -25,6 +30,14 @@ export function App() {
   return (
     <Routes>
       <Route path="/auth" element={<AuthPage />} />
+      <Route
+        path="/complete-profile"
+        element={
+          <PrivateRoute>
+            <CompleteProfilePage />
+          </PrivateRoute>
+        }
+      />
       <Route
         path="/"
         element={

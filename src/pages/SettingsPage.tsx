@@ -1,16 +1,17 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
 import { RankBadge } from '../components/RankBadge';
 import { useAuth } from '../contexts/AuthContext';
-import { claimDailyRefill, updateProfile } from '../services/userService';
+import { claimDailyRefill, updateProfile, updateUsername } from '../services/userService';
 import { downscaleProfileImage } from '../utils/image';
 import { rankForRating, rankProgress } from '../utils/ranks';
 
 export function SettingsPage() {
   const { profile, logout } = useAuth();
+  const [username, setUsername] = useState(profile?.username ?? '');
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
   const [photoURL, setPhotoURL] = useState(profile?.photoURL ?? '');
@@ -18,9 +19,19 @@ export function SettingsPage() {
   const [imageBusy, setImageBusy] = useState(false);
   const progress = useMemo(() => rankProgress(profile?.rating ?? 1000), [profile?.rating]);
 
+  useEffect(() => {
+    setUsername(profile?.username ?? '');
+    setDisplayName(profile?.displayName ?? '');
+    setBio(profile?.bio ?? '');
+    setPhotoURL(profile?.photoURL ?? '');
+  }, [profile]);
+
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!profile) return;
+    if (username.trim().toLowerCase() !== profile.username) {
+      await updateUsername(profile, username);
+    }
     await updateProfile(profile.uid, { displayName, bio, photoURL });
     setMessage('Profile saved.');
   }
@@ -81,6 +92,17 @@ export function SettingsPage() {
             </div>
           </div>
           <label className="block text-sm font-medium">
+            Username
+            <input
+              className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              pattern="[a-zA-Z0-9_]{3,20}"
+              autoComplete="username"
+            />
+            <span className="mt-1 block text-xs text-ink/50">Letters, numbers, underscore. 3-20 characters.</span>
+          </label>
+          <label className="block text-sm font-medium">
             Display name
             <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
           </label>
@@ -94,7 +116,7 @@ export function SettingsPage() {
         <aside className="space-y-4">
           <section className="rounded-md border border-line bg-white p-4">
             <p className="text-sm text-ink/55">Username</p>
-            <p className="font-bold">@{profile?.username}</p>
+            <p className="font-bold">@{username || profile?.username}</p>
           </section>
           <section className="rounded-md border border-line bg-white p-4">
             <div className="flex items-center justify-between">

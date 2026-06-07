@@ -33,6 +33,9 @@ export async function createProfile(params: {
   displayName: string;
 }) {
   const username = params.username.trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+    throw new Error('Username must be 3-20 characters using letters, numbers, or underscores.');
+  }
   const usernameRef = doc(db, 'usernames', username);
   const userRef = doc(db, 'users', params.authUser.uid);
 
@@ -75,6 +78,35 @@ export async function updateProfile(
     bio: data.bio ?? '',
     photoURL: data.photoURL ?? '',
     updatedAt: serverTimestamp(),
+  });
+}
+
+export async function updateUsername(user: UserProfile, nextUsername: string) {
+  const username = nextUsername.trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+    throw new Error('Username must be 3-20 characters using letters, numbers, or underscores.');
+  }
+  if (username === user.username) return;
+
+  const userRef = doc(db, 'users', user.uid);
+  const oldUsernameRef = doc(db, 'usernames', user.username);
+  const newUsernameRef = doc(db, 'usernames', username);
+
+  await runTransaction(db, async (transaction) => {
+    const newUsernameDoc = await transaction.get(newUsernameRef);
+    if (newUsernameDoc.exists()) {
+      throw new Error('That username is already taken.');
+    }
+
+    transaction.set(newUsernameRef, {
+      uid: user.uid,
+      createdAt: serverTimestamp(),
+    });
+    transaction.delete(oldUsernameRef);
+    transaction.update(userRef, {
+      username,
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 

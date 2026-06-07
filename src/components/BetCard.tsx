@@ -13,6 +13,12 @@ const optionColors = [
   { text: 'text-citrus', tile: 'bg-citrus/10' },
 ];
 
+function resolvedWinnerIds(bet: Bet) {
+  return (bet.resolution?.winningOptionIds?.length
+    ? bet.resolution.winningOptionIds
+    : [bet.resolution?.winningOptionId]).filter((id): id is string => Boolean(id));
+}
+
 export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction }) {
   const isOpen = bet.status === 'open';
   const meta = betTypeMeta[bet.type];
@@ -21,6 +27,7 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
   const sortedChances = [...bet.chanceSummary].sort((a, b) => b.chance - a.chance);
   const displayOptions = sortedChances.slice(0, 3);
   const remainingCount = sortedChances.length - displayOptions.length;
+  const winnerIds = bet.status === 'resolved' ? resolvedWinnerIds(bet) : [];
 
   return (
     <Link
@@ -42,7 +49,7 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-xs text-ink/40 mb-0.5">
               <span className="font-semibold">{betTypeLabel(bet.type)}</span>
-              {bet.deadline ? <><span>·</span><span>{relativeTime(bet.deadline)}</span></> : null}
+              {bet.deadline ? <><span>-</span><span>{relativeTime(bet.deadline)}</span></> : null}
               {bet.visibility === 'private' ? <Lock size={10} /> : null}
             </div>
             <p className="line-clamp-2 text-sm font-black leading-snug sm:text-base">{bet.title}</p>
@@ -56,7 +63,15 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
 
         {/* Options / chances */}
         <div className="mt-3">
-          {displayOptions.length > 0 ? (
+          {winnerIds.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {winnerIds.slice(0, 4).map((id) => (
+                <span key={id} className="rounded-xl bg-mint/10 px-2.5 py-2 text-xs font-black text-mint">
+                  {bet.options.find((option) => option.id === id)?.label ?? id}
+                </span>
+              ))}
+            </div>
+          ) : displayOptions.length > 0 ? (
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(displayOptions.length + (remainingCount > 0 ? 1 : 0), 4)}, 1fr)` }}>
               {displayOptions.map((s, i) => {
                 const option = bet.options.find((o) => o.id === s.optionId);
@@ -76,7 +91,9 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
               ) : null}
             </div>
           ) : (
-            <p className="text-xs italic text-ink/35">Each player submits their own guess</p>
+            <p className="text-xs italic text-ink/35">
+              {bet.type === 'openChoice' ? 'Players add answers when predicting' : 'Each player submits their own guess'}
+            </p>
           )}
         </div>
 

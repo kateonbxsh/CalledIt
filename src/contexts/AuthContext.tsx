@@ -7,7 +7,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { auth, db } from '../lib/firebase';
@@ -31,16 +31,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const googleProvider = new GoogleAuthProvider();
-
-function defaultUsername(user: User) {
-  const source = user.email?.split('@')[0] || user.displayName || 'user';
-  const base = source
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 14) || 'user';
-  return `${base}_${user.uid.slice(0, 5).toLowerCase()}`;
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -75,15 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signInWithEmailAndPassword(auth, email, password);
       },
       loginWithGoogle: async () => {
-        const credentials = await signInWithPopup(auth, googleProvider);
-        const profileSnap = await getDoc(doc(db, 'users', credentials.user.uid));
-        if (!profileSnap.exists()) {
-          await createProfile({
-            authUser: credentials.user,
-            username: defaultUsername(credentials.user),
-            displayName: credentials.user.displayName || credentials.user.email || 'Called it user',
-          });
-        }
+        await signInWithPopup(auth, googleProvider);
       },
       register: async ({ email, password, username, displayName }) => {
         const credentials = await createUserWithEmailAndPassword(auth, email, password);

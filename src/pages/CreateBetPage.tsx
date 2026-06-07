@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
+import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { createBet } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
@@ -21,7 +22,7 @@ export function CreateBetPage() {
   const [category, setCategory] = useState('');
   const [deadline, setDeadline] = useState('');
   const [visibility, setVisibility] = useState<BetVisibility>('public');
-  const [invited, setInvited] = useState('');
+  const [invited, setInvited] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [multiOptions, setMultiOptions] = useState('Option A\nOption B\nOption C');
@@ -50,7 +51,7 @@ export function CreateBetPage() {
     const allMembers = [group.creatorUsername, ...group.memberUsernames].filter(
       (u) => u !== profile?.username,
     );
-    setInvited(allMembers.join(', '));
+    setInvited(allMembers.map((username) => username.trim().toLowerCase()).filter(Boolean));
   }, [selectedGroupId, groups, profile?.username]);
 
   const options = useMemo<BetOption[]>(() => {
@@ -82,7 +83,7 @@ export function CreateBetPage() {
         { id: 'on-or-after', label: `On or after ${dateLabel}` },
       ];
     }
-    if (type === 'closestNumber' || type === 'closestDate') {
+    if (type === 'closestNumber' || type === 'closestDate' || type === 'openChoice') {
       return [];
     }
     return multiOptions
@@ -98,7 +99,7 @@ export function CreateBetPage() {
     setBusy(true);
     setError('');
     try {
-      if (type !== 'closestNumber' && type !== 'closestDate' && options.length < 2) {
+      if (type !== 'closestNumber' && type !== 'closestDate' && type !== 'openChoice' && options.length < 2) {
         throw new Error('Add at least two options.');
       }
       await createBet(
@@ -109,7 +110,7 @@ export function CreateBetPage() {
           category,
           deadline: deadline ? new Date(deadline) : undefined,
           visibility,
-          invitedUsernames: invited.split(',').map((name) => name.trim()).filter(Boolean),
+          invitedUsernames: invited,
           options,
           allowDraw,
           allowExactScore,
@@ -256,6 +257,12 @@ export function CreateBetPage() {
               <p className="mt-1">Each participant guesses a date. Whoever picks the date closest to the actual outcome wins. Use the title to describe what is being guessed (e.g., "When will the baby be born?").</p>
             </div>
           ) : null}
+          {type === 'openChoice' ? (
+            <div className="rounded-md bg-field p-3 text-sm text-ink/70">
+              <p className="font-semibold text-ink">Open Choice</p>
+              <p className="mt-1">Players write their own answer when predicting. When resolving, you can mark one or more submitted answers as correct.</p>
+            </div>
+          ) : null}
         </section>
 
         <aside className="space-y-4">
@@ -288,16 +295,21 @@ export function CreateBetPage() {
                     </span>
                   </label>
                 ) : null}
-                <label className="block text-sm font-medium">
-                  Invited usernames
-                  <textarea
-                    className="mt-1 min-h-20 w-full rounded-md border border-line bg-field px-3 py-2"
-                    value={invited}
-                    onChange={(e) => { setSelectedGroupId(''); setInvited(e.target.value); }}
-                    placeholder="alex, sam, taylor"
-                  />
-                  <span className="mt-1 block text-xs text-ink/50">Separate usernames with commas</span>
-                </label>
+                <div className="block text-sm font-medium">
+                  Invited users
+                  <div className="mt-1">
+                    <UsernamePicker
+                      value={invited}
+                      onChange={(next) => {
+                        setSelectedGroupId('');
+                        setInvited(next);
+                      }}
+                      exclude={profile?.username ? [profile.username] : []}
+                      placeholder="Search usernames"
+                    />
+                  </div>
+                  <span className="mt-1 block text-xs text-ink/50">Search and click users to add them</span>
+                </div>
               </div>
             ) : null}
           </section>
@@ -306,9 +318,11 @@ export function CreateBetPage() {
             {imageUrl ? <img src={imageUrl} alt="" className="mt-3 h-28 w-full rounded-md object-cover" /> : null}
             <h2 className="mt-3 line-clamp-2 font-black">{title || 'Untitled bet'}</h2>
             <p className="mt-1 line-clamp-2 text-xs text-ink/55">{description || 'Description preview'}</p>
-            {type === 'closestNumber' || type === 'closestDate' ? (
+            {type === 'closestNumber' || type === 'closestDate' || type === 'openChoice' ? (
               <p className="mt-3 text-sm text-ink/55 italic">
-                Each player submits their own {type === 'closestNumber' ? 'number' : 'date'} guess.
+                {type === 'openChoice'
+                  ? 'Players add answers when they predict.'
+                  : `Each player submits their own ${type === 'closestNumber' ? 'number' : 'date'} guess.`}
               </p>
             ) : (
               <div className="mt-3 space-y-2">

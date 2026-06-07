@@ -18,11 +18,13 @@ import type { DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type {
   Bet,
+  BetComment,
   BetResolution,
   ChanceSnapshot,
   CreateBetInput,
   Prediction,
   PredictionInput,
+  UpdateBetMetadataInput,
   UserProfile,
 } from '../types';
 import { calculateCoinPayouts } from '../utils/coins';
@@ -43,13 +45,52 @@ import {
 import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution } from './userService';
 
+function optionId(label: string, existingIds: string[]) {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'option';
+  let candidate = base;
+  let index = 2;
+  while (existingIds.includes(candidate)) {
+    candidate = `${base}-${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function normalizeOptionLabel(label: string) {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function winningOptionIds(resolution: BetResolution) {
+  return (resolution.winningOptionIds?.length ? resolution.winningOptionIds : [resolution.winningOptionId])
+    .filter((id): id is string => Boolean(id));
+}
+
+function scoreConsistencyError(optionId: string, homeScore?: number, awayScore?: number) {
+  if (homeScore === undefined || awayScore === undefined) return '';
+  if (optionId === 'home' && homeScore < awayScore) return 'Home cannot win with a lower score.';
+  if (optionId === 'away' && awayScore < homeScore) return 'Away cannot win with a lower score.';
+  if (optionId === 'draw' && homeScore !== awayScore) return 'Draw needs equal scores.';
+  return '';
+}
+
 export async function createBet(input: CreateBetInput, creator: UserProfile) {
   const now = serverTimestamp();
   await addDoc(collection(db, 'bets'), {
-    ...input,
+    type: input.type,
+    title: input.title.trim(),
+    category: input.category.trim(),
+    description: input.description?.trim() || null,
+    visibility: input.visibility,
+    invitedUsernames: input.invitedUsernames.map((name) => name.trim().toLowerCase()).filter(Boolean),
+    options: input.options,
+    allowDraw: input.allowDraw ?? false,
+    allowExactScore: input.allowExactScore ?? false,
+    homeTeam: input.homeTeam?.trim() || null,
+    awayTeam: input.awayTeam?.trim() || null,
+    imageUrl: input.imageUrl || null,
+    groupId: input.groupId ?? null,
     creatorId: creator.uid,
     creatorUsername: creator.username,
-    invitedUsernames: input.invitedUsernames.map((name) => name.trim().toLowerCase()).filter(Boolean),
     deadline: input.deadline ? Timestamp.fromDate(input.deadline) : null,
     status: 'open',
     predictionCount: 0,
@@ -57,9 +98,19 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     chanceSummary: calculateChanceSummary(input.options, []),
     resolution: null,
     resolvedAt: null,
-    groupId: input.groupId ?? null,
     createdAt: now,
     updatedAt: now,
+  });
+}
+
+export async function updateBetMetadata(betId: string, input: UpdateBetMetadataInput) {
+  await updateDoc(doc(db, 'bets', betId), {
+    title: input.title.trim(),
+    category: input.category.trim(),
+    description: input.description?.trim() || null,
+    deadline: input.deadline ? Timestamp.fromDate(input.deadline) : null,
+    imageUrl: input.imageUrl || null,
+    updatedAt: serverTimestamp(),
   });
 }
 
@@ -120,8 +171,12 @@ export async function getBetsByIds(ids: string[]) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
   const pairs = await Promise.all(
     uniqueIds.map(async (id) => {
-      const snap = await getDoc(doc(db, 'bets', id));
-      return snap.exists() ? ([id, { id: snap.id, ...snap.data() } as Bet] as const) : null;
+      try {
+        const snap = await getDoc(doc(db, 'bets', id));
+        return snap.exists() ? ([id, { id: snap.id, ...snap.data() } as Bet] as const) : null;
+      } catch {
+        return null;
+      }
     }),
   );
   return new Map(pairs.filter((pair): pair is readonly [string, Bet] => pair !== null));
@@ -136,12 +191,41 @@ export async function listChanceSnapshots(betId: string) {
     .sort((left, right) => left.createdAt.toMillis() - right.createdAt.toMillis());
 }
 
+export async function listCommentsForBet(betId: string) {
+  const snap = await getDocs(query(collection(db, 'comments'), where('betId', '==', betId), limit(100)));
+  return snap.docs
+    .map((item) => ({ id: item.id, ...item.data() }) as BetComment)
+    .sort((left, right) => left.createdAt.toMillis() - right.createdAt.toMillis());
+}
+
+export async function addBetComment(betId: string, user: UserProfile, body: string) {
+  const text = body.trim();
+  if (!text) throw new Error('Write a comment first.');
+  if (text.length > 1000) throw new Error('Keep comments under 1000 characters.');
+
+  await addDoc(collection(db, 'comments'), {
+    betId,
+    userId: user.uid,
+    username: user.username,
+    displayName: user.displayName,
+    photoURL: user.photoURL ?? null,
+    body: text,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteBetComment(commentId: string) {
+  await deleteDoc(doc(db, 'comments', commentId));
+}
+
 export async function placePrediction(input: PredictionInput) {
   const predictionRef = doc(db, 'predictions', `${input.bet.id}_${input.user.uid}`);
   const betRef = doc(db, 'bets', input.bet.id);
   const userRef = doc(db, 'users', input.user.uid);
   const snapshotRef = doc(collection(db, 'chanceSnapshots'));
   const closest = isClosestType(input.bet.type);
+  const openChoice = input.bet.type === 'openChoice';
 
   await runTransaction(db, async (transaction) => {
     const [predictionSnap, betSnap, userSnap] = await Promise.all([
@@ -166,10 +250,42 @@ export async function placePrediction(input: PredictionInput) {
     );
     const existing = previousPredictions.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
 
-    const effectiveOptionId = closest ? 'guess' : input.optionId;
+    let nextOptions = bet.options;
+    let effectiveOptionId = closest ? 'guess' : input.optionId;
+    const customOptionLabel = input.customOptionLabel?.trim();
+    if (openChoice) {
+      const selectedExistingOption = bet.options.find((option) => option.id === input.optionId);
+      if (customOptionLabel) {
+        const normalizedCustomOptionLabel = normalizeOptionLabel(customOptionLabel);
+        const existingOption = bet.options.find(
+          (option) => normalizeOptionLabel(option.label) === normalizedCustomOptionLabel,
+        );
+        const customOption =
+          existingOption ??
+          {
+            id: optionId(customOptionLabel, bet.options.map((option) => option.id)),
+            label: customOptionLabel,
+            createdBy: user.uid,
+          };
+        effectiveOptionId = customOption.id;
+        nextOptions = existingOption ? bet.options : [...bet.options, customOption];
+      } else if (selectedExistingOption) {
+        effectiveOptionId = selectedExistingOption.id;
+      } else {
+        throw new Error('Pick or add an answer.');
+      }
+    }
+    if (bet.type === 'sports' && input.scorePrediction) {
+      const scoreError = scoreConsistencyError(
+        effectiveOptionId,
+        input.scorePrediction.home,
+        input.scorePrediction.away,
+      );
+      if (scoreError) throw new Error(scoreError);
+    }
     const displayedChanceAtBetTime = closest
       ? 1 / (existing.length + 1)
-      : chanceForOption(bet.chanceSummary, input.optionId);
+      : chanceForOption(bet.chanceSummary, effectiveOptionId) || 1 / Math.max(1, nextOptions.length);
 
     transaction.set(predictionRef, {
       betId: bet.id,
@@ -184,6 +300,7 @@ export async function placePrediction(input: PredictionInput) {
       scorePrediction: input.scorePrediction ?? null,
       numericGuess: input.numericGuess ?? null,
       dateGuess: input.dateGuess ?? null,
+      customOptionLabel: customOptionLabel ?? null,
       createdAt: serverTimestamp(),
     });
 
@@ -217,13 +334,14 @@ export async function placePrediction(input: PredictionInput) {
       ];
       const elapsedMs = Timestamp.now().toMillis() - bet.updatedAt.toMillis();
       const chanceSummary = calculateSmoothedChanceSummary({
-        options: bet.options,
+        options: nextOptions,
         predictions: nextPredictions,
         previousSummary: bet.chanceSummary,
         elapsedMs,
       });
 
       transaction.update(betRef, {
+        ...(openChoice ? { options: nextOptions } : {}),
         predictionCount: increment(1),
         totalCoinsStaked: increment(input.stake),
         chanceSummary,
@@ -276,21 +394,36 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       }
       coinPayouts = calculateClosestPayouts(predictions, winnerPredictionIds);
     } else {
+      const winnerIds = winningOptionIds(resolution);
+      if (winnerIds.length === 0) throw new Error('Choose at least one winning option.');
+      if (
+        freshBet.type === 'sports' &&
+        resolution.actualHomeScore !== undefined &&
+        resolution.actualAwayScore !== undefined
+      ) {
+        const scoreError = scoreConsistencyError(
+          winnerIds[0] ?? '',
+          resolution.actualHomeScore,
+          resolution.actualAwayScore,
+        );
+        if (scoreError) throw new Error(scoreError);
+      }
+      const primaryWinnerId = winnerIds[0] ?? '';
       const losingStakeTotal = predictions
-        .filter((p) => p.optionId !== resolution.winningOptionId)
+        .filter((p) => !winnerIds.includes(p.optionId))
         .reduce((sum, p) => sum + p.stake, 0);
 
       scoreBonusResult = freshBet.type === 'sports'
         ? calculateSportsScoreBonus({
             predictions,
-            winningOptionId: resolution.winningOptionId,
+            winningOptionId: primaryWinnerId,
             actualHomeScore: resolution.actualHomeScore,
             actualAwayScore: resolution.actualAwayScore,
             losingStakeTotal,
           })
         : { bonusPool: 0, winners: [] };
 
-      coinPayouts = calculateCoinPayouts(predictions, resolution.winningOptionId, scoreBonusResult.bonusPool).map((p) => ({
+      coinPayouts = calculateCoinPayouts(predictions, winnerIds, scoreBonusResult.bonusPool).map((p) => ({
         userId: p.userId,
         predictionId: p.predictionId,
         coinDelta: p.coinDelta + (scoreBonusResult.winners.find((w) => w.predictionId === p.predictionId)?.coinBonus ?? 0),
@@ -299,10 +432,14 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       }));
     }
 
-    const finalResolution: BetResolution = {
-      ...resolution,
-      winnerPredictionIds: closest ? winnerPredictionIds : undefined,
-    };
+    const finalResolution: BetResolution = { ...resolution };
+    if (closest) {
+      finalResolution.winnerPredictionIds = winnerPredictionIds;
+    } else {
+      const winnerIds = winningOptionIds(resolution);
+      finalResolution.winningOptionId = winnerIds[0] ?? resolution.winningOptionId;
+      finalResolution.winningOptionIds = winnerIds;
+    }
 
     // --- Apply results to each predictor ---
     for (const prediction of predictions) {
@@ -313,10 +450,10 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
 
       const correct = closest
         ? winnerPredictionIds.includes(prediction.id)
-        : prediction.optionId === resolution.winningOptionId;
+        : winningOptionIds(finalResolution).includes(prediction.optionId);
 
       const scoreBonus = scoreBonusResult.winners.find((w) => w.predictionId === prediction.id);
-      let ratingDelta = calculateRatingDelta({
+      const ratingDelta = calculateRatingDelta({
         displayedChanceAtBetTime: prediction.displayedChanceAtBetTime,
         correct,
         stake: prediction.stake,
@@ -349,7 +486,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
         resolvedAt: serverTimestamp(),
         winningOptionId: closest
           ? (resolution.actualValue?.toString() ?? resolution.actualDateValue ?? '')
-          : resolution.winningOptionId,
+          : (winningOptionIds(finalResolution)[0] ?? ''),
       });
     }
 

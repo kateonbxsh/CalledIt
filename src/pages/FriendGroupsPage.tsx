@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
+import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import {
   createFriendGroup,
@@ -10,9 +11,9 @@ import {
 } from '../services/friendGroupService';
 import type { FriendGroup } from '../types';
 
-type EditingState = { groupId: string | null; name: string; members: string };
+type EditingState = { groupId: string | null; name: string; members: string[] };
 
-const EMPTY_EDITING: EditingState = { groupId: null, name: '', members: '' };
+const EMPTY_EDITING: EditingState = { groupId: null, name: '', members: [] };
 
 export function FriendGroupsPage() {
   const { profile } = useAuth();
@@ -23,7 +24,7 @@ export function FriendGroupsPage() {
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     try {
@@ -31,11 +32,11 @@ export function FriendGroupsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [profile]);
 
   useEffect(() => {
     load();
-  }, [profile]);
+  }, [load]);
 
   function openCreate() {
     setEditing(EMPTY_EDITING);
@@ -46,7 +47,7 @@ export function FriendGroupsPage() {
     setEditing({
       groupId: group.id,
       name: group.name,
-      members: group.memberUsernames.join(', '),
+      members: group.memberUsernames,
     });
     setError('');
   }
@@ -56,7 +57,7 @@ export function FriendGroupsPage() {
     if (!editing || !profile) return;
     const name = editing.name.trim();
     if (!name) { setError('Group name is required.'); return; }
-    const members = editing.members.split(',').map((u) => u.trim().toLowerCase()).filter(Boolean);
+    const members = editing.members;
     setBusy(true);
     setError('');
     try {
@@ -119,18 +120,20 @@ export function FriendGroupsPage() {
                 required
               />
             </label>
-            <label className="block text-sm font-medium">
-              Members (comma-separated usernames)
-              <textarea
-                className="mt-1 min-h-20 w-full rounded-md border border-line bg-field px-3 py-2"
-                value={editing.members}
-                onChange={(e) => setEditing({ ...editing, members: e.target.value })}
-                placeholder="alex, sam, taylor"
-              />
+            <div className="block text-sm font-medium">
+              Members
+              <div className="mt-1">
+                <UsernamePicker
+                  value={editing.members}
+                  onChange={(members) => setEditing({ ...editing, members })}
+                  exclude={profile?.username ? [profile.username] : []}
+                  placeholder="Search usernames"
+                />
+              </div>
               <span className="mt-1 block text-xs text-ink/50">
                 Your own username is always included automatically
               </span>
-            </label>
+            </div>
             <div className="flex gap-2">
               <button
                 type="button"

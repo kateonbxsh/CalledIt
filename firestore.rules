@@ -29,6 +29,17 @@ service cloud.firestore {
       );
     }
 
+    function canReadBetById(betId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/bets/$(betId))
+        && (
+          get(/databases/$(database)/documents/bets/$(betId)).data.visibility == 'public' ||
+          get(/databases/$(database)/documents/bets/$(betId)).data.creatorId == request.auth.uid ||
+          username() in get(/databases/$(database)/documents/bets/$(betId)).data.invitedUsernames ||
+          isAdmin()
+        );
+    }
+
     // Any signed-in user can write resolution fields — the allowlist is the security boundary.
     // Note: canReadBet() is deliberately NOT called here to avoid a cross-doc get() on a
     // document that may also be written in the same transaction commit (causes 403 in Firestore).
@@ -41,6 +52,7 @@ service cloud.firestore {
             'resolvedAt',
             'resolvedBy',
             'chanceSummary',
+            'options',
             'predictionCount',
             'totalCoinsStaked',
             'updatedAt'
@@ -59,12 +71,20 @@ service cloud.firestore {
           .hasOnly(['status', 'correct', 'coinDelta', 'ratingDelta', 'resolvedAt', 'winningOptionId']);
     }
 
+    function canEditBetMetadata() {
+      return signedIn()
+        && resource.data.creatorId == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['title', 'description', 'category', 'deadline', 'imageUrl', 'updatedAt']);
+    }
+
     match /usernames/{name} {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
         && !exists(/databases/$(database)/documents/usernames/$(name));
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
     match /users/{userId} {
@@ -74,7 +94,7 @@ service cloud.firestore {
         (
           request.auth.uid == userId
           && request.resource.data.diff(resource.data).changedKeys()
-            .hasOnly(['displayName', 'photoURL', 'bio', 'updatedAt', 'lastRefillAt', 'coinBalance'])
+            .hasOnly(['displayName', 'photoURL', 'bio', 'username', 'updatedAt', 'lastRefillAt', 'coinBalance'])
         ) ||
         canApplyResolutionToUser()
       );
@@ -86,7 +106,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.creatorId == request.auth.uid
         && request.resource.data.status == 'open';
-      allow update: if isAdmin() || canResolveBet();
+      allow update: if isAdmin() || canResolveBet() || canEditBetMetadata();
       allow delete: if signedIn() && resource.data.creatorId == request.auth.uid;
     }
 
@@ -103,6 +123,39 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn();
       allow update, delete: if false;
+    }
+
+    match /comments/{commentId} {
+      allow read: if canReadBetById(resource.data.betId);
+      allow create: if signedIn()
+        && canReadBetById(request.resource.data.betId)
+        && request.resource.data.keys().hasOnly([
+          'betId',
+          'userId',
+          'username',
+          'displayName',
+          'photoURL',
+          'body',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.username == username()
+        && request.resource.data.displayName == me().data.displayName
+        && (
+          (me().data.keys().hasAny(['photoURL']) && request.resource.data.photoURL == me().data.photoURL) ||
+          (!me().data.keys().hasAny(['photoURL']) && request.resource.data.photoURL == null)
+        )
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        && request.resource.data.body.size() <= 1000
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if false;
+      allow delete: if signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
     }
 
     match /activity/{activityId} {

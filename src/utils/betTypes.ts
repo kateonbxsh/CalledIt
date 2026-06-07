@@ -3,6 +3,7 @@ import {
   CalendarDays,
   Hash,
   HelpCircle,
+  ListPlus,
   Swords,
   TrendingUp,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ export const betTypeOptions: Array<{
 }> = [
   { type: 'binary', label: 'Yes / No', description: 'Two clear sides' },
   { type: 'multi', label: 'Multiple Choice', description: 'Several possible outcomes' },
+  { type: 'openChoice', label: 'Open Choice', description: 'Players can add answers' },
   { type: 'sports', label: 'Sports Match', description: 'Teams, result, optional score' },
   { type: 'overUnder', label: 'Over / Under', description: 'Above or below a number' },
   { type: 'date', label: 'Before / After', description: 'Whether it happens before a date' },
@@ -31,6 +33,7 @@ export const betTypeMeta: Record<
   overUnder:     { icon: TrendingUp,   color: 'text-citrus', bg: 'bg-citrus/12' },
   date:          { icon: CalendarDays, color: 'text-plum',   bg: 'bg-plum/12'   },
   multi:         { icon: BarChart2,    color: 'text-coral',  bg: 'bg-coral/12'  },
+  openChoice:    { icon: ListPlus,     color: 'text-plum',   bg: 'bg-plum/12'   },
   closestNumber: { icon: Hash,         color: 'text-aqua',   bg: 'bg-aqua/12'   },
   closestDate:   { icon: CalendarDays, color: 'text-aqua',   bg: 'bg-aqua/12'   },
 };

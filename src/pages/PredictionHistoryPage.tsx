@@ -26,15 +26,28 @@ const filters: { id: HistoryFilter; label: string }[] = [
 ];
 
 function inferStatus(prediction: Prediction, bet?: Bet): HistoryStatus {
-  if (prediction.status === 'won' || prediction.status === 'lost' || prediction.status === 'pending') {
+  if (prediction.status === 'won' || prediction.status === 'lost') {
     return prediction.status;
   }
 
   if (bet?.status === 'resolved' && bet.resolution) {
-    return prediction.optionId === bet.resolution.winningOptionId ? 'won' : 'lost';
+    const winningOptionIds = (bet.resolution.winningOptionIds?.length
+      ? bet.resolution.winningOptionIds
+      : [bet.resolution.winningOptionId]).filter(Boolean);
+    if (winningOptionIds.includes(prediction.optionId)) return 'won';
+    if (bet.resolution.winnerPredictionIds?.includes(prediction.id)) return 'won';
+    return 'lost';
   }
 
   return 'pending';
+}
+
+function timestampMs(prediction: Prediction) {
+  return prediction.createdAt?.toMillis?.() ?? 0;
+}
+
+function predictionTimeLabel(prediction: Prediction) {
+  return prediction.createdAt ? relativeTime(prediction.createdAt) : 'time unknown';
 }
 
 function DeltaText({
@@ -95,6 +108,10 @@ function StatusBadge({ status }: { status: HistoryStatus }) {
 function HistoryItem({ row }: { row: HistoryRow }) {
   const { prediction, bet, status } = row;
   const option = bet?.options.find((item) => item.id === prediction.optionId);
+  const pickedLabel =
+    option?.label ??
+    prediction.customOptionLabel ??
+    prediction.optionId;
 
   return (
     <Link
@@ -114,11 +131,11 @@ function HistoryItem({ row }: { row: HistoryRow }) {
       <div className="min-w-0 p-3 sm:p-4">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <StatusBadge status={status} />
-          <span className="text-xs font-semibold text-ink/45">{relativeTime(prediction.createdAt)}</span>
+          <span className="text-xs font-semibold text-ink/45">{predictionTimeLabel(prediction)}</span>
         </div>
         <h2 className="truncate text-base font-black">{bet?.title ?? 'Bet unavailable'}</h2>
         <p className="mt-1 truncate text-sm text-ink/60">
-          Picked <span className="font-bold text-ink/75">{option?.label ?? prediction.optionId}</span>
+          Picked <span className="font-bold text-ink/75">{pickedLabel}</span>
         </p>
       </div>
 
@@ -149,11 +166,13 @@ export function PredictionHistoryPage() {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [activeFilter, setActiveFilter] = useState<HistoryFilter>('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!profile) return;
 
     setLoading(true);
+    setError('');
     listMyPredictions(profile.uid)
       .then(async (predictions) => {
         const betsById = await getBetsByIds(predictions.map((prediction) => prediction.betId));
@@ -166,8 +185,12 @@ export function PredictionHistoryPage() {
               status: inferStatus(prediction, bet),
             };
           })
-          .sort((left, right) => right.prediction.createdAt.toMillis() - left.prediction.createdAt.toMillis());
+          .sort((left, right) => timestampMs(right.prediction) - timestampMs(left.prediction));
         setRows(nextRows);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Could not load prediction history.');
+        setRows([]);
       })
       .finally(() => setLoading(false));
   }, [profile]);
@@ -188,6 +211,7 @@ export function PredictionHistoryPage() {
   return (
     <>
       <PageHeader title="Prediction History" />
+      {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
 
       <div className="mb-4 inline-grid grid-cols-4 rounded-md border border-line bg-white p-1 shadow-soft">
         {filters.map((filter) => (

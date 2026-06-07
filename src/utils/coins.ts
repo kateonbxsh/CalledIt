@@ -22,16 +22,17 @@ export function canClaimDailyRefill(balance: number, lastRefillAt?: Date | null)
 
 export function calculateCoinPayouts(
   predictions: Prediction[],
-  winningOptionId: string,
+  winningOptionId: string | string[],
   bonusPool = 0,
 ): CoinPayout[] {
-  const winners = predictions.filter((prediction) => prediction.optionId === winningOptionId);
-  const losers = predictions.filter((prediction) => prediction.optionId !== winningOptionId);
+  const winningOptionIds = Array.isArray(winningOptionId) ? winningOptionId : [winningOptionId];
+  const winners = predictions.filter((prediction) => winningOptionIds.includes(prediction.optionId));
+  const losers = predictions.filter((prediction) => !winningOptionIds.includes(prediction.optionId));
   const winningStake = winners.reduce((sum, prediction) => sum + prediction.stake, 0);
   const losingPool = losers.reduce((sum, prediction) => sum + prediction.stake, 0) - bonusPool;
 
   return predictions.map((prediction) => {
-    const isWinner = prediction.optionId === winningOptionId;
+    const isWinner = winningOptionIds.includes(prediction.optionId);
     if (!isWinner || winningStake <= 0) {
       return {
         userId: prediction.userId,

@@ -1,6 +1,14 @@
 import type { Timestamp } from 'firebase/firestore';
 
-export type BetType = 'binary' | 'multi' | 'sports' | 'overUnder' | 'date' | 'closestNumber' | 'closestDate';
+export type BetType =
+  | 'binary'
+  | 'multi'
+  | 'sports'
+  | 'overUnder'
+  | 'date'
+  | 'closestNumber'
+  | 'closestDate'
+  | 'openChoice';
 export type BetVisibility = 'public' | 'private';
 export type BetStatus = 'open' | 'locked' | 'resolved';
 export type Rank =
@@ -43,6 +51,7 @@ export interface BetOption {
   id: string;
   label: string;
   teamSide?: 'home' | 'away' | 'draw';
+  createdBy?: string;
 }
 
 export interface ChanceOptionSummary {
@@ -82,7 +91,8 @@ export interface Bet {
 }
 
 export interface BetResolution {
-  winningOptionId: string;
+  winningOptionId?: string;
+  winningOptionIds?: string[];
   winnerPredictionIds?: string[];
   actualValue?: number;
   actualDateValue?: string;
@@ -113,6 +123,7 @@ export interface Prediction {
   };
   numericGuess?: number;
   dateGuess?: string;
+  customOptionLabel?: string;
   createdAt: Timestamp;
 }
 
@@ -121,6 +132,18 @@ export interface ChanceSnapshot {
   betId: string;
   summary: ChanceOptionSummary[];
   createdAt: Timestamp;
+}
+
+export interface BetComment {
+  id: string;
+  betId: string;
+  userId: string;
+  username: string;
+  displayName: string;
+  photoURL?: string;
+  body: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface CreateBetInput {
@@ -140,6 +163,14 @@ export interface CreateBetInput {
   groupId?: string;
 }
 
+export interface UpdateBetMetadataInput {
+  title: string;
+  description?: string;
+  category: string;
+  deadline?: Date | null;
+  imageUrl?: string;
+}
+
 export interface PredictionInput {
   bet: Bet;
   user: UserProfile;
@@ -151,6 +182,7 @@ export interface PredictionInput {
   };
   numericGuess?: number;
   dateGuess?: string;
+  customOptionLabel?: string;
 }
 
 export interface FriendGroup {
