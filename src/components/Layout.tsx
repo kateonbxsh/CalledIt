@@ -112,34 +112,24 @@ export function Layout() {
       </main>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-line/70 bg-[#f8faf4]/95 px-3 py-2 backdrop-blur-md lg:hidden">
-        <div className="grid grid-cols-6 gap-1">
-          {navItems.slice(0, 5).map((item) => (
+      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-line/70 bg-[#f8faf4]/95 px-2 py-2 backdrop-blur-md lg:hidden">
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+          {[...navItems, { to: '/me', label: 'Profile', icon: User }].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
               className={({ isActive }) =>
-                `grid h-12 place-items-center rounded-xl transition ${
+                `flex shrink-0 flex-col items-center justify-center gap-0.5 h-13 w-14 rounded-xl transition ${
                   isActive ? 'bg-ink text-white' : 'text-ink/50 hover:bg-white hover:text-ink'
                 }`
               }
               title={item.label}
             >
-              <item.icon size={20} />
+              <item.icon size={18} />
+              <span className="text-[9px] font-semibold leading-none">{item.label}</span>
             </NavLink>
           ))}
-          <NavLink
-            to="/me"
-            className={({ isActive }) =>
-              `grid h-12 place-items-center rounded-xl transition ${
-                isActive ? 'bg-ink text-white' : 'text-ink/50 hover:bg-white hover:text-ink'
-              }`
-            }
-            title="Profile"
-          >
-            <User size={20} />
-          </NavLink>
         </div>
       </nav>
     </div>

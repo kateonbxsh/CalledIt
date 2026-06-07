@@ -26,6 +26,9 @@ export default {
       fontSize: {
         '2xs': ['11px', '16px'],
       },
+      height: {
+        '13': '52px',
+      },
     },
   },
   plugins: [],
