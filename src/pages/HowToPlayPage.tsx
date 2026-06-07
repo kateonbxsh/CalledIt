@@ -105,11 +105,21 @@ export function HowToPlayPage() {
           <p>For sports bets you can also enter the actual score, which awards a bonus to anyone who predicted it exactly.</p>
         </Section>
 
+        <Section title="Daily coin refill">
+          <p>
+            If your balance drops <strong className="text-ink">below 50 coins</strong>, a refill button becomes available on your Profile page.
+            Claiming it tops your balance back up to <strong className="text-ink">100 coins</strong>.
+          </p>
+          <p>
+            The refill resets every <strong className="text-ink">24 hours</strong> — so even if you go broke, you're never stuck for long.
+          </p>
+        </Section>
+
         <div className="flex items-start gap-3 rounded-2xl border border-citrus/25 bg-citrus/6 p-5 text-sm leading-6">
           <CircleDollarSign size={20} className="mt-0.5 shrink-0 text-citrus" />
           <p>
             <strong className="text-citrus">Coins are completely fictional.</strong>{' '}
-            No real money is involved. You get a starting balance on signup and a daily refill if your balance runs low.
+            No real money is involved. Your starting balance is given on signup, and you can always refill once per day if you run low.
           </p>
         </div>
 
