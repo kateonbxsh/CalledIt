@@ -17,7 +17,6 @@ import {
 } from '../services/betService';
 import type { Bet, BetResolution, ChanceSnapshot, Prediction } from '../types';
 import { isClosestType } from '../utils/betTypes';
-import { maxStakeForBalance } from '../utils/coins';
 import {
   closestDateDistance,
   closestDateGuessLabel,
@@ -92,7 +91,7 @@ export function BetDetailPage() {
     () => predictions.find((p) => p.userId === profile?.uid),
     [predictions, profile?.uid],
   );
-  const maxStake = profile ? maxStakeForBalance(profile.coinBalance) : 0;
+
   const closest = bet ? isClosestType(bet.type) : false;
   const canPredict = bet?.status === 'open' && !myPrediction;
   const canResolve = !!profile && !!bet;
@@ -446,19 +445,15 @@ export function BetDetailPage() {
                       className="w-full rounded-xl border border-line bg-field px-3 py-2.5 text-center outline-none focus:border-mint"
                       type="number"
                       min={10}
-                      max={maxStake}
                       value={stake}
                       onChange={(e) => setStake(Number(e.target.value))}
                     />
                     <button
                       type="button"
-                      onClick={() => setStake((s) => Math.min(maxStake, s + 10))}
+                      onClick={() => setStake((s) => s + 10)}
                       className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-lg font-bold text-ink/60 transition hover:bg-field active:scale-95"
                     >+</button>
                   </div>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-ink/45">
-                    Max <CoinAmount amount={maxStake} className="text-xs" />
-                  </p>
                 </div>
 
                 {!closest && selectedChance > 0 ? (
