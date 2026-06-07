@@ -38,7 +38,7 @@ export function AuthPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen overflow-hidden bg-[#f1f3ec] text-ink">
+    <main className="relative flex min-h-screen overflow-hidden bg-[#edf0e8] text-ink">
       {/* Decorative background blobs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-mint/15 blur-3xl" />

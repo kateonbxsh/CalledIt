@@ -2,11 +2,13 @@ import { SearchX } from 'lucide-react';
 
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="grid min-h-64 place-items-center rounded-md border border-dashed border-line bg-white p-8 text-center">
+    <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-line bg-white/60 p-8 text-center">
       <div>
-        <SearchX className="mx-auto mb-3 text-ink/45" size={36} />
-        <h2 className="font-semibold">{title}</h2>
-        <p className="mt-1 max-w-md text-sm text-ink/60">{body}</p>
+        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-field">
+          <SearchX className="text-ink/35" size={28} />
+        </div>
+        <h2 className="font-black text-ink/70">{title}</h2>
+        <p className="mt-1.5 max-w-sm text-sm text-ink/45">{body}</p>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@
 
 :root {
   color: #121417;
-  background: #f1f3ec;
+  background: #edf0e8;
   font-family:
     "Inter Variable", "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
     "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -35,13 +35,30 @@ select {
 }
 
 ::selection {
-  background: rgba(47, 125, 99, 0.18);
+  background: rgba(47, 125, 99, 0.2);
+}
+
+/* Thin scrollbar on supported browsers */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(18, 20, 23, 0.15) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(18, 20, 23, 0.15);
+  border-radius: 99px;
 }
 
 .scrollbar-hide {
   scrollbar-width: none;
 }
-
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
@@ -49,7 +66,7 @@ select {
 @keyframes soft-enter {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.995);
+    transform: translateY(6px) scale(0.997);
   }
   to {
     opacity: 1;
@@ -58,21 +75,26 @@ select {
 }
 
 @keyframes fill-bar {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .animate-soft-enter {
-  animation: soft-enter 280ms ease-out both;
+  animation: soft-enter 240ms ease-out both;
 }
 
 .animate-fill-bar {
   animation: fill-bar 520ms ease-out both;
   transform-origin: left;
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
