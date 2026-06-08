@@ -184,6 +184,7 @@ function uniqueById(items: ChallengeActivity[]) {
 export async function claimDailyForecast(user: UserProfile, mode: DailyForecastMode) {
   const userRef = doc(db, 'users', user.uid);
   const claimRef = rewardClaimRef(user.uid, `forecast_${dayKey()}`);
+  const reward = forecastReward(mode);
   await runTransaction(db, async (transaction) => {
     const [userSnap, claimSnap] = await Promise.all([
       transaction.get(userRef),
@@ -195,7 +196,6 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
       throw new Error('Daily forecast is already claimed.');
     }
 
-    const reward = forecastReward(mode);
     transaction.set(claimRef, {
       userId: user.uid,
       username: user.username,
@@ -213,6 +213,7 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
       updatedAt: serverTimestamp(),
     });
   });
+  return reward;
 }
 
 export async function getChestDefinitions(user: UserProfile): Promise<ChestDefinition[]> {
@@ -258,6 +259,7 @@ export async function claimChest(user: UserProfile, chestId: string) {
       updatedAt: serverTimestamp(),
     });
   });
+  return { amount: chest.reward, label: chest.title };
 }
 
 export const wheelRewards = [

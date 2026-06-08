@@ -13,6 +13,14 @@ import {
 import type { ChestDefinition, DailyForecastMode } from '../types';
 
 const wheelColors = ['#2f7d63', '#d95f46', '#d49a25', '#8c98a5', '#3b75af', '#d95f46', '#6f5ca8', '#121417'];
+const WHEEL_SPIN_MS = 4400;
+
+type RewardPopupState = {
+  title: string;
+  amount: number;
+  detail: string;
+  variant: 'forecast' | 'wheel' | 'chest';
+};
 
 function polarToCartesian(cx: number, cy: number, r: number, angle: number) {
   const rad = ((angle - 90) * Math.PI) / 180;
@@ -35,17 +43,54 @@ function wheelSlicePath(index: number, total: number) {
   ].join(' ');
 }
 
+function signedCoins(amount: number) {
+  return amount > 0 ? `+${amount} coins` : amount < 0 ? `${amount} coins` : '0 coins';
+}
+
+function RewardChest({ open = false, className = '' }: { open?: boolean; className?: string }) {
+  return (
+    <svg viewBox="0 0 180 140" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="chest-lid" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#f2b84b" />
+          <stop offset="100%" stopColor="#d49a25" />
+        </linearGradient>
+        <linearGradient id="chest-body" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#a86f43" />
+          <stop offset="100%" stopColor="#70482f" />
+        </linearGradient>
+      </defs>
+      {open ? (
+        <g className="origin-[90px_72px] animate-chest-open">
+          <path d="M33 54 C38 23 142 23 147 54 L138 73 H42 Z" fill="url(#chest-lid)" />
+          <path d="M44 54 H136 L130 68 H50 Z" fill="#f8faf4" opacity="0.65" />
+          <path d="M33 54 C38 23 142 23 147 54" fill="none" stroke="#121417" strokeOpacity="0.18" strokeWidth="4" />
+        </g>
+      ) : (
+        <path d="M31 54 C36 24 144 24 149 54 L141 73 H39 Z" fill="url(#chest-lid)" stroke="#121417" strokeOpacity="0.14" strokeWidth="4" />
+      )}
+      <path d="M26 63 H154 V121 C154 128 149 133 142 133 H38 C31 133 26 128 26 121 Z" fill="url(#chest-body)" />
+      <path d="M26 82 H154" stroke="#121417" strokeOpacity="0.16" strokeWidth="4" />
+      <path d="M50 64 V132 M130 64 V132" stroke="#f2b84b" strokeWidth="8" strokeLinecap="round" opacity="0.9" />
+      <rect x="75" y="78" width="30" height="32" rx="5" fill="#f8faf4" stroke="#121417" strokeOpacity="0.18" strokeWidth="3" />
+      <circle cx="90" cy="91" r="4" fill="#d49a25" />
+      <path d="M38 133 H142" stroke="#121417" strokeOpacity="0.2" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function MinigamesPage() {
   const { profile } = useAuth();
   const [chests, setChests] = useState<ChestDefinition[]>([]);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [wheelResult, setWheelResult] = useState<number | null>(null);
+  const [wheelRevealed, setWheelRevealed] = useState(false);
   const [wheelTurns, setWheelTurns] = useState(0);
   const [openedChestId, setOpenedChestId] = useState('');
-  const [openedChestReward, setOpenedChestReward] = useState<number | null>(null);
   const [forecastMode, setForecastMode] = useState<DailyForecastMode | null>(null);
   const [wheelOpen, setWheelOpen] = useState(false);
+  const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -65,15 +110,25 @@ export function MinigamesPage() {
     setMessage('');
     setForecastMode(null);
     try {
-      await claimDailyForecast(profile, mode);
+      const reward = await claimDailyForecast(profile, mode);
       setForecastMode(mode);
       const messages: Record<DailyForecastMode, string> = {
-        safe: 'Safe reward claimed: +60 coins.',
-        random: 'Random reward claimed.',
-        chaos: 'Chaos reward claimed. Check your coin balance.',
-        spicy: 'Spicy reward claimed: +20 now, +120 only if your next prediction wins.',
+        safe: `Safe reward claimed: +${reward.amount} coins.`,
+        random: `Random reward claimed: +${reward.amount} coins.`,
+        chaos: reward.amount >= 0 ? `Chaos reward claimed: +${reward.amount} coins.` : `Chaos reward claimed: ${reward.amount} coins.`,
+        spicy: `Spicy reward claimed: +${reward.amount} now, +${reward.spicyBonus ?? 0} only if your next prediction wins.`,
       };
       setMessage(messages[mode]);
+      setRewardPopup({
+        title: `${mode[0].toUpperCase()}${mode.slice(1)} forecast`,
+        amount: reward.amount,
+        detail: mode === 'spicy'
+          ? `You got ${reward.amount} coins now. The ${reward.spicyBonus ?? 0} coin spicy bonus only pays if your next resolved prediction wins.`
+          : reward.amount < 0
+            ? 'Chaos took coins this time.'
+            : 'Coins were added to your balance.',
+        variant: 'forecast',
+      });
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Daily forecast unavailable.');
     } finally {
@@ -87,11 +142,15 @@ export function MinigamesPage() {
     setMessage('');
     setOpenedChestId('');
     try {
-      await claimChest(profile, chestId);
-      const chest = chests.find((item) => item.id === chestId);
+      const reward = await claimChest(profile, chestId);
       setOpenedChestId(chestId);
-      setOpenedChestReward(chest?.reward ?? null);
-      setMessage('Chest opened.');
+      setMessage(`Chest opened: +${reward.amount} coins.`);
+      setRewardPopup({
+        title: `${reward.label} opened`,
+        amount: reward.amount,
+        detail: 'Chest reward added to your balance.',
+        variant: 'chest',
+      });
       setChests(await getChestDefinitions(profile));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Chest unavailable.');
@@ -106,10 +165,19 @@ export function MinigamesPage() {
     setMessage('');
     try {
       setWheelOpen(true);
+      setWheelRevealed(false);
       const reward = await spinWheel(profile);
       setWheelResult(reward);
       setWheelTurns((turns) => turns + 1);
+      await new Promise((resolve) => window.setTimeout(resolve, WHEEL_SPIN_MS));
+      setWheelRevealed(true);
       setMessage(reward > 0 ? `Wheel landed on +${reward} coins.` : reward < 0 ? `Wheel landed on ${reward} coins.` : 'Wheel landed on 0. It resets tomorrow.');
+      setRewardPopup({
+        title: 'Wheel result',
+        amount: reward,
+        detail: reward > 0 ? 'Wheel coins added to your balance.' : reward < 0 ? 'The wheel took coins this time.' : 'No coin change today.',
+        variant: 'wheel',
+      });
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Wheel unavailable.');
     } finally {
@@ -192,11 +260,7 @@ export function MinigamesPage() {
               return (
                 <div key={chest.id} className="rounded-md bg-field p-3">
                   <div className="flex items-center gap-3">
-                    <div className={`relative h-14 w-16 shrink-0 ${opening ? 'animate-chest-open' : ''}`}>
-                      <div className="absolute left-1 top-1 h-5 w-14 rounded-t-md border border-citrus/40 bg-citrus" />
-                      <div className="absolute bottom-1 left-0 h-9 w-16 rounded-md border border-ink/10 bg-[#8f5f3d]" />
-                      <div className="absolute bottom-4 left-7 h-5 w-3 rounded-sm bg-[#f8faf4]" />
-                    </div>
+                    <RewardChest open={opening} className="h-16 w-20 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-bold">{chest.title}</p>
@@ -254,7 +318,7 @@ export function MinigamesPage() {
                 })}
                 <circle cx="150" cy="150" r="42" fill="white" />
                 <text x="150" y="153" textAnchor="middle" dominantBaseline="middle" className="fill-[#121417] text-[12px] font-black">
-                  {wheelResult === null ? 'READY' : wheelResult > 0 ? `+${wheelResult}` : String(wheelResult)}
+                  {wheelResult === null ? 'READY' : !wheelRevealed ? 'SPIN' : wheelResult > 0 ? `+${wheelResult}` : String(wheelResult)}
                 </text>
               </svg>
             </div>
@@ -269,19 +333,26 @@ export function MinigamesPage() {
         </div>
       ) : null}
 
-      {openedChestReward !== null ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
+      {rewardPopup ? (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-reward-pop rounded-md border border-line bg-white p-6 text-center shadow-lift">
-            <div className="mx-auto mb-4 grid h-28 w-32 animate-chest-open place-items-end">
-              <div className="h-16 w-28 rounded-md bg-[#8f5f3d] shadow-lift" />
-              <div className="-mt-24 h-9 w-28 rotate-[-8deg] rounded-t-md bg-citrus shadow-soft" />
-            </div>
-            <h2 className="text-xl font-black">Chest opened</h2>
-            <div className="mt-3 inline-flex rounded-md bg-field px-4 py-3">
-              <CoinAmount amount={openedChestReward} className="text-lg" />
+            {rewardPopup.variant === 'chest' ? (
+              <RewardChest open className="mx-auto mb-3 h-32 w-40" />
+            ) : (
+              <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-citrus/10">
+                {rewardPopup.variant === 'wheel' ? <Sparkles size={34} className="text-citrus" /> : <BadgeDollarSign size={34} className="text-citrus" />}
+              </div>
+            )}
+            <h2 className="text-xl font-black">{rewardPopup.title}</h2>
+            <p className="mt-2 text-sm text-ink/60">{rewardPopup.detail}</p>
+            <p className={`mt-4 text-3xl font-black ${rewardPopup.amount < 0 ? 'text-rust' : 'text-citrus'}`}>
+              {signedCoins(rewardPopup.amount)}
+            </p>
+            <div className="mt-4 inline-flex rounded-md bg-field px-4 py-3">
+              <CoinAmount amount={rewardPopup.amount} className="text-lg" />
             </div>
             <button
-              onClick={() => setOpenedChestReward(null)}
+              onClick={() => setRewardPopup(null)}
               className="mt-5 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white"
             >
               Nice

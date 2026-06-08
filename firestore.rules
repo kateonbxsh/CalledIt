@@ -246,8 +246,14 @@ service cloud.firestore {
     }
 
     match /rewardClaims/{claimId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow get: if signedIn() && (
+        claimId.matches('^' + request.auth.uid + '_.*') ||
+        resource.data.userId == request.auth.uid
+      );
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && claimId.matches('^' + request.auth.uid + '_.*');
       allow update, delete: if false;
     }
 
