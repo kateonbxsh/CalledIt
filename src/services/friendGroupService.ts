@@ -24,6 +24,13 @@ async function resolveUids(usernames: string[]): Promise<string[]> {
   return results.filter((uid): uid is string => uid !== null);
 }
 
+function sameUsernames(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((username, index) => username === sortedB[index]);
+}
+
 export async function listMyFriendGroups(user: UserProfile): Promise<FriendGroup[]> {
   const groupsRef = collection(db, 'friendGroups');
   const [createdSnap, memberSnap] = await Promise.all([
@@ -70,17 +77,24 @@ export async function updateFriendGroup(
   memberUsernames: string[],
   creatorUsername: string,
 ) {
+  const groupRef = doc(db, 'friendGroups', groupId);
+  const previousSnap = await getDoc(groupRef);
+  const previousGroup = previousSnap.exists() ? ({ id: previousSnap.id, ...previousSnap.data() } as FriendGroup) : null;
   const filtered = memberUsernames
     .map((u) => u.trim().toLowerCase())
     .filter((u) => u && u !== creatorUsername);
   const memberUids = await resolveUids(filtered);
 
-  await updateDoc(doc(db, 'friendGroups', groupId), {
+  await updateDoc(groupRef, {
     name: name.trim(),
     memberUsernames: filtered,
     memberUids,
     updatedAt: serverTimestamp(),
   });
+
+  if (previousGroup && sameUsernames(previousGroup.memberUsernames, filtered)) {
+    return;
+  }
 
   const allGroupUsernames = [creatorUsername, ...filtered];
   const betsSnap = await getDocs(query(collection(db, 'bets'), where('groupId', '==', groupId), limit(100)));

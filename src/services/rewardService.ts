@@ -436,6 +436,7 @@ export async function postCompletedChallenge(params: {
   challenge: WeeklyChallengeDefinition;
   weekKey?: string;
   proofImageUrl: string;
+  comment?: string;
   visibility: BetVisibility;
   groupId?: string;
   groups?: FriendGroup[];
@@ -465,12 +466,15 @@ export async function postCompletedChallenge(params: {
       visibility: audience.visibility,
       title: params.challenge.title,
       body: params.challenge.body,
+      comment: params.comment?.trim() || null,
       creatorId: params.user.uid,
       creatorUsername: params.user.username,
+      creatorDisplayName: params.user.displayName,
       invitedUsernames: audience.invitedUsernames,
       groupId: audience.groupId,
       completerId: params.user.uid,
       completerUsername: params.user.username,
+      completerDisplayName: params.user.displayName,
       systemChallengeId: params.challenge.id,
       weekKey,
       proofImageUrl: params.proofImageUrl,
@@ -501,8 +505,10 @@ export async function legacyPostCompletedChallenge(params: {
     body: params.body?.trim() || null,
     creatorId: params.user.uid,
     creatorUsername: params.user.username,
+    creatorDisplayName: params.user.displayName,
     completerId: params.user.uid,
     completerUsername: params.user.username,
+    completerDisplayName: params.user.displayName,
     proofImageUrl: params.proofImageUrl,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -557,6 +563,7 @@ export async function createWagerChallenge(params: {
       body: params.body?.trim() || null,
       creatorId: params.user.uid,
       creatorUsername: params.user.username,
+      creatorDisplayName: params.user.displayName,
       invitedUsernames: audience.invitedUsernames,
       groupId: audience.groupId,
       targetUsername: normalizedTarget,
@@ -582,6 +589,7 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
       status: 'completed',
       completerId: user.uid,
       completerUsername: user.username,
+      completerDisplayName: user.displayName,
       proofImageUrl,
       completedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),

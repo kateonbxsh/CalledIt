@@ -262,12 +262,15 @@ export interface ChallengeActivity {
   visibility: BetVisibility;
   title: string;
   body?: string;
+  comment?: string | null;
   creatorId: string;
   creatorUsername: string;
+  creatorDisplayName?: string | null;
   invitedUsernames?: string[];
   groupId?: string | null;
   completerId?: string | null;
   completerUsername?: string | null;
+  completerDisplayName?: string | null;
   targetUsername?: string | null;
   proofImageUrl?: string | null;
   stake?: number;

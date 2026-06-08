@@ -26,6 +26,7 @@ service cloud.firestore {
         resource.data.visibility == 'public' ||
         resource.data.creatorId == request.auth.uid ||
         username() in resource.data.invitedUsernames ||
+        canReadGroupLinkedResource() ||
         isAdmin()
       );
     }
@@ -46,8 +47,20 @@ service cloud.firestore {
         resource.data.visibility == 'public' ||
         resource.data.creatorId == request.auth.uid ||
         username() in resource.data.invitedUsernames ||
+        canReadGroupLinkedResource() ||
         isAdmin()
       );
+    }
+
+    function canReadGroupLinkedResource() {
+      return signedIn()
+        && resource.data.keys().hasAny(['groupId'])
+        && resource.data.groupId != null
+        && exists(/databases/$(database)/documents/friendGroups/$(resource.data.groupId))
+        && (
+          get(/databases/$(database)/documents/friendGroups/$(resource.data.groupId)).data.creatorId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/friendGroups/$(resource.data.groupId)).data.memberUids
+        );
     }
 
     // Any signed-in user can write resolution fields — the allowlist is the security boundary.

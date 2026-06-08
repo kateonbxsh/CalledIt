@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   limit,
@@ -151,6 +152,19 @@ export async function findUsersByUsernamePrefix(prefix: string) {
     ),
   );
   return snap.docs.map((item) => item.data() as UserProfile);
+}
+
+export async function getUsersByIds(ids: string[]) {
+  const uniqueIds = [...new Set(ids)].filter(Boolean);
+  const snaps = await Promise.all(uniqueIds.map((uid) => getDoc(doc(db, 'users', uid))));
+  return new Map(
+    snaps
+      .filter((snap) => snap.exists())
+      .map((snap) => {
+        const user = snap.data() as UserProfile;
+        return [user.uid, user] as const;
+      }),
+  );
 }
 
 export function buildStatsAfterResolution(params: {

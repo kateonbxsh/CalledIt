@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CheckCircle2, ImageIcon, Target, Trophy, XCircle } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
@@ -15,6 +16,7 @@ import {
   postCompletedChallenge,
   weeklyChallengesForUser,
 } from '../services/rewardService';
+import { getUsersByIds } from '../services/userService';
 import type { BetVisibility, ChallengeActivity, FriendGroup } from '../types';
 import type { WeeklyChallengeDefinition } from '../services/rewardService';
 import { relativeTime } from '../utils/format';
@@ -55,6 +57,7 @@ export function ChallengesPage() {
   const [weeklyModalChallenge, setWeeklyModalChallenge] = useState<WeeklyChallengeDefinition | null>(null);
   const [wagerModalOpen, setWagerModalOpen] = useState(false);
   const [proofByChallenge, setProofByChallenge] = useState<Record<string, string>>({});
+  const [commentByChallenge, setCommentByChallenge] = useState<Record<string, string>>({});
   const [weeklyReward, setWeeklyReward] = useState<{ coins: number; chest: number } | null>(null);
 
   const weekKey = currentWeekKey();
@@ -85,8 +88,20 @@ export function ChallengesPage() {
       if (!profile) return;
       const nextGroups = await listMyFriendGroups(profile);
       const nextActivities = await listChallengeActivities(profile, nextGroups);
+      const usersById = await getUsersByIds(
+        nextActivities.flatMap((activity) => [activity.creatorId, activity.completerId ?? '']),
+      );
+      const hydratedActivities = nextActivities.map((activity) => {
+        const creator = usersById.get(activity.creatorId);
+        const completer = activity.completerId ? usersById.get(activity.completerId) : null;
+        return {
+          ...activity,
+          creatorDisplayName: activity.creatorDisplayName ?? creator?.displayName ?? null,
+          completerDisplayName: activity.completerDisplayName ?? completer?.displayName ?? null,
+        };
+      });
       setGroups(nextGroups);
-      setActivities(nextActivities);
+      setActivities(hydratedActivities);
     } finally {
       setLoading(false);
     }
@@ -127,6 +142,7 @@ export function ChallengesPage() {
         challenge,
         weekKey,
         proofImageUrl: proof,
+        comment: commentByChallenge[challenge.id] || undefined,
         visibility: postGroupId ? 'private' : postVisibility,
         groupId: postGroupId || undefined,
         groups,
@@ -135,6 +151,7 @@ export function ChallengesPage() {
       setWeeklyModalChallenge(null);
       setWeeklyModalOpen(false);
       setProofByChallenge((current) => ({ ...current, [challenge.id]: '' }));
+      setCommentByChallenge((current) => ({ ...current, [challenge.id]: '' }));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not complete weekly challenge.');
@@ -287,31 +304,55 @@ export function ChallengesPage() {
                   && (!activity.targetUsername || activity.targetUsername === profile?.username);
                 const deadlinePassed = !!activity.deadline && Date.now() >= activity.deadline.toMillis();
                 const canFail = activity.type === 'wager' && activity.status === 'open' && activity.creatorId === profile?.uid;
+                const actorId = activity.type === 'completion' ? (activity.completerId || activity.creatorId) : activity.creatorId;
+                const actorUsername = activity.type === 'completion'
+                  ? (activity.completerUsername || activity.creatorUsername)
+                  : activity.creatorUsername;
+                const actorDisplayName = activity.type === 'completion'
+                  ? (activity.completerDisplayName || activity.completerUsername || activity.creatorDisplayName || activity.creatorUsername)
+                  : (activity.creatorDisplayName || activity.creatorUsername);
                 return (
-                  <article key={activity.id} className="overflow-hidden rounded-md border border-line bg-white shadow-soft">
-                    {activity.proofImageUrl ? (
-                      <img src={activity.proofImageUrl} alt="" className="max-h-96 w-full object-cover" loading="lazy" />
-                    ) : (
-                      <div className="grid h-40 place-items-center bg-field text-ink/25">
-                        <ImageIcon size={30} />
+                  <article key={activity.id} className="rounded-md border border-line bg-white p-4 shadow-soft">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
+                      <div className="min-w-0">
+                      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <Link to={`/profile/${actorId}`} className="text-xs font-semibold text-ink/45 hover:text-ink hover:underline">
+                            @{actorUsername}
+                          </Link>
+                          {activity.type === 'wager' ? (
+                            <span className="rounded-full bg-citrus/10 px-2 py-0.5 text-xs font-black text-citrus">wager</span>
+                          ) : (
+                            <span className="rounded-full bg-mint/10 px-2 py-0.5 text-xs font-black text-mint">weekly</span>
+                          )}
+                          <span className="text-xs font-semibold text-ink/35">
+                            {activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-black ${statusStyle(activity.status)}`}>
+                            {activity.status}
+                          </span>
+                        </div>
+                        {activity.type === 'completion' && activity.reward ? (
+                          <div className="inline-flex shrink-0 self-start rounded-md bg-citrus/10 px-2.5 py-1">
+                            <CoinAmount amount={activity.reward} className="text-sm" />
+                          </div>
+                        ) : null}
                       </div>
-                    )}
-                    <div className="p-4">
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full px-2 py-1 text-xs font-black ${statusStyle(activity.status)}`}>
-                          {activity.status}
-                        </span>
-                        <span className="text-xs font-semibold text-ink/45">
-                          @{activity.creatorUsername} - {activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}
-                        </span>
-                        {activity.type === 'wager' ? (
-                          <span className="rounded-full bg-citrus/10 px-2 py-1 text-xs font-black text-citrus">wager</span>
-                        ) : (
-                          <span className="rounded-full bg-mint/10 px-2 py-1 text-xs font-black text-mint">weekly</span>
-                        )}
-                      </div>
-                      <h2 className="text-lg font-black">{activity.title}</h2>
-                      {activity.body ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-ink/65">{activity.body}</p> : null}
+                      {activity.type === 'completion' ? (
+                        <h2 className="text-base leading-snug">
+                          <span className="font-black">{actorDisplayName}</span>
+                          <span className="font-normal"> completed </span>
+                          <span className="font-black">{activity.title}</span>
+                        </h2>
+                      ) : (
+                        <h2 className="text-lg font-black leading-snug">{activity.title}</h2>
+                      )}
+                      {activity.body ? <p className="mt-1.5 whitespace-pre-wrap text-sm leading-5 text-ink/65">{activity.body}</p> : null}
+                      {activity.comment ? (
+                        <p className="mt-2.5 rounded-md bg-field px-3 py-2 text-sm font-semibold leading-5 text-ink/75">
+                          {activity.comment}
+                        </p>
+                      ) : null}
                       {activity.type === 'wager' ? (
                         <div className="mt-3 grid gap-2 rounded-md bg-field p-3 text-sm sm:grid-cols-3">
                           <div>
@@ -327,11 +368,17 @@ export function ChallengesPage() {
                             <p className="mt-1 font-bold">@{activity.targetUsername || 'anyone'}</p>
                           </div>
                         </div>
-                      ) : activity.reward ? (
-                        <div className="mt-3 inline-flex rounded-md bg-field px-3 py-2">
-                          <CoinAmount amount={activity.reward} className="text-sm" />
-                        </div>
                       ) : null}
+                      </div>
+                      {activity.proofImageUrl ? (
+                        <img src={activity.proofImageUrl} alt="" className="h-40 w-full rounded-md border border-line object-cover sm:h-36" loading="lazy" />
+                      ) : (
+                        <div className="grid h-32 place-items-center rounded-md bg-field text-ink/25 sm:h-36">
+                          <ImageIcon size={24} />
+                        </div>
+                      )}
+                    </div>
+                    <div>
                       {canComplete ? (
                         <div className="mt-3 rounded-md border border-line p-3">
                           <label className="block text-sm font-medium">
@@ -436,6 +483,16 @@ export function ChallengesPage() {
             {proofByChallenge[weeklyModalChallenge.id] ? (
               <img src={proofByChallenge[weeklyModalChallenge.id]} alt="" className="mt-3 h-44 w-full rounded-md object-cover" />
             ) : null}
+            <label className="mt-3 block text-sm font-medium">
+              Comment
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-md border border-line bg-field px-3 py-2 text-sm"
+                value={commentByChallenge[weeklyModalChallenge.id] ?? ''}
+                onChange={(event) => setCommentByChallenge((current) => ({ ...current, [weeklyModalChallenge.id]: event.target.value }))}
+                placeholder="Add a caption, rating, or what happened"
+                maxLength={280}
+              />
+            </label>
             <button
               onClick={() => completeWeekly(weeklyModalChallenge)}
               disabled={!!busy}

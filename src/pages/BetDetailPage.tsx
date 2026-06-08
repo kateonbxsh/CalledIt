@@ -458,13 +458,17 @@ export function BetDetailPage() {
           ) : null}
           <div className="min-w-0">
             <h1 className="break-words text-2xl font-black tracking-normal sm:text-3xl md:truncate">{bet.title}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink/65">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-ink/65">
               <Link to={`/profile/${bet.creatorId}`} className="font-bold text-ink/75 hover:underline">
                 @{bet.creatorUsername}
               </Link>
-              <span>{bet.category || 'General'}</span>
-              <span>{betStatusLabel(bet)}</span>
-              <span>{bet.deadline ? `deadline ${relativeTime(bet.deadline)}` : 'no deadline'}</span>
+              <span className="rounded-full bg-field px-2.5 py-1 text-xs font-black text-ink/65">{bet.category || 'General'}</span>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
+                bet.status === 'open' ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-coral/12 text-coral'
+              }`}>
+                {betStatusLabel(bet)}
+              </span>
+              <span className="text-sm font-semibold text-ink/45">{bet.deadline ? `deadline ${relativeTime(bet.deadline)}` : 'no deadline'}</span>
             </div>
           </div>
         </div>
@@ -490,14 +494,8 @@ export function BetDetailPage() {
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-white p-3">
-            <span className={`rounded-full px-3 py-1 text-xs font-black ${
-              bet.status === 'open' ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-coral/12 text-coral'
-            }`}>
-              {betStatusLabel(bet)}
-            </span>
-            <span className="rounded-full bg-field px-3 py-1 text-xs font-bold text-ink/60">{bet.category || 'General'}</span>
-            <span className="text-sm font-semibold text-ink/55">{bet.predictionCount} predictions</span>
+          <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-white p-3">
+            <span className="text-sm font-black text-ink/65">{bet.predictionCount} predictions</span>
             <CoinAmount amount={bet.totalCoinsStaked} className="text-sm" />
           </div>
 
@@ -509,13 +507,13 @@ export function BetDetailPage() {
             )}
           </div>
 
-          {/* Closest type: show participant guesses */}
+          {/* Closest type: show distribution before resolution and results after resolution */}
           {closest ? (
             <div className="rounded-md border border-line bg-white p-4">
               <h2 className="mb-3 font-bold">Guess Distribution</h2>
               <ClosestDistributionChart bet={bet} predictions={predictions} />
-              <h2 className="mb-3 mt-4 font-bold">
-                {bet.status === 'resolved' ? 'Results' : 'Participants'}
+              <h2 className={`mb-3 mt-4 font-bold ${bet.status === 'resolved' ? '' : 'hidden'}`}>
+                Results
                 {bet.status === 'resolved' && bet.resolution ? (
                   <span className="ml-2 text-sm font-normal text-ink/55">
                     Actual: {bet.type === 'closestNumber'
@@ -525,7 +523,7 @@ export function BetDetailPage() {
                 ) : null}
               </h2>
               {bet.status !== 'resolved' ? (
-                <p className="text-sm text-ink/55 italic">Exact guesses are hidden until the bet is resolved. The chart only shows anonymous ranges.</p>
+                null
               ) : sortedPredictions.length === 0 ? (
                 <p className="text-sm text-ink/55">No predictions yet.</p>
               ) : (

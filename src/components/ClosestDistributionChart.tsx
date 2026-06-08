@@ -1,6 +1,7 @@
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
+  CartesianGrid,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -25,60 +26,81 @@ function compactDate(ms: number) {
   });
 }
 
-function numberBuckets(values: number[]) {
+type DensityPoint = {
+  x: number;
+  density: number;
+  label: string;
+};
+
+type DensityCurve = {
+  data: DensityPoint[];
+  minX: number;
+  maxX: number;
+  bandwidth: number;
+  toLabel: (x: number) => string;
+};
+
+function normalizeDensity(points: DensityPoint[]) {
+  const area = points.slice(1).reduce((sum, point, index) => {
+    const previous = points[index];
+    return sum + ((previous.density + point.density) / 2) * (point.x - previous.x);
+  }, 0);
+
+  if (area <= 0) return points;
+  return points.map((point) => ({ ...point, density: point.density / area }));
+}
+
+function buildDensityCurve(values: number[], toLabel: (x: number) => string): DensityCurve {
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = Math.max(1, max - min);
-  const bucketCount = Math.min(8, Math.max(3, Math.ceil(Math.sqrt(values.length) + 2)));
-  const size = range / bucketCount;
+  const sortedValues = [...values].sort((a, b) => a - b);
+  const gaps = sortedValues
+    .slice(1)
+    .map((value, index) => value - sortedValues[index])
+    .filter((gap) => gap > 0);
+  const typicalGap = gaps.length > 0 ? gaps[Math.floor(gaps.length / 2)] : range;
+  const bandwidth = Math.max(
+    Math.min(range / 9, typicalGap * 0.28, range / Math.sqrt(values.length) * 0.38),
+    range / 85,
+    0.18,
+  );
+  const minX = min - bandwidth * 5;
+  const maxX = max + bandwidth * 5;
+  const steps = 240;
+  const rawPoints = Array.from({ length: steps + 1 }, (_, index) => {
+    const x = minX + ((maxX - minX) * index) / steps;
+    const density = values.reduce((sum, value) => {
+      const u = (x - value) / bandwidth;
+      return sum + Math.exp(-0.5 * u * u);
+    }, 0) / (values.length * bandwidth * Math.sqrt(2 * Math.PI));
 
-  return Array.from({ length: bucketCount }, (_, index) => {
-    const start = min + size * index;
-    const end = index === bucketCount - 1 ? max : start + size;
-    const count = values.filter((value) => (
-      index === bucketCount - 1 ? value >= start && value <= end : value >= start && value < end
-    )).length;
-    const decimals = range < 10 ? 1 : 0;
     return {
-      label: `${start.toFixed(decimals)}-${end.toFixed(decimals)}`,
-      count,
-      center: start + (end - start) / 2,
+      x,
+      density,
+      label: toLabel(x),
     };
   });
-}
 
-function dateBuckets(values: number[]) {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const rangeDays = Math.max(1, Math.ceil((max - min) / DAY_MS));
-  const bucketCount = Math.min(8, Math.max(3, Math.ceil(Math.sqrt(values.length) + 2)));
-  const sizeDays = Math.max(1, Math.ceil(rangeDays / bucketCount));
-  const startDay = new Date(min);
-  startDay.setHours(0, 0, 0, 0);
-  const startMs = startDay.getTime();
-
-  return Array.from({ length: bucketCount }, (_, index) => {
-    const start = startMs + index * sizeDays * DAY_MS;
-    const end = start + sizeDays * DAY_MS - 1;
-    const count = values.filter((value) => value >= start && value <= end).length;
-    return {
-      label: sizeDays === 1 ? compactDate(start) : `${compactDate(start)}-${compactDate(end)}`,
-      count,
-      center: start + (end - start) / 2,
-    };
-  }).filter((bucket) => bucket.count > 0 || bucket.center <= max + sizeDays * DAY_MS);
+  return {
+    data: normalizeDensity(rawPoints),
+    minX,
+    maxX,
+    bandwidth,
+    toLabel,
+  };
 }
 
 export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predictions: Prediction[] }) {
-  const values = bet.type === 'closestNumber'
+  const rawValues = bet.type === 'closestNumber'
     ? predictions
-        .map((prediction) => prediction.numericGuess)
-        .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+      .map((prediction) => prediction.numericGuess)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
     : predictions
-        .map((prediction) => asTime(prediction.dateGuess))
-        .filter((value): value is number => value !== null);
+      .map((prediction) => asTime(prediction.dateGuess))
+      .filter((value): value is number => value !== null);
 
-  if (values.length < 2) {
+  if (rawValues.length < 2) {
     return (
       <div className="grid h-48 place-items-center rounded-md border border-line bg-field px-4 text-center text-sm text-ink/60">
         Guess distribution appears after more predictions arrive.
@@ -86,44 +108,71 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
     );
   }
 
-  const data = bet.type === 'closestNumber' ? numberBuckets(values) : dateBuckets(values);
+  const firstDateMs = bet.type === 'closestDate' ? Math.min(...rawValues) : null;
+  const startDayMs = firstDateMs === null
+    ? null
+    : new Date(firstDateMs).setHours(0, 0, 0, 0);
+  const values = bet.type === 'closestNumber'
+    ? rawValues
+    : rawValues.map((value) => ((value - (startDayMs ?? value)) / DAY_MS));
+  const numberRange = bet.type === 'closestNumber'
+    ? Math.max(1, Math.max(...values) - Math.min(...values))
+    : 1;
+  const numberDecimals = numberRange < 10 ? 1 : 0;
+  const curve = buildDensityCurve(
+    values,
+    bet.type === 'closestNumber'
+      ? (x) => x.toFixed(numberDecimals)
+      : (x) => compactDate((startDayMs ?? 0) + x * DAY_MS),
+  );
   const actual =
     bet.status === 'resolved' && bet.type === 'closestNumber' && bet.resolution?.actualValue !== undefined
       ? bet.resolution.actualValue
       : bet.status === 'resolved' && bet.type === 'closestDate'
-        ? asTime(bet.resolution?.actualDateValue)
+        ? (() => {
+          const time = asTime(bet.resolution?.actualDateValue);
+          return time === null || startDayMs === null ? null : (time - startDayMs) / DAY_MS;
+        })()
         : null;
-  const actualBucket = actual === null
-    ? null
-    : data.reduce((best, bucket) => (
-        Math.abs(bucket.center - actual) < Math.abs(best.center - actual) ? bucket : best
-      ), data[0]);
 
   return (
     <div className="h-56 rounded-md border border-line bg-white p-3">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
+        <AreaChart data={curve.data} margin={{ top: 8, right: 14, bottom: 0, left: 10 }}>
+          <defs>
+            <linearGradient id="guessDensityFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#2f7d63" stopOpacity={0.34} />
+              <stop offset="95%" stopColor="#2f7d63" stopOpacity={0.04} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#e8e5dc" strokeDasharray="3 5" vertical={false} />
           <XAxis
-            dataKey="label"
+            dataKey="x"
+            type="number"
+            domain={[curve.minX, curve.maxX]}
+            tickFormatter={curve.toLabel}
             tickLine={false}
             axisLine={false}
-            interval={0}
             tick={{ fontSize: 10 }}
           />
           <YAxis
-            allowDecimals={false}
+            dataKey="density"
             tickLine={false}
             axisLine={false}
-            width={28}
+            width={34}
             tick={{ fontSize: 10 }}
+            tickFormatter={(value) => Number(value).toFixed(2)}
           />
           <Tooltip
-            formatter={(value) => [`${value} guesses`, 'Count']}
-            labelFormatter={(label) => `Range: ${label}`}
+            formatter={(value) => [Number(value).toFixed(3), 'Probability density']}
+            labelFormatter={(_, payload) => {
+              const point = payload?.[0]?.payload as DensityPoint | undefined;
+              return point ? `Guess: ${point.label}` : 'Guess';
+            }}
           />
-          {actualBucket ? (
+          {actual !== null ? (
             <ReferenceLine
-              x={actualBucket.label}
+              x={actual}
               stroke="#d95f46"
               strokeDasharray="4 4"
               label={{
@@ -134,8 +183,17 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
               }}
             />
           ) : null}
-          <Bar dataKey="count" fill="#2f7d63" radius={[4, 4, 0, 0]} />
-        </BarChart>
+          <Area
+            type="monotone"
+            dataKey="density"
+            stroke="#2f7d63"
+            strokeWidth={3}
+            fill="url(#guessDensityFill)"
+            dot={false}
+            activeDot={{ r: 4, stroke: '#163d31', strokeWidth: 1, fill: '#f7f5ee' }}
+            isAnimationActive
+          />
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
