@@ -4,12 +4,14 @@ import { Layout } from './components/Layout';
 import { useAuth } from './contexts/AuthContext';
 import { AuthPage } from './pages/AuthPage';
 import { BetDetailPage } from './pages/BetDetailPage';
+import { ChallengesPage } from './pages/ChallengesPage';
 import { CompleteProfilePage } from './pages/CompleteProfilePage';
 import { CreateBetPage } from './pages/CreateBetPage';
 import { FeedPage } from './pages/FeedPage';
 import { FriendGroupsPage } from './pages/FriendGroupsPage';
 import { HowToPlayPage } from './pages/HowToPlayPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
+import { MinigamesPage } from './pages/MinigamesPage';
 import { MyBetsPage } from './pages/MyBetsPage';
 import { PredictionHistoryPage } from './pages/PredictionHistoryPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -46,11 +48,12 @@ export function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<FeedPage scope="public" />} />
-        <Route path="private" element={<FeedPage scope="private" />} />
+        <Route index element={<FeedPage />} />
         <Route path="mine" element={<MyBetsPage />} />
         <Route path="history" element={<PredictionHistoryPage />} />
         <Route path="groups" element={<FriendGroupsPage />} />
+        <Route path="challenges" element={<ChallengesPage />} />
+        <Route path="minigames" element={<MinigamesPage />} />
         <Route path="create" element={<CreateBetPage />} />
         <Route path="bets/:betId" element={<BetDetailPage />} />
         <Route path="leaderboard" element={<LeaderboardPage />} />

@@ -27,7 +27,10 @@ import type {
   UpdateBetMetadataInput,
   UserProfile,
 } from '../types';
-import { calculateCoinPayouts } from '../utils/coins';
+import {
+  calculatePredictionChangeFee,
+  calculatePredictionRewards,
+} from '../utils/coins';
 import {
   calculateChanceSummary,
   calculateSmoothedChanceSummary,
@@ -224,6 +227,7 @@ export async function placePrediction(input: PredictionInput) {
   const betRef = doc(db, 'bets', input.bet.id);
   const userRef = doc(db, 'users', input.user.uid);
   const snapshotRef = doc(collection(db, 'chanceSnapshots'));
+  const eventRef = doc(collection(db, 'predictionEvents'));
   const closest = isClosestType(input.bet.type);
   const openChoice = input.bet.type === 'openChoice';
 
@@ -234,16 +238,17 @@ export async function placePrediction(input: PredictionInput) {
       transaction.get(userRef),
     ]);
 
-    if (predictionSnap.exists()) throw new Error('You already predicted on this bet.');
     if (!betSnap.exists()) throw new Error('Bet not found.');
     if (!userSnap.exists()) throw new Error('Profile not found.');
 
     const bet = { id: betSnap.id, ...betSnap.data() } as Bet;
     const user = userSnap.data() as UserProfile;
+    const existingPrediction = predictionSnap.exists()
+      ? ({ id: predictionSnap.id, ...predictionSnap.data() } as Prediction)
+      : null;
     if (bet.status !== 'open') throw new Error('This bet is not open.');
     if (bet.deadline && Timestamp.now().toMillis() >= bet.deadline.toMillis()) throw new Error('The deadline has passed.');
     if (input.stake < 10) throw new Error('Minimum stake is 10 coins.');
-    if (input.stake > user.coinBalance) throw new Error('Insufficient coins.');
 
     const previousPredictions = await getDocs(
       query(collection(db, 'predictions'), where('betId', '==', bet.id)),
@@ -287,7 +292,24 @@ export async function placePrediction(input: PredictionInput) {
       ? 1 / (existing.length + 1)
       : chanceForOption(bet.chanceSummary, effectiveOptionId) || 1 / Math.max(1, nextOptions.length);
 
-    transaction.set(predictionRef, {
+    const now = Timestamp.now();
+    const previousStake = existingPrediction?.stake ?? 0;
+    const previousOptionId = existingPrediction?.optionId ?? null;
+    const revisionCount = existingPrediction ? (existingPrediction.revisionCount ?? 0) + 1 : 0;
+    const changeFee = existingPrediction
+      ? calculatePredictionChangeFee({
+          previousStake,
+          nextStake: input.stake,
+          revisionCount: existingPrediction.revisionCount ?? 0,
+          betCreatedAtMs: bet.createdAt?.toMillis?.(),
+          deadlineMs: bet.deadline?.toMillis?.() ?? null,
+          nowMs: now.toMillis(),
+        })
+      : 0;
+    const balanceDelta = previousStake - input.stake - changeFee;
+    if (user.coinBalance + previousStake < input.stake + changeFee) throw new Error('Insufficient coins.');
+
+    const predictionPayload = {
       betId: bet.id,
       userId: user.uid,
       username: user.username,
@@ -297,27 +319,50 @@ export async function placePrediction(input: PredictionInput) {
       displayedChanceAtBetTime,
       userRating: user.rating,
       status: 'pending',
+      originalOptionId: existingPrediction?.originalOptionId ?? effectiveOptionId,
+      originalStake: existingPrediction?.originalStake ?? input.stake,
+      originalChanceAtBetTime: existingPrediction?.originalChanceAtBetTime ?? displayedChanceAtBetTime,
+      lastChangedAt: existingPrediction ? serverTimestamp() : null,
+      revisionCount,
+      changeFeesPaid: (existingPrediction?.changeFeesPaid ?? 0) + changeFee,
+      lastChangeFee: changeFee,
       scorePrediction: input.scorePrediction ?? null,
       numericGuess: input.numericGuess ?? null,
       dateGuess: input.dateGuess ?? null,
       customOptionLabel: customOptionLabel ?? null,
-      createdAt: serverTimestamp(),
-    });
+      createdAt: existingPrediction?.createdAt ?? serverTimestamp(),
+    };
+
+    transaction.set(predictionRef, predictionPayload);
 
     transaction.update(userRef, {
-      coinBalance: increment(-input.stake),
+      coinBalance: increment(balanceDelta),
       updatedAt: serverTimestamp(),
+    });
+
+    transaction.set(eventRef, {
+      betId: bet.id,
+      userId: user.uid,
+      username: user.username,
+      fromOptionId: previousOptionId,
+      toOptionId: effectiveOptionId,
+      fromStake: existingPrediction?.stake ?? null,
+      toStake: input.stake,
+      chanceBefore: existingPrediction?.displayedChanceAtBetTime ?? displayedChanceAtBetTime,
+      chanceAfter: displayedChanceAtBetTime,
+      fee: changeFee,
+      createdAt: serverTimestamp(),
     });
 
     if (closest) {
       transaction.update(betRef, {
-        predictionCount: increment(1),
-        totalCoinsStaked: increment(input.stake),
+        predictionCount: existingPrediction ? bet.predictionCount : increment(1),
+        totalCoinsStaked: increment(input.stake - previousStake),
         updatedAt: serverTimestamp(),
       });
     } else {
       const nextPredictions = [
-        ...existing,
+        ...existing.filter((prediction) => prediction.id !== predictionRef.id),
         {
           id: predictionRef.id,
           betId: bet.id,
@@ -329,7 +374,14 @@ export async function placePrediction(input: PredictionInput) {
           displayedChanceAtBetTime,
           userRating: user.rating,
           status: 'pending',
-          createdAt: Timestamp.now(),
+          originalOptionId: existingPrediction?.originalOptionId ?? effectiveOptionId,
+          originalStake: existingPrediction?.originalStake ?? input.stake,
+          originalChanceAtBetTime: existingPrediction?.originalChanceAtBetTime ?? displayedChanceAtBetTime,
+          lastChangedAt: existingPrediction ? Timestamp.now() : null,
+          revisionCount,
+          changeFeesPaid: (existingPrediction?.changeFeesPaid ?? 0) + changeFee,
+          lastChangeFee: changeFee,
+          createdAt: existingPrediction?.createdAt ?? Timestamp.now(),
         } as Prediction,
       ];
       const elapsedMs = Timestamp.now().toMillis() - bet.updatedAt.toMillis();
@@ -342,8 +394,8 @@ export async function placePrediction(input: PredictionInput) {
 
       transaction.update(betRef, {
         ...(openChoice ? { options: nextOptions } : {}),
-        predictionCount: increment(1),
-        totalCoinsStaked: increment(input.stake),
+        predictionCount: existingPrediction ? bet.predictionCount : increment(1),
+        totalCoinsStaked: increment(input.stake - previousStake),
         chanceSummary,
         updatedAt: serverTimestamp(),
       });
@@ -383,7 +435,16 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
 
     // --- Determine winners and payouts ---
     let winnerPredictionIds: string[] = [];
-    let coinPayouts: Array<{ userId: string; predictionId: string; coinDelta: number; isWinner: boolean; stake: number }>;
+    let coinPayouts: Array<{
+      userId: string;
+      predictionId: string;
+      coinDelta: number;
+      isWinner: boolean;
+      stake: number;
+      poolProfit?: number;
+      mintedReward?: number;
+      timingMultiplier?: number;
+    }>;
     let scoreBonusResult: ScoreBonusResult = { bonusPool: 0, winners: [] };
 
     if (closest) {
@@ -423,12 +484,22 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
           })
         : { bonusPool: 0, winners: [] };
 
-      coinPayouts = calculateCoinPayouts(predictions, winnerIds, scoreBonusResult.bonusPool).map((p) => ({
+      coinPayouts = calculatePredictionRewards({
+        predictions,
+        winningOptionId: winnerIds,
+        bonusPool: scoreBonusResult.bonusPool,
+        betCreatedAtMs: freshBet.createdAt?.toMillis?.(),
+        deadlineMs: freshBet.deadline?.toMillis?.() ?? null,
+        resolvedAtMs: Timestamp.now().toMillis(),
+      }).map((p) => ({
         userId: p.userId,
         predictionId: p.predictionId,
         coinDelta: p.coinDelta + (scoreBonusResult.winners.find((w) => w.predictionId === p.predictionId)?.coinBonus ?? 0),
         isWinner: p.isWinner,
         stake: p.stake,
+        poolProfit: p.poolProfit,
+        mintedReward: p.mintedReward,
+        timingMultiplier: p.timingMultiplier,
       }));
     }
 
@@ -453,22 +524,28 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
         : winningOptionIds(finalResolution).includes(prediction.optionId);
 
       const scoreBonus = scoreBonusResult.winners.find((w) => w.predictionId === prediction.id);
+      const payout = coinPayouts.find((p) => p.predictionId === prediction.id);
+      const hadSpicyForecast = !!user.pendingSpicyForecast;
+      const spicyForecastBonus = correct ? (user.pendingSpicyForecast?.bonus ?? 0) : 0;
       const ratingDelta = calculateRatingDelta({
         displayedChanceAtBetTime: prediction.displayedChanceAtBetTime,
         correct,
         stake: prediction.stake,
         userCoinBalanceAtBetTime: prediction.userBalanceAtBetTime,
         currentRating: user.rating,
+        timingMultiplier: payout?.timingMultiplier,
+        revisionCount: prediction.revisionCount ?? 0,
       }) + (scoreBonus?.ratingBonus ?? 0);
 
       const nextRating = applyRatingDelta(user.rating, ratingDelta);
-      const coinDelta = coinPayouts.find((p) => p.predictionId === prediction.id)?.coinDelta ?? 0;
+      const coinDelta = (payout?.coinDelta ?? 0) + spicyForecastBonus;
       const netCoinDelta = correct ? coinDelta - prediction.stake : -prediction.stake;
 
       transaction.update(userRef, {
         coinBalance: increment(coinDelta),
         rating: nextRating,
         rank: rankForRating(nextRating),
+        ...(hadSpicyForecast ? { pendingSpicyForecast: null } : {}),
         stats: buildStatsAfterResolution({
           stats: user.stats,
           correct,
@@ -483,6 +560,10 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
         correct,
         coinDelta: netCoinDelta,
         ratingDelta,
+        poolCoinProfit: payout?.poolProfit ?? 0,
+        mintedCoinReward: payout?.mintedReward ?? 0,
+        timingMultiplier: payout?.timingMultiplier ?? 1,
+        spicyForecastBonus,
         resolvedAt: serverTimestamp(),
         winningOptionId: closest
           ? (resolution.actualValue?.toString() ?? resolution.actualDateValue ?? '')

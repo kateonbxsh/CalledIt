@@ -12,7 +12,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { FriendGroup, UserProfile } from '../types';
+import type { Bet, ChallengeActivity, FriendGroup, UserProfile } from '../types';
 
 async function resolveUids(usernames: string[]): Promise<string[]> {
   const results = await Promise.all(
@@ -81,6 +81,28 @@ export async function updateFriendGroup(
     memberUids,
     updatedAt: serverTimestamp(),
   });
+
+  const allGroupUsernames = [creatorUsername, ...filtered];
+  const betsSnap = await getDocs(query(collection(db, 'bets'), where('groupId', '==', groupId), limit(100)));
+  const challengesSnap = await getDocs(query(collection(db, 'challenges'), where('groupId', '==', groupId), limit(100)));
+  await Promise.all([
+    ...betsSnap.docs.map((item) => {
+      const bet = { id: item.id, ...item.data() } as Bet;
+      const invitedUsernames = allGroupUsernames.filter((username) => username !== bet.creatorUsername);
+      return updateDoc(doc(db, 'bets', item.id), {
+        invitedUsernames,
+        updatedAt: serverTimestamp(),
+      });
+    }),
+    ...challengesSnap.docs.map((item) => {
+      const challenge = { id: item.id, ...item.data() } as ChallengeActivity;
+      const invitedUsernames = allGroupUsernames.filter((username) => username !== challenge.creatorUsername);
+      return updateDoc(doc(db, 'challenges', item.id), {
+        invitedUsernames,
+        updatedAt: serverTimestamp(),
+      });
+    }),
+  ]);
 }
 
 export async function deleteFriendGroup(groupId: string) {

@@ -5,7 +5,7 @@ import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
 import { RankBadge } from '../components/RankBadge';
 import { useAuth } from '../contexts/AuthContext';
-import { claimDailyRefill, updateProfile, updateUsername } from '../services/userService';
+import { updateProfile, updateUsername } from '../services/userService';
 import { downscaleProfileImage } from '../utils/image';
 import { rankForRating, rankProgress } from '../utils/ranks';
 
@@ -34,16 +34,6 @@ export function SettingsPage() {
     }
     await updateProfile(profile.uid, { displayName, bio, photoURL });
     setMessage('Profile saved.');
-  }
-
-  async function refill() {
-    if (!profile) return;
-    try {
-      await claimDailyRefill(profile);
-      setMessage('Coins refilled to 100.');
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Refill unavailable.');
-    }
   }
 
   async function onImageChange(file?: File) {
@@ -135,9 +125,6 @@ export function SettingsPage() {
           <section className="rounded-md border border-line bg-white p-4">
             <p className="text-sm text-ink/55">Coins</p>
             <CoinAmount amount={profile?.coinBalance ?? 0} className="mt-1 text-2xl" />
-            <button onClick={refill} className="mt-3 w-full rounded-md border border-line px-4 py-2 text-sm font-semibold">
-              Daily refill
-            </button>
           </section>
           <Link
             to="/how-to-play"

@@ -4,6 +4,8 @@ export interface RatingDeltaInput {
   stake: number;
   userCoinBalanceAtBetTime: number;
   currentRating: number;
+  timingMultiplier?: number;
+  revisionCount?: number;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -16,7 +18,9 @@ export function calculateRatingDelta(input: RatingDeltaInput) {
   const confidence = clamp(input.stake / Math.max(50, input.userCoinBalanceAtBetTime), 0.05, 0.35);
   const stakeMultiplier = 0.75 + confidence;
   const upsetMultiplier = input.correct ? Math.sqrt(1 / p) : Math.sqrt(1 / (1 - p));
-  let rawDelta = 32 * stakeMultiplier * (result - p) * upsetMultiplier;
+  const timingMultiplier = clamp(input.timingMultiplier ?? 1, 0.65, 1.25);
+  const revisionMultiplier = clamp(1 - (input.revisionCount ?? 0) * 0.12, 0.5, 1);
+  let rawDelta = 32 * stakeMultiplier * (result - p) * upsetMultiplier * timingMultiplier * revisionMultiplier;
   rawDelta = clamp(rawDelta, -45, 80);
 
   if (input.currentRating < 500 && rawDelta < 0) {

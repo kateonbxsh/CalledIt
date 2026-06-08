@@ -225,7 +225,7 @@ export function FriendGroupsPage() {
           <div className="w-full max-w-sm rounded-md border border-line bg-white p-5 shadow-lift animate-soft-enter">
             <h2 className="font-black">Delete this group?</h2>
             <p className="mt-2 text-sm text-ink/65">
-              The group will be removed. Existing bets created for this group are not affected.
+              The group will be removed. Editing group members updates linked bets, but deleting the group leaves existing bets as they are.
             </p>
             <div className="mt-4 flex gap-2">
               <button

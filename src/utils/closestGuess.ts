@@ -61,7 +61,9 @@ export function calculateClosestPayouts(
       return { userId: p.userId, predictionId: p.id, stake: p.stake, isWinner: false, coinDelta: 0 };
     }
     const profit = Math.floor((p.stake / winnerStake) * Math.max(0, losingPool));
-    return { userId: p.userId, predictionId: p.id, stake: p.stake, isWinner: true, coinDelta: p.stake + profit };
+    const chance = Math.max(0.05, 1 / Math.max(1, predictions.length));
+    const mintedReward = Math.round(10 * Math.sqrt(Math.max(10, p.stake) / 50) * Math.sqrt(1 / chance));
+    return { userId: p.userId, predictionId: p.id, stake: p.stake, isWinner: true, coinDelta: p.stake + profit + mintedReward };
   });
 }
 

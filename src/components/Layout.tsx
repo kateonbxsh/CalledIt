@@ -1,13 +1,14 @@
 import {
   BarChart3,
   CirclePlus,
+  Gamepad2,
   HelpCircle,
   History,
   Home,
-  Lock,
   LogOut,
   Medal,
   Menu,
+  Trophy,
   User,
   Users,
   X,
@@ -20,9 +21,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: Home },
-  { to: '/private', label: 'Private', icon: Lock },
-  { to: '/groups', label: 'Groups', icon: Users },
   { to: '/create', label: 'Create', icon: CirclePlus },
+  { to: '/challenges', label: 'Challenges', icon: Trophy },
+  { to: '/minigames', label: 'Minigames', icon: Gamepad2 },
+  { to: '/groups', label: 'Groups', icon: Users },
   { to: '/mine', label: 'My Bets', icon: BarChart3 },
   { to: '/history', label: 'History', icon: History },
   { to: '/leaderboard', label: 'Leaderboard', icon: Medal },

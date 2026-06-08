@@ -22,6 +22,7 @@ service cloud.firestore {
 
     function canReadBet() {
       return signedIn() && (
+        !resource.data.keys().hasAny(['visibility']) ||
         resource.data.visibility == 'public' ||
         resource.data.creatorId == request.auth.uid ||
         username() in resource.data.invitedUsernames ||
@@ -38,6 +39,15 @@ service cloud.firestore {
           username() in get(/databases/$(database)/documents/bets/$(betId)).data.invitedUsernames ||
           isAdmin()
         );
+    }
+
+    function canReadChallenge() {
+      return signedIn() && (
+        resource.data.visibility == 'public' ||
+        resource.data.creatorId == request.auth.uid ||
+        username() in resource.data.invitedUsernames ||
+        isAdmin()
+      );
     }
 
     // Any signed-in user can write resolution fields — the allowlist is the security boundary.
@@ -62,13 +72,24 @@ service cloud.firestore {
     function canApplyResolutionToUser() {
       return signedIn()
         && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['coinBalance', 'rating', 'rank', 'stats', 'updatedAt']);
+          .hasOnly(['coinBalance', 'rating', 'rank', 'stats', 'pendingSpicyForecast', 'updatedAt']);
     }
 
     function canApplyPredictionResult() {
       return signedIn()
         && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['status', 'correct', 'coinDelta', 'ratingDelta', 'resolvedAt', 'winningOptionId']);
+          .hasOnly([
+            'status',
+            'correct',
+            'coinDelta',
+            'ratingDelta',
+            'poolCoinProfit',
+            'mintedCoinReward',
+            'timingMultiplier',
+            'spicyForecastBonus',
+            'resolvedAt',
+            'winningOptionId'
+          ]);
     }
 
     function canEditBetMetadata() {
@@ -76,6 +97,24 @@ service cloud.firestore {
         && resource.data.creatorId == request.auth.uid
         && request.resource.data.diff(resource.data).changedKeys()
           .hasOnly(['title', 'description', 'category', 'deadline', 'imageUrl', 'updatedAt']);
+    }
+
+    function canSyncGroupInvites() {
+      return signedIn()
+        && resource.data.groupId != null
+        && exists(/databases/$(database)/documents/friendGroups/$(resource.data.groupId))
+        && get(/databases/$(database)/documents/friendGroups/$(resource.data.groupId)).data.creatorId == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['invitedUsernames', 'updatedAt']);
+    }
+
+    function canSyncChallengeGroupInvites() {
+      return signedIn()
+        && resource.data.groupId != null
+        && exists(/databases/$(database)/documents/friendGroups/$(resource.data.groupId))
+        && get(/databases/$(database)/documents/friendGroups/$(resource.data.groupId)).data.creatorId == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['invitedUsernames', 'updatedAt']);
     }
 
     match /usernames/{name} {
@@ -94,7 +133,19 @@ service cloud.firestore {
         (
           request.auth.uid == userId
           && request.resource.data.diff(resource.data).changedKeys()
-            .hasOnly(['displayName', 'photoURL', 'bio', 'username', 'updatedAt', 'lastRefillAt', 'coinBalance'])
+            .hasOnly([
+              'displayName',
+              'photoURL',
+              'bio',
+              'username',
+              'updatedAt',
+              'lastRefillAt',
+              'coinBalance',
+              'lastDailyForecastAt',
+              'pendingSpicyForecast',
+              'lastWheelSpinAt',
+              'stats'
+            ])
         ) ||
         canApplyResolutionToUser()
       );
@@ -106,7 +157,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.creatorId == request.auth.uid
         && request.resource.data.status == 'open';
-      allow update: if isAdmin() || canResolveBet() || canEditBetMetadata();
+      allow update: if isAdmin() || canResolveBet() || canEditBetMetadata() || canSyncGroupInvites();
       allow delete: if signedIn() && resource.data.creatorId == request.auth.uid;
     }
 
@@ -115,8 +166,38 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.stake >= 10;
-      allow update: if canApplyPredictionResult();
+      allow update: if canApplyPredictionResult() || (
+        signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly([
+            'optionId',
+            'stake',
+            'userBalanceAtBetTime',
+            'displayedChanceAtBetTime',
+            'userRating',
+            'originalOptionId',
+            'originalStake',
+            'originalChanceAtBetTime',
+            'lastChangedAt',
+            'revisionCount',
+            'changeFeesPaid',
+            'lastChangeFee',
+            'scorePrediction',
+            'numericGuess',
+            'dateGuess',
+            'customOptionLabel'
+          ])
+      );
       allow delete: if false;
+    }
+
+    match /predictionEvents/{eventId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /chanceSnapshots/{snapshotId} {
@@ -162,6 +243,23 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    match /rewardClaims/{claimId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /challenges/{challengeId} {
+      allow read: if canReadChallenge();
+      allow create: if signedIn() && request.resource.data.creatorId == request.auth.uid;
+      allow update: if signedIn() && (
+        resource.data.creatorId == request.auth.uid ||
+        request.resource.data.completerId == request.auth.uid ||
+        canSyncChallengeGroupInvites()
+      );
+      allow delete: if false;
     }
 
     match /adminConfig/{uid} {

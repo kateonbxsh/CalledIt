@@ -163,13 +163,25 @@ export function BetDetailPage() {
     [predictions, profile?.uid],
   );
 
+  useEffect(() => {
+    if (!myPrediction || !bet || bet.status !== 'open') return;
+    setSelected(myPrediction.optionId);
+    setStake(myPrediction.stake);
+    setCustomOptionLabel(myPrediction.customOptionLabel ?? '');
+    setHomeScore(myPrediction.scorePrediction?.home?.toString() ?? '');
+    setAwayScore(myPrediction.scorePrediction?.away?.toString() ?? '');
+    setNumericGuess(myPrediction.numericGuess?.toString() ?? '');
+    setDateGuess(myPrediction.dateGuess ?? '');
+  }, [bet, myPrediction]);
+
   const closest = bet ? isClosestType(bet.type) : false;
   const multiWinner = bet ? supportsMultipleWinners(bet) : false;
-  const canPredict = bet?.status === 'open' && !myPrediction;
+  const canPredict = bet?.status === 'open';
   const canResolve = !!profile && !!bet;
   const selectedChance = bet && !closest ? chanceForOption(bet.chanceSummary, selected) : 0;
   const estimatedProfit = selectedChance > 0 ? Math.max(0, Math.floor(stake * (1 / selectedChance - 1))) : 0;
   const estimatedReturn = stake + estimatedProfit;
+  const estimatedSkillReward = selectedChance > 0 ? Math.max(10, Math.round(10 * Math.sqrt(Math.max(10, stake) / 50) * Math.sqrt(1 / Math.max(0.05, selectedChance)))) : 0;
   const selectedOption = bet?.options.find((o) => o.id === selected);
   const winningOptions = bet?.options.filter((o) => (multiWinner ? winningOptionIds : [winningOptionId]).includes(o.id)) ?? [];
   const canEditBet = !!profile && !!bet && profile.uid === bet.creatorId;
@@ -575,7 +587,7 @@ export function BetDetailPage() {
           <section className="rounded-md border border-line bg-white p-4">
             <h2 className="mb-3 font-bold">Prediction</h2>
             {myPrediction ? (
-              <div className="rounded-md bg-mint/10 p-3 text-sm text-mint">
+              <div className="mb-3 rounded-md bg-mint/10 p-3 text-sm text-mint">
                 <Check className="mb-2" size={18} />
                 {closest ? (
                   <span>
@@ -593,8 +605,14 @@ export function BetDetailPage() {
                     <CoinAmount amount={myPrediction.stake} className="text-sm" />
                   </span>
                 )}
+                {(myPrediction.revisionCount ?? 0) > 0 ? (
+                  <p className="mt-2 text-xs font-semibold text-mint/80">
+                    Updated {myPrediction.revisionCount}x - fees paid {myPrediction.changeFeesPaid ?? 0} coins
+                  </p>
+                ) : null}
               </div>
-            ) : canPredict ? (
+            ) : null}
+            {canPredict ? (
               <form className="space-y-3" onSubmit={submitPrediction}>
                 {/* Option tile picker */}
                 {!closest && bet.options.length > 0 ? (
@@ -728,6 +746,16 @@ export function BetDetailPage() {
                       <span>Total return</span>
                       <CoinAmount amount={estimatedReturn} className="text-xs" />
                     </div>
+                    <div className="mt-1 flex items-center justify-between text-ink/45">
+                      <span>Skill reward</span>
+                      <CoinAmount amount={estimatedSkillReward} className="text-xs" />
+                    </div>
+                    {myPrediction ? (
+                      <div className="mt-1 flex items-center justify-between text-ink/45">
+                        <span>Update fee</span>
+                        <CoinAmount amount={Math.max(1, myPrediction.lastChangeFee ?? 3)} className="text-xs" />
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -742,7 +770,7 @@ export function BetDetailPage() {
                 ) : null}
 
                 <button disabled={busy} className="w-full rounded-xl bg-ink px-4 py-3 font-bold text-white disabled:opacity-60">
-                  {busy ? 'Submitting…' : 'Submit prediction'}
+                  {busy ? 'Submitting...' : myPrediction ? 'Update prediction' : 'Submit prediction'}
                 </button>
               </form>
             ) : (

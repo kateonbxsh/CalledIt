@@ -9,12 +9,14 @@ import { listFeedBets, listMyPredictions, lockExpiredBet } from '../services/bet
 import { listMyFriendGroups } from '../services/friendGroupService';
 import type { Bet, FriendGroup, Prediction } from '../types';
 
-export function FeedPage({ scope }: { scope: 'public' | 'private' }) {
+type FeedTab = 'all' | 'private' | string;
+
+export function FeedPage() {
   const { profile } = useAuth();
   const [bets, setBets] = useState<Bet[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [groups, setGroups] = useState<FriendGroup[]>([]);
-  const [activeGroupId, setActiveGroupId] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<FeedTab>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -26,13 +28,14 @@ export function FeedPage({ scope }: { scope: 'public' | 'private' }) {
       setLoading(true);
       try {
         const [nextBets, nextPredictions, nextGroups] = await Promise.all([
-          listFeedBets(scope, profile),
+          Promise.all([listFeedBets('public', profile), listFeedBets('private', profile)]),
           listMyPredictions(profile.uid),
-          scope === 'private' ? listMyFriendGroups(profile) : Promise.resolve([]),
+          listMyFriendGroups(profile),
         ]);
-        await Promise.all(nextBets.map(lockExpiredBet));
+        const mergedBets = [...new Map(nextBets.flat().map((bet) => [bet.id, bet])).values()];
+        await Promise.all(mergedBets.map(lockExpiredBet));
         if (active) {
-          setBets(nextBets.filter((b) => b.status === 'open'));
+          setBets(mergedBets.filter((b) => b.status === 'open'));
           setPredictions(nextPredictions);
           setGroups(nextGroups);
         }
@@ -46,14 +49,14 @@ export function FeedPage({ scope }: { scope: 'public' | 'private' }) {
     return () => {
       active = false;
     };
-  }, [profile, scope]);
+  }, [profile]);
 
   const predictionByBet = new Map(predictions.map((prediction) => [prediction.betId, prediction]));
 
   const tabFilteredBets = bets.filter((bet) => {
-    if (scope !== 'private') return true;
-    if (activeGroupId === 'all') return true;
-    return bet.groupId === activeGroupId;
+    if (activeTab === 'all') return true;
+    if (activeTab === 'private') return bet.visibility === 'private';
+    return bet.groupId === activeTab;
   });
 
   const visibleBets = tabFilteredBets.filter((bet) => {
@@ -65,12 +68,16 @@ export function FeedPage({ scope }: { scope: 'public' | 'private' }) {
       .includes(normalized);
   });
 
-  const showGroupTabs = scope === 'private' && groups.length > 0;
+  const tabs = [
+    { id: 'all', label: 'All' },
+    { id: 'private', label: 'Private' },
+    ...groups.map((group) => ({ id: group.id, label: group.name })),
+  ];
 
   return (
     <>
       <PageHeader
-        title={scope === 'public' ? 'Public Bets' : 'Private Bets'}
+        title="Bets"
         action={
           <Link
             to="/create"
@@ -81,29 +88,19 @@ export function FeedPage({ scope }: { scope: 'public' | 'private' }) {
         }
       />
 
-      {showGroupTabs ? (
-        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => setActiveGroupId('all')}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-              activeGroupId === 'all' ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
-            }`}
-          >
-            All
-          </button>
-          {groups.map((group) => (
+      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+        {tabs.map((tab) => (
             <button
-              key={group.id}
-              onClick={() => setActiveGroupId(group.id)}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
               className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                activeGroupId === group.id ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
+                activeTab === tab.id ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
               }`}
             >
-              {group.name}
+              {tab.label}
             </button>
-          ))}
-        </div>
-      ) : null}
+        ))}
+      </div>
 
       <input
         className="mb-4 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none transition focus:border-mint"

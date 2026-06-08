@@ -25,6 +25,8 @@ export const emptyStats: UserStats = {
   bestUpsetWin: 0,
   coinsWon: 0,
   coinsLost: 0,
+  chestsOpened: 0,
+  challengesCompleted: 0,
 };
 
 export async function createProfile(params: {

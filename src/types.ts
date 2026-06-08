@@ -33,6 +33,12 @@ export interface UserProfile {
   stats: UserStats;
   isAdmin?: boolean;
   lastRefillAt?: Timestamp | null;
+  lastDailyForecastAt?: Timestamp | null;
+  pendingSpicyForecast?: {
+    bonus: number;
+    claimedAt: Timestamp;
+  } | null;
+  lastWheelSpinAt?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -45,6 +51,8 @@ export interface UserStats {
   bestUpsetWin: number;
   coinsWon: number;
   coinsLost: number;
+  chestsOpened?: number;
+  challengesCompleted?: number;
 }
 
 export interface BetOption {
@@ -111,6 +119,17 @@ export interface Prediction {
   userBalanceAtBetTime: number;
   displayedChanceAtBetTime: number;
   userRating?: number;
+  originalOptionId?: string;
+  originalStake?: number;
+  originalChanceAtBetTime?: number;
+  lastChangedAt?: Timestamp | null;
+  revisionCount?: number;
+  changeFeesPaid?: number;
+  lastChangeFee?: number;
+  timingMultiplier?: number;
+  mintedCoinReward?: number;
+  poolCoinProfit?: number;
+  spicyForecastBonus?: number;
   status?: 'pending' | 'won' | 'lost';
   correct?: boolean;
   coinDelta?: number;
@@ -124,6 +143,21 @@ export interface Prediction {
   numericGuess?: number;
   dateGuess?: string;
   customOptionLabel?: string;
+  createdAt: Timestamp;
+}
+
+export interface PredictionEvent {
+  id: string;
+  betId: string;
+  userId: string;
+  username: string;
+  fromOptionId?: string | null;
+  toOptionId: string;
+  fromStake?: number | null;
+  toStake: number;
+  chanceBefore: number;
+  chanceAfter: number;
+  fee: number;
   createdAt: Timestamp;
 }
 
@@ -194,4 +228,58 @@ export interface FriendGroup {
   memberUids: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export type DailyForecastMode = 'safe' | 'random' | 'chaos' | 'spicy';
+export type RewardClaimType = 'dailyForecast' | 'chest' | 'wheel' | 'weeklyChallenge';
+
+export interface RewardClaim {
+  id: string;
+  userId: string;
+  username: string;
+  type: RewardClaimType;
+  label: string;
+  amount: number;
+  createdAt: Timestamp;
+}
+
+export interface ChestDefinition {
+  id: string;
+  title: string;
+  description: string;
+  reward: number;
+  unlocked: boolean;
+  claimed: boolean;
+}
+
+export type ChallengeActivityType = 'completion' | 'wager';
+export type ChallengeStatus = 'open' | 'completed' | 'failed';
+
+export interface ChallengeActivity {
+  id: string;
+  type: ChallengeActivityType;
+  status: ChallengeStatus;
+  visibility: BetVisibility;
+  title: string;
+  body?: string;
+  creatorId: string;
+  creatorUsername: string;
+  invitedUsernames?: string[];
+  groupId?: string | null;
+  completerId?: string | null;
+  completerUsername?: string | null;
+  targetUsername?: string | null;
+  proofImageUrl?: string | null;
+  stake?: number;
+  bonus?: number;
+  reward?: number;
+  chestReward?: number;
+  creatorRefund?: number;
+  systemChallengeId?: string | null;
+  weekKey?: string | null;
+  deadline?: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  completedAt?: Timestamp | null;
+  failedAt?: Timestamp | null;
 }
