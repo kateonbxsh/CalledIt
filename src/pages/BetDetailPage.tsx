@@ -413,7 +413,7 @@ export function BetDetailPage() {
             <img src={bet.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-md border border-line object-cover shadow-soft sm:h-20 sm:w-20" />
           ) : null}
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-black tracking-normal sm:text-3xl">{bet.title}</h1>
+            <h1 className="break-words text-2xl font-black tracking-normal sm:text-3xl md:truncate">{bet.title}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink/65">
               <Link to={`/profile/${bet.creatorId}`} className="font-bold text-ink/75 hover:underline">
                 @{bet.creatorUsername}
