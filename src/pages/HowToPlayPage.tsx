@@ -64,8 +64,8 @@ export function HowToPlayPage() {
 
         <Section title="Displayed odds">
           <p>
-            The percentage shown on each option is a weighted mix: 42% from user count, 51% from coins staked,
-            and 7% from the rating signal of the predictors on that option.
+            The percentage shown on each option is a weighted mix: 62% from user count, 23% from coins staked,
+            and 15% from the rating signal of the predictors on that option.
           </p>
           <p>Odds update live as people join or change predictions.</p>
         </Section>

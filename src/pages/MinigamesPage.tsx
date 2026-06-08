@@ -11,6 +11,7 @@ import {
   wheelRewards,
 } from '../services/rewardService';
 import type { ChestDefinition, DailyForecastMode } from '../types';
+import { canClaimDailyReward } from '../utils/coins';
 
 const wheelColors = ['#2f7d63', '#d95f46', '#d49a25', '#8c98a5', '#3b75af', '#d95f46', '#6f5ca8', '#121417'];
 const WHEEL_SPIN_MS = 4400;
@@ -91,6 +92,8 @@ export function MinigamesPage() {
   const [forecastMode, setForecastMode] = useState<DailyForecastMode | null>(null);
   const [wheelOpen, setWheelOpen] = useState(false);
   const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
+  const forecastAvailable = profile ? canClaimDailyReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
+  const wheelAvailable = profile ? canClaimDailyReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
 
   useEffect(() => {
     if (!profile) return;
@@ -196,6 +199,9 @@ export function MinigamesPage() {
             <BadgeDollarSign size={18} className="text-citrus" />
             <h2 className="font-black">Daily forecast</h2>
           </div>
+          <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
+            One forecast reward per day. {forecastAvailable ? 'Available now.' : 'Already claimed today.'}
+          </p>
           <div className="grid gap-3">
             {(['safe', 'random', 'chaos', 'spicy'] as DailyForecastMode[]).map((mode) => {
               const selected = forecastMode === mode;
@@ -210,7 +216,7 @@ export function MinigamesPage() {
                   key={mode}
                   type="button"
                   onClick={() => forecast(mode)}
-                  disabled={!!busy}
+                  disabled={!!busy || !forecastAvailable}
                   className={`min-h-28 rounded-md border p-4 text-left transition disabled:opacity-50 ${
                     selected ? 'animate-reward-pop border-citrus bg-citrus/10' : 'border-line bg-field hover:bg-white'
                   }`}
@@ -234,13 +240,16 @@ export function MinigamesPage() {
             <Sparkles size={18} className="text-plum" />
             <h2 className="font-black">Spin the wheel</h2>
           </div>
+          <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
+            {wheelAvailable ? 'Wheel spin available today.' : 'Wheel already used today. Come back tomorrow.'}
+          </p>
           <div className="grid h-56 place-items-center rounded-md bg-field">
             <button
               type="button"
               onClick={() => setWheelOpen(true)}
-              className="grid h-40 w-40 place-items-center rounded-full border-8 border-white bg-[conic-gradient(#2f7d63,#d95f46,#d49a25,#8c98a5,#3b75af,#d95f46,#6f5ca8,#121417)] text-white shadow-lift"
+              className="grid h-40 w-40 place-items-center overflow-hidden rounded-full border-8 border-white bg-[conic-gradient(from_22.5deg,#2f7d63,#d95f46,#d49a25,#8c98a5,#3b75af,#d95f46,#6f5ca8,#121417,#2f7d63)] text-white shadow-lift"
             >
-              <span className="rounded-full bg-ink px-4 py-2 text-sm font-black">Open wheel</span>
+              <span className="rounded-full bg-ink px-4 py-2 text-sm font-black">{wheelAvailable ? 'Open wheel' : 'View wheel'}</span>
             </button>
           </div>
         </section>
@@ -324,10 +333,10 @@ export function MinigamesPage() {
             </div>
             <button
               onClick={wheel}
-              disabled={!!busy}
+              disabled={!!busy || !wheelAvailable}
               className="mt-5 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
             >
-              {busy === 'wheel' ? 'Spinning slowly...' : 'Spin today'}
+              {busy === 'wheel' ? 'Spinning slowly...' : wheelAvailable ? 'Spin today' : 'Already spun today'}
             </button>
           </div>
         </div>

@@ -45,39 +45,108 @@ export interface WeeklyChallengeDefinition {
   body: string;
   reward: number;
   chestReward: number;
+  tag?: WeeklyChallengeTag;
 }
 
+type WeeklyChallengeTag =
+  | 'going-out'
+  | 'gym'
+  | 'style'
+  | 'drink-food'
+  | 'social'
+  | 'weird'
+  | 'glow-up'
+  | 'bubble';
+
 const weeklyChallengeCatalog: WeeklyChallengeDefinition[] = [
-  { id: 'cook-new', title: 'Cook something new', body: 'Make a dish you have not made before and upload the result.', reward: 70, chestReward: 35 },
-  { id: 'walk-45', title: '45 minute walk', body: 'Take a real walk and upload proof from outside.', reward: 55, chestReward: 30 },
-  { id: 'clean-zone', title: 'Clean one zone', body: 'Clean a desk, closet, kitchen area, or room corner. Before/after proof is ideal.', reward: 65, chestReward: 35 },
-  { id: 'draw-anything', title: 'Draw anything', body: 'Make a sketch, doodle, diagram, or silly portrait.', reward: 45, chestReward: 25 },
-  { id: 'gym-proof', title: 'Move your body', body: 'Gym, home workout, run, sport, yoga, or stretching session.', reward: 75, chestReward: 40 },
-  { id: 'touch-grass', title: 'Touch grass', body: 'Go outside somewhere green and prove it.', reward: 40, chestReward: 20 },
-  { id: 'read-20', title: 'Read 20 pages', body: 'Read a book, comic, paper, or long article and show the page or notes.', reward: 50, chestReward: 25 },
-  { id: 'hydrate', title: 'Hydration check', body: 'Fill a big water bottle and finish it today.', reward: 35, chestReward: 20 },
-  { id: 'learn-word', title: 'Learn one useful thing', body: 'Share a note about something you learned this week.', reward: 55, chestReward: 30 },
-  { id: 'declutter-five', title: 'Remove five things', body: 'Throw away, donate, archive, or organize five things.', reward: 60, chestReward: 30 },
-  { id: 'make-playlist', title: 'Make a playlist', body: 'Create a playlist for a mood, person, or event.', reward: 40, chestReward: 20 },
-  { id: 'call-someone', title: 'Check in with someone', body: 'Message or call someone you have not talked to in a while.', reward: 45, chestReward: 25 },
-  { id: 'photo-walk', title: 'Photo walk', body: 'Take three interesting photos from a walk.', reward: 65, chestReward: 35 },
-  { id: 'fix-small', title: 'Fix one small annoyance', body: 'Patch, clean, repair, label, or improve one tiny thing.', reward: 70, chestReward: 35 },
-  { id: 'no-snooze', title: 'No snooze morning', body: 'Wake up without snoozing and upload morning proof.', reward: 55, chestReward: 30 },
-  { id: 'write-note', title: 'Write a note', body: 'Journal, plan, poem, idea list, or letter. Upload a safe snippet.', reward: 45, chestReward: 25 },
-  { id: 'try-place', title: 'Try a new place', body: 'Visit somewhere new: cafe, park, shop, street, or route.', reward: 80, chestReward: 45 },
-  { id: 'cook-veg', title: 'Eat something green', body: 'Make or buy a meal with an actual vegetable involved.', reward: 45, chestReward: 25 },
-  { id: 'stretch-ten', title: 'Stretch 10 minutes', body: 'Do a stretching session and upload proof.', reward: 40, chestReward: 20 },
-  { id: 'desk-reset', title: 'Desk reset', body: 'Reset your main workspace so it looks usable again.', reward: 55, chestReward: 30 },
-  { id: 'wear-silly', title: 'Wear something ridiculous', body: 'Put on a strange outfit combo for five minutes and document it.', reward: 85, chestReward: 45 },
-  { id: 'floor-picnic', title: 'Floor picnic', body: 'Eat a snack or meal picnic-style somewhere unusual but safe.', reward: 75, chestReward: 40 },
-  { id: 'reverse-song', title: 'Sing one chorus badly', body: 'Record or photo-proof a tiny performance. Dramatic commitment encouraged.', reward: 90, chestReward: 50 },
-  { id: 'tiny-fort', title: 'Build a tiny fort', body: 'Make a micro fort from pillows, books, boxes, or whatever is nearby.', reward: 95, chestReward: 50 },
-  { id: 'stranger-object', title: 'Photograph a weird object', body: 'Find the oddest harmless object in your day and upload it.', reward: 60, chestReward: 30 },
-  { id: 'one-song-dance', title: 'Dance for one song', body: 'Move for one full song. Proof can be a sweaty selfie or setup photo.', reward: 85, chestReward: 45 },
-  { id: 'compliment-note', title: 'Leave a nice note', body: 'Write a nice note for someone or somewhere.', reward: 65, chestReward: 35 },
-  { id: 'cold-splash', title: 'Cold water splash', body: 'Splash cold water on your face or take a cold shower finish.', reward: 70, chestReward: 35 },
-  { id: 'one-minute-plank', title: 'One minute plank', body: 'Hold a plank or wall sit for one minute.', reward: 80, chestReward: 45 },
-  { id: 'odd-sandwich', title: 'Invent a questionable sandwich', body: 'Make a sandwich with at least one unusual ingredient.', reward: 90, chestReward: 50 },
+  { id: 'new-cafe-drink', title: 'New cafe drink', body: 'Order a non-alcoholic drink you have never tried. Upload the cup, receipt, or table proof.', reward: 65, chestReward: 35, tag: 'drink-food' },
+  { id: 'boba-wildcard', title: 'Boba wildcard', body: 'Try a boba, smoothie, juice, matcha, coffee, or tea flavor chosen mostly by vibes.', reward: 70, chestReward: 35, tag: 'drink-food' },
+  { id: 'barista-pick', title: 'Let them pick', body: 'Ask a barista or cashier for a non-alcoholic recommendation and actually try it.', reward: 90, chestReward: 50, tag: 'bubble' },
+  { id: 'drink-aesthetic', title: 'Drink aesthetic', body: 'Make or buy a drink and take a photo that looks like it belongs in a tiny ad.', reward: 60, chestReward: 30, tag: 'drink-food' },
+  { id: 'snack-rating', title: 'Snack critic', body: 'Try a snack and rate it out of 10 in the caption or proof note.', reward: 50, chestReward: 25, tag: 'drink-food' },
+  { id: 'weird-menu-safe', title: 'Weird menu pick', body: 'Order the strangest safe non-alcoholic menu item you can find.', reward: 85, chestReward: 45, tag: 'drink-food' },
+  { id: 'dessert-hunt', title: 'Dessert hunt', body: 'Find the best-looking dessert near you and upload proof.', reward: 70, chestReward: 35, tag: 'drink-food' },
+  { id: 'spicy-food-mini', title: 'Spicy bite', body: 'Try something spicier than your usual comfort level. Keep it reasonable.', reward: 75, chestReward: 40, tag: 'drink-food' },
+  { id: 'fancy-home-drink', title: 'Fancy home drink', body: 'Make a non-alcoholic drink with ice, garnish, a weird glass, or dramatic presentation.', reward: 55, chestReward: 30, tag: 'drink-food' },
+  { id: 'green-meal', title: 'Eat something green', body: 'Make or buy a meal that includes an actual vegetable. Upload the plate.', reward: 45, chestReward: 25, tag: 'drink-food' },
+  { id: 'questionable-sandwich', title: 'Questionable sandwich', body: 'Invent a sandwich with at least one unusual ingredient. It must still be edible.', reward: 90, chestReward: 50, tag: 'weird' },
+  { id: 'floor-picnic-v2', title: 'Tiny picnic', body: 'Have a snack or drink picnic-style outside or somewhere harmlessly unusual.', reward: 75, chestReward: 40, tag: 'going-out' },
+
+  { id: 'fit-pic-public', title: 'Public fit pic', body: 'Take an outfit photo somewhere outside your home.', reward: 75, chestReward: 40, tag: 'style' },
+  { id: 'one-bold-accessory', title: 'Bold accessory', body: 'Wear one accessory or item that is louder than your usual style.', reward: 70, chestReward: 35, tag: 'style' },
+  { id: 'color-theme-fit', title: 'Color theme fit', body: 'Wear an outfit built around one main color and upload proof.', reward: 65, chestReward: 35, tag: 'style' },
+  { id: 'friend-picks-fit', title: 'Friend picks one item', body: 'Let a friend pick one part of your outfit and wear it out or for a fit check.', reward: 85, chestReward: 45, tag: 'social' },
+  { id: 'coffee-run-fit', title: 'Coffee run fit', body: 'Dress like the drink run is the event. Upload a fit or mirror pic.', reward: 65, chestReward: 35, tag: 'style' },
+  { id: 'gym-fit-check', title: 'Gym fit check', body: 'Take a gym fit or post-workout fit photo.', reward: 60, chestReward: 30, tag: 'style' },
+  { id: 'style-unused-item', title: 'Style the forgotten item', body: 'Wear an item you almost never use and make it work.', reward: 80, chestReward: 40, tag: 'style' },
+  { id: 'fake-movie-fit', title: 'Movie genre fit', body: 'Dress like you are in a fake movie genre: spy, romcom, sports movie, cyber, anything.', reward: 85, chestReward: 45, tag: 'style' },
+  { id: 'ridiculous-works', title: 'Ridiculous but works', body: 'Put together the weirdest outfit that still somehow works. Upload proof.', reward: 95, chestReward: 50, tag: 'weird' },
+  { id: 'public-mirror', title: 'Public mirror check', body: 'Find a mirror outside your home and take a clean mirror pic.', reward: 70, chestReward: 35, tag: 'going-out' },
+
+  { id: 'gym-proof-v2', title: 'Gym proof', body: 'Go to the gym or do a real workout. Upload setup, mirror, shoes, or sweaty proof.', reward: 75, chestReward: 40, tag: 'gym' },
+  { id: 'leg-day-survive', title: 'Survive leg day', body: 'Do a leg-focused workout or lower-body session and upload proof.', reward: 85, chestReward: 45, tag: 'gym' },
+  { id: 'machine-avoid', title: 'Avoided machine', body: 'Try one gym machine, lift, or movement you usually skip.', reward: 80, chestReward: 40, tag: 'gym' },
+  { id: 'incline-ten', title: 'Incline ten', body: 'Do 10 minutes of incline walk, stairs, hill walk, or equivalent.', reward: 60, chestReward: 30, tag: 'gym' },
+  { id: 'pushup-fifty', title: '50 pushups total', body: 'Complete 50 pushups across the day. Knees or incline count if needed.', reward: 70, chestReward: 35, tag: 'gym' },
+  { id: 'core-regret', title: 'Core regret', body: 'Do a core session long enough to regret your choices a little.', reward: 75, chestReward: 40, tag: 'gym' },
+  { id: 'stretch-session', title: 'Stretch session', body: 'Stretch for 10 minutes. Upload mat, timer, or post-stretch proof.', reward: 45, chestReward: 25, tag: 'gym' },
+  { id: 'walk-5k', title: '5k steps outside', body: 'Get at least 5,000 steps outside or take a long walk with proof.', reward: 70, chestReward: 35, tag: 'gym' },
+  { id: 'try-sport', title: 'Try a sport', body: 'Play, practice, or try a sport/activity you do not usually do.', reward: 95, chestReward: 50, tag: 'gym' },
+  { id: 'no-headphones-walk', title: 'No-headphones walk', body: 'Walk outside for 15 minutes without headphones. Upload route or outside proof.', reward: 65, chestReward: 35, tag: 'bubble' },
+  { id: 'stairs-day', title: 'Stairs day', body: 'Take stairs instead of an elevator/escalator at least once and document it.', reward: 45, chestReward: 25, tag: 'gym' },
+  { id: 'one-minute-plank-v2', title: 'One minute hold', body: 'Hold a plank, wall sit, or dead hang for one minute.', reward: 80, chestReward: 45, tag: 'gym' },
+
+  { id: 'main-character-walk', title: 'Main character walk', body: 'Go outside for a 20 minute walk like the soundtrack is playing.', reward: 70, chestReward: 35, tag: 'going-out' },
+  { id: 'new-street', title: 'New street', body: 'Walk down a street, route, or area you have never properly explored.', reward: 80, chestReward: 40, tag: 'going-out' },
+  { id: 'city-lights', title: 'City lights', body: 'Take a photo with evening lights, neon, a cool sign, or a nice storefront.', reward: 70, chestReward: 35, tag: 'going-out' },
+  { id: 'sunset-proof', title: 'Sunset proof', body: 'Catch sunset or golden hour from outside.', reward: 60, chestReward: 30, tag: 'going-out' },
+  { id: 'friend-chooses-place', title: 'Friend chooses place', body: 'Let a friend choose a place to go, then go there or pass by.', reward: 90, chestReward: 50, tag: 'social' },
+  { id: 'aesthetic-corner', title: 'Aesthetic corner', body: 'Find the most aesthetic corner of your day and upload it.', reward: 55, chestReward: 30, tag: 'going-out' },
+  { id: 'mall-arcade-cafe', title: 'Public spot proof', body: 'Go to a mall, arcade, bookstore, gym, cafe, park, or similar public spot.', reward: 65, chestReward: 35, tag: 'going-out' },
+  { id: 'photo-walk-v2', title: 'Three-photo walk', body: 'Take three interesting photos during a walk and upload the best one.', reward: 65, chestReward: 35, tag: 'going-out' },
+  { id: 'go-alone-20', title: 'Solo 20', body: 'Go somewhere alone for 20 minutes: cafe, walk, shop, gym, library, or park.', reward: 90, chestReward: 50, tag: 'bubble' },
+  { id: 'public-selfie', title: 'Public selfie', body: 'Take a selfie outside your home without hiding like you committed a crime.', reward: 85, chestReward: 45, tag: 'bubble' },
+  { id: 'ask-recommendation', title: 'Ask for a recommendation', body: 'Ask someone working at a cafe/shop/food place for a recommendation.', reward: 100, chestReward: 55, tag: 'bubble' },
+  { id: 'tiny-conversation', title: 'Tiny conversation', body: 'Start a tiny harmless conversation: ask a question, compliment, or comment on something.', reward: 110, chestReward: 60, tag: 'bubble' },
+
+  { id: 'friend-photo-outside', title: 'Friend photo outside', body: 'Take a photo with a friend outside or at a public place.', reward: 75, chestReward: 40, tag: 'social' },
+  { id: 'friend-drink-pick', title: 'Friend picks your drink', body: 'Let a friend pick your non-alcoholic drink or flavor.', reward: 80, chestReward: 40, tag: 'social' },
+  { id: 'mini-photoshoot', title: 'Mini photoshoot', body: 'Do a tiny photo shoot with a friend. One decent photo is enough.', reward: 85, chestReward: 45, tag: 'social' },
+  { id: 'song-recommend', title: 'Song recommendation', body: 'Send someone a song recommendation and screenshot safe proof.', reward: 45, chestReward: 25, tag: 'social' },
+  { id: 'walk-with-someone', title: 'Walk with someone', body: 'Go on a walk with a friend, sibling, classmate, or gym buddy.', reward: 70, chestReward: 35, tag: 'social' },
+  { id: 'shared-playlist', title: 'Shared playlist', body: 'Make a tiny playlist for a mood, friend, outing, or workout.', reward: 50, chestReward: 25, tag: 'social' },
+  { id: 'meme-recreate', title: 'Recreate a meme pose', body: 'Recreate a harmless meme pose or dramatic photo with a friend.', reward: 85, chestReward: 45, tag: 'weird' },
+  { id: 'fit-battle', title: 'Fit battle', body: 'Do a friendly fit check or gym fit comparison with someone.', reward: 75, chestReward: 40, tag: 'social' },
+  { id: 'bring-snack', title: 'Bring a snack', body: 'Bring someone a snack or drink, or get one together.', reward: 65, chestReward: 35, tag: 'social' },
+  { id: 'group-mirror', title: 'Group mirror pic', body: 'Take a group mirror pic or group outing proof.', reward: 80, chestReward: 40, tag: 'social' },
+
+  { id: 'album-cover', title: 'Fake album cover', body: 'Take a photo that looks like an album cover. Dramatic points encouraged.', reward: 80, chestReward: 40, tag: 'weird' },
+  { id: 'music-video-shot', title: 'Music video shot', body: 'Take a photo that looks like a frame from a music video.', reward: 80, chestReward: 40, tag: 'weird' },
+  { id: 'ugly-cool-find', title: 'Ugly-cool find', body: 'Find the ugliest-cool item in a store, closet, street, or room.', reward: 65, chestReward: 35, tag: 'weird' },
+  { id: 'fake-ad', title: 'Fake ad', body: 'Make a fake ad photo for a drink, snack, shoe, bag, or random object.', reward: 85, chestReward: 45, tag: 'weird' },
+  { id: 'point-at-nothing', title: 'Point at nothing', body: 'Take a photo pointing at something deeply unimportant like it is breaking news.', reward: 55, chestReward: 30, tag: 'weird' },
+  { id: 'match-outfit-object', title: 'Match the world', body: 'Find something outside that matches your outfit or drink.', reward: 65, chestReward: 35, tag: 'weird' },
+  { id: 'npc-walk-proof', title: 'NPC walk', body: 'Do a tiny staged NPC walk or pose somewhere safe and upload proof.', reward: 90, chestReward: 50, tag: 'weird' },
+  { id: 'blurry-action', title: 'Blurry action shot', body: 'Take a deliberately blurry action shot: jump, run, spin, or dramatic walk.', reward: 65, chestReward: 35, tag: 'weird' },
+  { id: 'harmless-object', title: 'Weird object hunt', body: 'Photograph the weirdest harmless object you see this week.', reward: 60, chestReward: 30, tag: 'weird' },
+  { id: 'dramatic-normal-place', title: 'Dramatic normal place', body: 'Pose dramatically somewhere incredibly normal.', reward: 80, chestReward: 40, tag: 'weird' },
+
+  { id: 'shoe-clean', title: 'Shoe reset', body: 'Clean your shoes or make them photo-ready.', reward: 45, chestReward: 25, tag: 'glow-up' },
+  { id: 'gym-bag-reset', title: 'Gym bag reset', body: 'Reset your gym bag, backpack, purse, or daily carry.', reward: 50, chestReward: 25, tag: 'glow-up' },
+  { id: 'camera-roll-clear', title: 'Camera roll clear', body: 'Delete or organize at least 20 photos/videos from your camera roll.', reward: 45, chestReward: 25, tag: 'glow-up' },
+  { id: 'tomorrow-fit', title: 'Tomorrow fit', body: 'Plan tomorrow outfit or gym fit and upload the setup.', reward: 45, chestReward: 25, tag: 'glow-up' },
+  { id: 'room-photo-safe', title: 'Photo-safe corner', body: 'Make one corner of your room clean enough for a photo.', reward: 60, chestReward: 30, tag: 'glow-up' },
+  { id: 'skincare-haircare', title: 'Glow-up proof', body: 'Do skincare, haircare, shave/trim, nails, or another clean-up ritual.', reward: 55, chestReward: 30, tag: 'glow-up' },
+  { id: 'water-bottle-reset', title: 'Bottle reset', body: 'Wash and refill your water bottle. Hydration counts as a side quest.', reward: 35, chestReward: 20, tag: 'glow-up' },
+  { id: 'desk-reset-v2', title: 'Desk reset', body: 'Reset your desk, vanity, bag shelf, or main drop zone.', reward: 55, chestReward: 30, tag: 'glow-up' },
+  { id: 'snack-prep', title: 'Snack prep', body: 'Prep one useful snack for gym, school, work, or going out.', reward: 50, chestReward: 25, tag: 'glow-up' },
+  { id: 'playlist-refresh', title: 'Playlist refresh', body: 'Add 10 songs to a playlist for gym, night walk, study, or going out.', reward: 45, chestReward: 25, tag: 'glow-up' },
+
+  { id: 'compliment-stranger-safe', title: 'Compliment mission', body: 'Give a genuine, non-weird compliment to someone. Proof can be a note after the fact.', reward: 115, chestReward: 60, tag: 'bubble' },
+  { id: 'ask-photo', title: 'Ask for a photo', body: 'Ask someone you are with to take a photo of you instead of hiding behind selfies.', reward: 95, chestReward: 50, tag: 'bubble' },
+  { id: 'new-class-activity', title: 'Try a class/activity', body: 'Try a new gym class, sport session, event, club, study spot, or social activity.', reward: 125, chestReward: 65, tag: 'bubble' },
+  { id: 'phone-down-outing', title: 'Phone-down outing', body: 'Spend 20 minutes out with your phone away except for proof at the start/end.', reward: 100, chestReward: 55, tag: 'bubble' },
+  { id: 'solo-order', title: 'Solo order', body: 'Go somewhere and order a drink/snack alone without overthinking it.', reward: 95, chestReward: 50, tag: 'bubble' },
 ];
 
 export function currentWeekKey(date = new Date()) {
@@ -96,8 +165,52 @@ function hashString(value: string) {
 }
 
 export function weeklyChallengesForUser(user: UserProfile, weekKey = currentWeekKey()) {
-  const start = hashString(`${user.uid}:${weekKey}`) % weeklyChallengeCatalog.length;
-  return Array.from({ length: 10 }, (_, offset) => weeklyChallengeCatalog[(start + offset * 7) % weeklyChallengeCatalog.length]);
+  const picked = new Map<string, WeeklyChallengeDefinition>();
+  const pickFromTag = (tag: WeeklyChallengeTag, seed: string) => {
+    const pool = weeklyChallengeCatalog.filter((challenge) => challenge.tag === tag);
+    if (pool.length === 0) return;
+    for (let offset = 0; offset < pool.length; offset += 1) {
+      const candidate = pool[(hashString(seed) + offset * 7) % pool.length];
+      if (!picked.has(candidate.id)) {
+        picked.set(candidate.id, candidate);
+        return;
+      }
+    }
+  };
+
+  // Two weekly commons give friend groups some overlap; the rest is user-specific.
+  pickFromTag('going-out', `common:${weekKey}:going-out`);
+  pickFromTag('drink-food', `common:${weekKey}:drink-food`);
+
+  const personalizedTags: WeeklyChallengeTag[] = [
+    'going-out',
+    'gym',
+    'style',
+    'drink-food',
+    'social',
+    'weird',
+    'glow-up',
+    'gym',
+  ];
+  personalizedTags.forEach((tag, index) => pickFromTag(tag, `${user.uid}:${weekKey}:${tag}:${index}`));
+
+  // About every other week per user, replace one slot with a bigger get-out-of-your-bubble quest.
+  if (hashString(`bubble:${user.uid}:${weekKey}`) % 2 === 0) {
+    const keys = [...picked.keys()];
+    if (keys.length > 8) picked.delete(keys[keys.length - 1]);
+    pickFromTag('bubble', `${user.uid}:${weekKey}:bubble-breaker`);
+  }
+
+  const allTags: WeeklyChallengeTag[] = ['going-out', 'gym', 'style', 'drink-food', 'social', 'weird', 'glow-up', 'bubble'];
+  let filler = 0;
+  while (picked.size < 10) {
+    const tag = allTags[(hashString(`${user.uid}:${weekKey}:fill:${filler}`) + filler) % allTags.length];
+    pickFromTag(tag, `${user.uid}:${weekKey}:fill:${tag}:${filler}`);
+    filler += 1;
+    if (filler > 80) break;
+  }
+
+  return [...picked.values()].slice(0, 10);
 }
 
 export const chestCatalog = [

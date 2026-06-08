@@ -548,7 +548,15 @@ export function ChallengesPage() {
             </label>
             <label className="mt-3 block text-sm font-medium">
               Target username
-              <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={targetUsername} onChange={(e) => setTargetUsername(e.target.value)} placeholder="Leave blank for anyone" />
+              <div className="mt-1">
+                <UsernamePicker
+                  value={targetUsername ? [targetUsername] : []}
+                  onChange={(next) => setTargetUsername(next[0] ?? '')}
+                  exclude={profile?.username ? [profile.username] : []}
+                  placeholder="Search one username, or leave blank for anyone"
+                  maxSelections={1}
+                />
+              </div>
             </label>
             <label className="mt-3 block text-sm font-medium">
               Post to

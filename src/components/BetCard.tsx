@@ -19,6 +19,11 @@ function resolvedWinnerIds(bet: Bet) {
     : [bet.resolution?.winningOptionId]).filter((id): id is string => Boolean(id));
 }
 
+function statusLabel(bet: Bet) {
+  if (bet.status === 'locked') return 'Awaiting resolve';
+  return bet.status === 'open' ? 'Open' : 'Resolved';
+}
+
 export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction }) {
   const isOpen = bet.status === 'open';
   const meta = betTypeMeta[bet.type];
@@ -56,8 +61,10 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
           </div>
 
           {/* Status badge */}
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-black ${isOpen ? 'bg-mint/12 text-mint' : 'bg-line text-ink/45'}`}>
-            {isOpen ? 'Open' : 'Closed'}
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-black ${
+            isOpen ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-line text-ink/45'
+          }`}>
+            {statusLabel(bet)}
           </span>
         </div>
 

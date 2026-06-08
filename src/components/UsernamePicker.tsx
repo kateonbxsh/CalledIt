@@ -9,11 +9,13 @@ export function UsernamePicker({
   onChange,
   exclude = [],
   placeholder = 'Search usernames',
+  maxSelections,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   exclude?: string[];
   placeholder?: string;
+  maxSelections?: number;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserProfile[]>([]);
@@ -52,7 +54,7 @@ export function UsernamePicker({
   function add(username: string) {
     const normalized = username.trim().toLowerCase();
     if (!normalized || normalizedValue.includes(normalized) || excluded.has(normalized)) return;
-    onChange([...normalizedValue, normalized]);
+    onChange(maxSelections === 1 ? [normalized] : [...normalizedValue, normalized].slice(0, maxSelections));
     setQuery('');
     setResults([]);
   }
@@ -76,13 +78,14 @@ export function UsernamePicker({
           className="min-w-32 flex-1 bg-transparent px-1 py-1 text-sm outline-none"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
+          disabled={maxSelections !== undefined && normalizedValue.length >= maxSelections}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
               if (results[0]) add(results[0].username);
             }
           }}
-          placeholder={normalizedValue.length ? 'Add another' : placeholder}
+          placeholder={maxSelections !== undefined && normalizedValue.length >= maxSelections ? '' : normalizedValue.length ? 'Add another' : placeholder}
         />
       </div>
       {results.length > 0 ? (

@@ -107,12 +107,25 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
 }
 
 export async function updateBetMetadata(betId: string, input: UpdateBetMetadataInput) {
-  await updateDoc(doc(db, 'bets', betId), {
+  const betRef = doc(db, 'bets', betId);
+  const betSnap = await getDoc(betRef);
+  const current = betSnap.exists() ? ({ id: betSnap.id, ...betSnap.data() } as Bet) : null;
+  const nextStatus =
+    current?.status === 'resolved'
+      ? undefined
+      : input.deadline && input.deadline.getTime() <= Date.now()
+        ? 'locked'
+        : current?.status === 'locked'
+          ? 'open'
+          : undefined;
+
+  await updateDoc(betRef, {
     title: input.title.trim(),
     category: input.category.trim(),
     description: input.description?.trim() || null,
     deadline: input.deadline ? Timestamp.fromDate(input.deadline) : null,
     imageUrl: input.imageUrl || null,
+    ...(nextStatus ? { status: nextStatus } : {}),
     updatedAt: serverTimestamp(),
   });
 }
@@ -421,17 +434,27 @@ export async function lockExpiredBet(bet: Bet) {
 export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUid: string) {
   const betRef = doc(db, 'bets', bet.id);
   const closest = isClosestType(bet.type);
+  const predictionSnap = await getDocs(
+    query(collection(db, 'predictions'), where('betId', '==', bet.id)),
+  );
+  const predictions = predictionSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
 
   await runTransaction(db, async (transaction) => {
-    const betSnap = await transaction.get(betRef);
+    const userRefs = [...new Set(predictions.map((prediction) => prediction.userId))]
+      .map((userId) => doc(db, 'users', userId));
+    const [betSnap, ...userSnaps] = await Promise.all([
+      transaction.get(betRef),
+      ...userRefs.map((userRef) => transaction.get(userRef)),
+    ]);
     if (!betSnap.exists()) throw new Error('Bet not found.');
     const freshBet = { id: betSnap.id, ...betSnap.data() } as Bet;
     if (freshBet.status === 'resolved') throw new Error('Bet is already resolved.');
 
-    const predictionSnap = await getDocs(
-      query(collection(db, 'predictions'), where('betId', '==', bet.id)),
+    const usersById = new Map(
+      userSnaps
+        .filter((snap) => snap.exists())
+        .map((snap) => [snap.id, snap.data() as UserProfile]),
     );
-    const predictions = predictionSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
 
     // --- Determine winners and payouts ---
     let winnerPredictionIds: string[] = [];
@@ -515,9 +538,8 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
     // --- Apply results to each predictor ---
     for (const prediction of predictions) {
       const userRef = doc(db, 'users', prediction.userId);
-      const userSnap = await transaction.get(userRef);
-      if (!userSnap.exists()) continue;
-      const user = userSnap.data() as UserProfile;
+      const user = usersById.get(prediction.userId);
+      if (!user) continue;
 
       const correct = closest
         ? winnerPredictionIds.includes(prediction.id)

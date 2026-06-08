@@ -34,8 +34,13 @@ export function FeedPage() {
         ]);
         const mergedBets = [...new Map(nextBets.flat().map((bet) => [bet.id, bet])).values()];
         await Promise.all(mergedBets.map(lockExpiredBet));
+        const activeBets = mergedBets.map((bet) => (
+          bet.status === 'open' && bet.deadline && Date.now() >= bet.deadline.toMillis()
+            ? { ...bet, status: 'locked' as const }
+            : bet
+        ));
         if (active) {
-          setBets(mergedBets.filter((b) => b.status === 'open'));
+          setBets(activeBets.filter((b) => b.status !== 'resolved'));
           setPredictions(nextPredictions);
           setGroups(nextGroups);
         }

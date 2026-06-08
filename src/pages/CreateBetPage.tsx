@@ -10,7 +10,8 @@ import { betTypeOptions } from '../utils/betTypes';
 import { downscaleBetImage } from '../utils/image';
 
 function optionId(label: string, index: number) {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `option-${index}`;
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'option';
+  return `${base}-${index + 1}`;
 }
 
 export function CreateBetPage() {
@@ -326,8 +327,8 @@ export function CreateBetPage() {
               </p>
             ) : (
               <div className="mt-3 space-y-2">
-                {options.map((option) => (
-                  <div key={option.id} className="rounded-md bg-field px-3 py-2 text-sm font-semibold">
+                {options.map((option, index) => (
+                  <div key={`${option.id}-${index}`} className="rounded-md bg-field px-3 py-2 text-sm font-semibold">
                     <div className="flex items-center justify-between gap-2">
                       <span>{option.label}</span>
                       <span className="text-xs text-ink/45">0%</span>

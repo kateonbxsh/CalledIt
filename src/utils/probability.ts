@@ -36,8 +36,8 @@ export function calculateRawChanceSummary(
       optionId: option.id,
       users: optionPredictions.length,
       coins,
-      // 42% user count + 51% stake weight + 7% rating-weighted accuracy signal
-      chance: 0.42 * userShare + 0.51 * stakeShare + 0.07 * ratingShare,
+    // Coins should matter, but not dominate: crowd signal is primary, stake is secondary.
+    chance: 0.62 * userShare + 0.23 * stakeShare + 0.15 * ratingShare,
     };
   });
 }

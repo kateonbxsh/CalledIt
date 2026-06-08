@@ -4,6 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { Check, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { ChanceChart } from '../components/ChanceChart';
+import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,6 +16,7 @@ import {
   listChanceSnapshots,
   listCommentsForBet,
   listPredictionsForBet,
+  lockExpiredBet,
   placePrediction,
   reopenBet,
   resolveBet,
@@ -64,6 +66,15 @@ function predictionTime(prediction: Prediction) {
   return prediction.createdAt ? relativeTime(prediction.createdAt) : 'just now';
 }
 
+function betStatusLabel(bet: Bet) {
+  if (bet.status === 'locked') return 'Awaiting resolve';
+  return bet.status === 'open' ? 'Open' : 'Resolved';
+}
+
+function signedNumber(value: number) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
 function predictionDetail(bet: Bet, prediction: Prediction) {
   if (bet.type === 'closestNumber') return closestNumberGuessLabel(prediction.numericGuess);
   if (bet.type === 'closestDate') return closestDateGuessLabel(prediction.dateGuess);
@@ -74,6 +85,16 @@ function predictionDetail(bet: Bet, prediction: Prediction) {
     return `${label}, ${prediction.scorePrediction.home}-${prediction.scorePrediction.away}`;
   }
   return label;
+}
+
+function estimatedCoinOutcome(stake: number, chance: number) {
+  if (chance <= 0) return { profit: 0, totalReturn: stake, skillReward: 0 };
+  const profit = Math.max(0, Math.floor(stake * (1 / chance - 1)));
+  return {
+    profit,
+    totalReturn: stake + profit,
+    skillReward: Math.max(10, Math.round(10 * Math.sqrt(Math.max(10, stake) / 50) * Math.sqrt(1 / Math.max(0.05, chance)))),
+  };
 }
 
 export function BetDetailPage() {
@@ -108,6 +129,7 @@ export function BetDetailPage() {
   const [confirmingResolution, setConfirmingResolution] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editingBet, setEditingBet] = useState(false);
+  const [editingPrediction, setEditingPrediction] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editCategory, setEditCategory] = useState('');
@@ -129,7 +151,15 @@ export function BetDetailPage() {
       return;
     }
 
-    const nextBet = { id: betSnap.id, ...betSnap.data() } as Bet;
+    let nextBet = { id: betSnap.id, ...betSnap.data() } as Bet;
+    if (
+      nextBet.status === 'open' &&
+      nextBet.deadline &&
+      Date.now() >= nextBet.deadline.toMillis()
+    ) {
+      await lockExpiredBet(nextBet);
+      nextBet = { ...nextBet, status: 'locked' };
+    }
     const [nextPredictions, nextSnapshots, nextComments] = await Promise.all([
       listPredictionsForBet(nextBet.id),
       listChanceSnapshots(nextBet.id),
@@ -179,9 +209,10 @@ export function BetDetailPage() {
   const canPredict = bet?.status === 'open';
   const canResolve = !!profile && !!bet;
   const selectedChance = bet && !closest ? chanceForOption(bet.chanceSummary, selected) : 0;
-  const estimatedProfit = selectedChance > 0 ? Math.max(0, Math.floor(stake * (1 / selectedChance - 1))) : 0;
-  const estimatedReturn = stake + estimatedProfit;
-  const estimatedSkillReward = selectedChance > 0 ? Math.max(10, Math.round(10 * Math.sqrt(Math.max(10, stake) / 50) * Math.sqrt(1 / Math.max(0.05, selectedChance)))) : 0;
+  const pendingEstimate = estimatedCoinOutcome(stake, selectedChance);
+  const myPredictionEstimate = myPrediction && !closest
+    ? estimatedCoinOutcome(myPrediction.stake, myPrediction.displayedChanceAtBetTime)
+    : null;
   const selectedOption = bet?.options.find((o) => o.id === selected);
   const winningOptions = bet?.options.filter((o) => (multiWinner ? winningOptionIds : [winningOptionId]).includes(o.id)) ?? [];
   const canEditBet = !!profile && !!bet && profile.uid === bet.creatorId;
@@ -242,6 +273,7 @@ export function BetDetailPage() {
         dateGuess: bet.type === 'closestDate' && dateGuess ? dateGuess : undefined,
         customOptionLabel: bet.type === 'openChoice' ? customOptionLabel : undefined,
       });
+      setEditingPrediction(false);
       setCustomOptionLabel('');
       await load();
     } catch (err) {
@@ -431,7 +463,7 @@ export function BetDetailPage() {
                 @{bet.creatorUsername}
               </Link>
               <span>{bet.category || 'General'}</span>
-              <span>{bet.status}</span>
+              <span>{betStatusLabel(bet)}</span>
               <span>{bet.deadline ? `deadline ${relativeTime(bet.deadline)}` : 'no deadline'}</span>
             </div>
           </div>
@@ -459,8 +491,10 @@ export function BetDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="space-y-4">
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-white p-3">
-            <span className={`rounded-full px-3 py-1 text-xs font-black ${bet.status === 'open' ? 'bg-mint/12 text-mint' : 'bg-coral/12 text-coral'}`}>
-              {bet.status === 'open' ? 'Open' : 'Closed'}
+            <span className={`rounded-full px-3 py-1 text-xs font-black ${
+              bet.status === 'open' ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-coral/12 text-coral'
+            }`}>
+              {betStatusLabel(bet)}
             </span>
             <span className="rounded-full bg-field px-3 py-1 text-xs font-bold text-ink/60">{bet.category || 'General'}</span>
             <span className="text-sm font-semibold text-ink/55">{bet.predictionCount} predictions</span>
@@ -478,7 +512,9 @@ export function BetDetailPage() {
           {/* Closest type: show participant guesses */}
           {closest ? (
             <div className="rounded-md border border-line bg-white p-4">
-              <h2 className="mb-3 font-bold">
+              <h2 className="mb-3 font-bold">Guess Distribution</h2>
+              <ClosestDistributionChart bet={bet} predictions={predictions} />
+              <h2 className="mb-3 mt-4 font-bold">
                 {bet.status === 'resolved' ? 'Results' : 'Participants'}
                 {bet.status === 'resolved' && bet.resolution ? (
                   <span className="ml-2 text-sm font-normal text-ink/55">
@@ -489,7 +525,7 @@ export function BetDetailPage() {
                 ) : null}
               </h2>
               {bet.status !== 'resolved' ? (
-                <p className="text-sm text-ink/55 italic">Guesses are hidden until the bet is resolved.</p>
+                <p className="text-sm text-ink/55 italic">Exact guesses are hidden until the bet is resolved. The chart only shows anonymous ranges.</p>
               ) : sortedPredictions.length === 0 ? (
                 <p className="text-sm text-ink/55">No predictions yet.</p>
               ) : (
@@ -522,10 +558,10 @@ export function BetDetailPage() {
               <div className="rounded-md border border-line bg-white p-4">
                 <h2 className="mb-3 font-bold">Option Breakdown</h2>
                 <div className="space-y-3">
-                  {bet.chanceSummary.map((summary) => {
+                  {bet.chanceSummary.map((summary, index) => {
                     const option = bet.options.find((item) => item.id === summary.optionId);
                     return (
-                      <div key={summary.optionId}>
+                      <div key={`${summary.optionId}-${index}`}>
                         <div className="mb-1 flex items-center justify-between text-sm">
                           <span className="font-semibold">{option?.label}</span>
                           <span>{percent(summary.chance)}</span>
@@ -588,32 +624,114 @@ export function BetDetailPage() {
             <h2 className="mb-3 font-bold">Prediction</h2>
             {myPrediction ? (
               <div className="mb-3 rounded-md bg-mint/10 p-3 text-sm text-mint">
-                <Check className="mb-2" size={18} />
-                {closest ? (
-                  <span>
-                    Your guess:{' '}
-                    <strong>
-                      {bet.type === 'closestNumber'
-                        ? closestNumberGuessLabel(myPrediction.numericGuess)
-                        : closestDateGuessLabel(myPrediction.dateGuess)}
-                    </strong>
-                    {' '}with <CoinAmount amount={myPrediction.stake} className="text-sm" />
-                  </span>
-                ) : (
-                  <span className="inline-flex flex-wrap items-center gap-1">
-                    You picked {bet.options.find((o) => o.id === myPrediction.optionId)?.label} with{' '}
-                    <CoinAmount amount={myPrediction.stake} className="text-sm" />
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <Check size={18} className="shrink-0" />
+                  {closest ? (
+                    <span className="inline-flex flex-wrap items-center gap-1">
+                      Your guess:{' '}
+                      <strong>
+                        {bet.type === 'closestNumber'
+                          ? closestNumberGuessLabel(myPrediction.numericGuess)
+                          : closestDateGuessLabel(myPrediction.dateGuess)}
+                      </strong>
+                      {' '}with <CoinAmount amount={myPrediction.stake} className="text-sm" />
+                    </span>
+                  ) : (
+                    <span className="inline-flex flex-wrap items-center gap-1">
+                      You picked {bet.options.find((o) => o.id === myPrediction.optionId)?.label} with{' '}
+                      <CoinAmount amount={myPrediction.stake} className="text-sm" />
+                    </span>
+                  )}
+                </div>
                 {(myPrediction.revisionCount ?? 0) > 0 ? (
-                  <p className="mt-2 text-xs font-semibold text-mint/80">
+                  <p className="mt-2 pl-7 text-xs font-semibold text-mint/80">
                     Updated {myPrediction.revisionCount}x - fees paid {myPrediction.changeFeesPaid ?? 0} coins
                   </p>
                 ) : null}
+                {bet.status === 'resolved' ? (
+                  <div className="mt-3 rounded-md bg-white/75 p-3 text-xs text-ink/60">
+                    <p className="mb-2 font-black text-ink/70">Resolution result</p>
+                    <div className="flex items-center justify-between">
+                      <span>Outcome</span>
+                      <span className={`font-black ${myPrediction.correct ? 'text-mint' : 'text-coral'}`}>
+                        {myPrediction.correct ? 'Won' : 'Lost'}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span>Net coins</span>
+                      <CoinAmount amount={myPrediction.coinDelta ?? 0} className="text-xs" />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span>ELO</span>
+                      <span className={`font-bold ${(myPrediction.ratingDelta ?? 0) >= 0 ? 'text-mint' : 'text-coral'}`}>
+                        {signedNumber(myPrediction.ratingDelta ?? 0)}
+                      </span>
+                    </div>
+                    {(myPrediction.poolCoinProfit ?? 0) > 0 ? (
+                      <div className="mt-1 flex items-center justify-between text-ink/45">
+                        <span>Pool profit</span>
+                        <CoinAmount amount={myPrediction.poolCoinProfit ?? 0} className="text-xs" />
+                      </div>
+                    ) : null}
+                    {(myPrediction.mintedCoinReward ?? 0) > 0 ? (
+                      <div className="mt-1 flex items-center justify-between text-ink/45">
+                        <span>Skill reward</span>
+                        <CoinAmount amount={myPrediction.mintedCoinReward ?? 0} className="text-xs" />
+                      </div>
+                    ) : null}
+                    {(myPrediction.spicyForecastBonus ?? 0) > 0 ? (
+                      <div className="mt-1 flex items-center justify-between text-ink/45">
+                        <span>Spicy bonus</span>
+                        <CoinAmount amount={myPrediction.spicyForecastBonus ?? 0} className="text-xs" />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : !closest && myPredictionEstimate ? (
+                  <div className="mt-3 rounded-md bg-white/75 p-3 text-xs text-ink/60">
+                    <p className="mb-2 font-black text-ink/70">Your current prediction estimate</p>
+                    <div className="flex items-center justify-between">
+                      <span>Chance when placed</span>
+                      <span className="font-bold">{percent(myPrediction.displayedChanceAtBetTime)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span>Est. profit</span>
+                      <CoinAmount amount={myPredictionEstimate.profit} className="text-xs" />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span>Total return</span>
+                      <CoinAmount amount={myPredictionEstimate.totalReturn} className="text-xs" />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span>Skill reward</span>
+                      <CoinAmount amount={myPredictionEstimate.skillReward} className="text-xs" />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
-            {canPredict ? (
+            {canPredict && myPrediction && !editingPrediction ? (
+              <button
+                type="button"
+                onClick={() => setEditingPrediction(true)}
+                className="w-full rounded-xl border border-line bg-white px-4 py-3 text-sm font-bold text-ink/75 transition hover:bg-field"
+              >
+                Edit prediction
+              </button>
+            ) : null}
+            {canPredict && (!myPrediction || editingPrediction) ? (
               <form className="space-y-3" onSubmit={submitPrediction}>
+                {myPrediction ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-black uppercase tracking-wide text-ink/45">Edit prediction</p>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPrediction(false)}
+                      className="rounded-md border border-line px-2 py-1 text-xs font-bold text-ink/55"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : null}
                 {/* Option tile picker */}
                 {!closest && bet.options.length > 0 ? (
                   <div>
@@ -621,12 +739,12 @@ export function BetDetailPage() {
                       {bet.type === 'openChoice' ? 'Pick an existing answer' : 'Your pick'}
                     </p>
                     <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(bet.options.length, 2)}, 1fr)` }}>
-                      {bet.options.map((option) => {
+                      {bet.options.map((option, index) => {
                         const chance = chanceForOption(bet.chanceSummary, option.id);
                         const isSelected = selected === option.id;
                         return (
                           <button
-                            key={option.id}
+                            key={`${option.id}-${index}`}
                             type="button"
                             onClick={() => {
                               setSelected(option.id);
@@ -659,9 +777,9 @@ export function BetDetailPage() {
                     />
                     {openChoiceMatches.length > 0 ? (
                       <div className="mt-2 overflow-hidden rounded-xl border border-line bg-white">
-                        {openChoiceMatches.map((option) => (
+                        {openChoiceMatches.map((option, index) => (
                           <button
-                            key={option.id}
+                            key={`${option.id}-${index}`}
                             type="button"
                             onClick={() => {
                               setSelected(option.id);
@@ -740,15 +858,15 @@ export function BetDetailPage() {
                   <div className="rounded-xl bg-field px-3 py-2.5 text-xs text-ink/60">
                     <div className="flex items-center justify-between">
                       <span>Est. profit if <span className="font-semibold text-ink/80">{selectedOption?.label}</span> wins</span>
-                      <CoinAmount amount={estimatedProfit} className="text-xs" />
+                      <CoinAmount amount={pendingEstimate.profit} className="text-xs" />
                     </div>
                     <div className="mt-1 flex items-center justify-between text-ink/45">
                       <span>Total return</span>
-                      <CoinAmount amount={estimatedReturn} className="text-xs" />
+                      <CoinAmount amount={pendingEstimate.totalReturn} className="text-xs" />
                     </div>
                     <div className="mt-1 flex items-center justify-between text-ink/45">
                       <span>Skill reward</span>
-                      <CoinAmount amount={estimatedSkillReward} className="text-xs" />
+                      <CoinAmount amount={pendingEstimate.skillReward} className="text-xs" />
                     </div>
                     {myPrediction ? (
                       <div className="mt-1 flex items-center justify-between text-ink/45">
@@ -773,9 +891,14 @@ export function BetDetailPage() {
                   {busy ? 'Submitting...' : myPrediction ? 'Update prediction' : 'Submit prediction'}
                 </button>
               </form>
-            ) : (
-              <p className="text-sm text-ink/60">Prediction is closed or unavailable for this bet.</p>
-            )}
+            ) : null}
+            {!canPredict ? (
+              <p className="text-sm text-ink/60">
+                {bet.status === 'locked'
+                  ? 'This bet is awaiting resolve. Predictions and edits are closed.'
+                  : 'Prediction is closed for this bet.'}
+              </p>
+            ) : null}
           </section>
 
           {/* Resolve panel */}
@@ -814,8 +937,8 @@ export function BetDetailPage() {
                 {!closest && multiWinner ? (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-ink/55">Winning options</p>
-                    {bet.options.map((option) => (
-                      <label key={option.id} className="flex items-center gap-2 rounded-md bg-field px-3 py-2 text-sm font-semibold">
+                    {bet.options.map((option, index) => (
+                      <label key={`${option.id}-${index}`} className="flex items-center gap-2 rounded-md bg-field px-3 py-2 text-sm font-semibold">
                         <input
                           type="checkbox"
                           checked={winningOptionIds.includes(option.id)}
@@ -827,8 +950,8 @@ export function BetDetailPage() {
                   </div>
                 ) : !closest ? (
                   <select className="w-full rounded-md border border-line bg-field px-3 py-2" value={winningOptionId} onChange={(e) => setWinningOptionId(e.target.value)}>
-                    {bet.options.map((option) => (
-                      <option key={option.id} value={option.id}>{option.label}</option>
+                    {bet.options.map((option, index) => (
+                      <option key={`${option.id}-${index}`} value={option.id}>{option.label}</option>
                     ))}
                   </select>
                 ) : null}
