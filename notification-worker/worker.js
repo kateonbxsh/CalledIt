@@ -19,7 +19,6 @@ function loadEnv(filePath) {
 loadEnv(path.join(__dirname, '.env'));
 
 const projectId = process.env.FIREBASE_PROJECT_ID || 'kent3arf';
-const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS || 5000);
 const batchSize = Number(process.env.NOTIFICATION_BATCH_SIZE || 20);
 const dryRun = String(process.env.DRY_RUN || 'false').toLowerCase() === 'true';
 const publicAppUrl = (process.env.PUBLIC_APP_URL || 'https://kateonbxsh.github.io/CalledIt').replace(/\/$/, '');
@@ -34,10 +33,14 @@ admin.initializeApp({
 
 const db = admin.firestore();
 const messaging = admin.messaging();
-let running = false;
 let stopping = false;
 let lastDeadlineScanMs = 0;
 let firestoreBackoffUntilMs = 0;
+let deadlineRunning = false;
+let notificationRunning = false;
+let unsubscribeNotifications = null;
+let notificationRetryTimer = null;
+const notificationQueue = new Map();
 
 function log(message, extra = {}) {
   const suffix = Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : '';
@@ -335,40 +338,89 @@ async function scanDeadlineReminders() {
   }
 }
 
-async function tick() {
-  if (running || stopping) return;
+function isQuotaError(err) {
+  return err?.code === 8 || String(err?.message || '').includes('RESOURCE_EXHAUSTED');
+}
+
+function backoffFirestore(err) {
+  firestoreBackoffUntilMs = Date.now() + quotaBackoffMs;
+  console.error(`[${new Date().toISOString()}] Firestore quota exhausted; backing off for ${quotaBackoffMs}ms`, err);
+}
+
+function queueNotificationDoc(doc) {
+  notificationQueue.set(doc.id, doc.ref);
+  processNotificationQueue();
+}
+
+async function processNotificationQueue() {
+  if (notificationRunning || stopping) return;
   if (Date.now() < firestoreBackoffUntilMs) return;
-  running = true;
+  notificationRunning = true;
+  try {
+    while (notificationQueue.size > 0 && !stopping) {
+      if (Date.now() < firestoreBackoffUntilMs) break;
+      const [id, ref] = notificationQueue.entries().next().value;
+      notificationQueue.delete(id);
+      const claimed = await claimNotification(ref);
+      if (claimed) await sendNotification(claimed);
+    }
+  } catch (err) {
+    if (isQuotaError(err)) backoffFirestore(err);
+    else console.error(`[${new Date().toISOString()}] Notification processing failed`, err);
+  } finally {
+    notificationRunning = false;
+    if (notificationQueue.size > 0 && !stopping) {
+      clearTimeout(notificationRetryTimer);
+      const delay = Math.max(1000, firestoreBackoffUntilMs - Date.now());
+      notificationRetryTimer = setTimeout(processNotificationQueue, delay);
+    }
+  }
+}
+
+function listenForNotifications() {
+  if (unsubscribeNotifications || stopping) return;
+  unsubscribeNotifications = db
+    .collection('notifications')
+    .where('sentAt', '==', null)
+    .limit(batchSize)
+    .onSnapshot((snap) => {
+      snap.docChanges()
+        .filter((change) => change.type === 'added' || change.type === 'modified')
+        .forEach((change) => queueNotificationDoc(change.doc));
+    }, (err) => {
+      unsubscribeNotifications = null;
+      if (isQuotaError(err)) backoffFirestore(err);
+      else console.error(`[${new Date().toISOString()}] Notification listener failed`, err);
+      if (!stopping) {
+        clearTimeout(notificationRetryTimer);
+        const delay = Math.max(5000, firestoreBackoffUntilMs - Date.now());
+        notificationRetryTimer = setTimeout(listenForNotifications, delay);
+      }
+    });
+}
+
+async function deadlineTick() {
+  if (deadlineRunning || stopping) return;
+  if (Date.now() < firestoreBackoffUntilMs) return;
+  deadlineRunning = true;
   try {
     const nowMs = Date.now();
     if (nowMs - lastDeadlineScanMs >= deadlineScanIntervalMs) {
       lastDeadlineScanMs = nowMs;
       await scanDeadlineReminders();
     }
-    const snap = await db
-      .collection('notifications')
-      .where('sentAt', '==', null)
-      .limit(batchSize)
-      .get();
-
-    for (const doc of snap.docs) {
-      const claimed = await claimNotification(doc.ref);
-      if (claimed) await sendNotification(claimed);
-    }
   } catch (err) {
-    if (err?.code === 8 || String(err?.message || '').includes('RESOURCE_EXHAUSTED')) {
-      firestoreBackoffUntilMs = Date.now() + quotaBackoffMs;
-      console.error(`[${new Date().toISOString()}] Firestore quota exhausted; backing off for ${quotaBackoffMs}ms`, err);
-      return;
-    }
-    console.error(`[${new Date().toISOString()}] Worker tick failed`, err);
+    if (isQuotaError(err)) backoffFirestore(err);
+    else console.error(`[${new Date().toISOString()}] Deadline scan failed`, err);
   } finally {
-    running = false;
+    deadlineRunning = false;
   }
 }
 
 async function shutdown(signal) {
   stopping = true;
+  if (unsubscribeNotifications) unsubscribeNotifications();
+  clearTimeout(notificationRetryTimer);
   log(`Received ${signal}, shutting down`);
   process.exit(0);
 }
@@ -378,12 +430,12 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 log('Called It notification worker started', {
   projectId,
-  pollIntervalMs,
   batchSize,
   dryRun,
   publicAppUrl,
   deadlineScanIntervalMs,
   quotaBackoffMs,
 });
-tick();
-setInterval(tick, pollIntervalMs);
+listenForNotifications();
+deadlineTick();
+setInterval(deadlineTick, Math.min(deadlineScanIntervalMs, 60 * 1000));
