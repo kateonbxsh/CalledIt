@@ -50,45 +50,16 @@ function signedCoins(amount: number) {
 
 function RewardChest({ open = false, className = '' }: { open?: boolean; className?: string }) {
   return (
-    <svg viewBox="0 0 220 170" className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="chest-lid" x1="28" x2="180" y1="20" y2="80" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#ffca62" />
-          <stop offset="100%" stopColor="#c46b2c" />
-        </linearGradient>
-        <linearGradient id="chest-body" x1="28" x2="180" y1="78" y2="156" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#a96b3d" />
-          <stop offset="100%" stopColor="#643a24" />
-        </linearGradient>
-        <linearGradient id="coin-shine" x1="74" x2="144" y1="52" y2="118" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#ffe48f" />
-          <stop offset="100%" stopColor="#d49a25" />
-        </linearGradient>
-      </defs>
+    <div className={`relative grid place-items-center rounded-2xl bg-[radial-gradient(circle_at_45%_20%,#ffe48f,#d49a25_48%,#70482f)] p-2 shadow-soft ${open ? 'animate-chest-open' : ''} ${className}`} aria-hidden="true">
+      <img
+        src="./chest-locked-game-icons.svg"
+        alt=""
+        className="h-full w-full drop-shadow-[0_8px_12px_rgba(18,20,23,0.24)]"
+      />
       {open ? (
-        <g className="origin-[110px_86px] animate-chest-open">
-          <path d="M37 78 C45 28 175 28 183 78 L170 96 H50 Z" fill="url(#chest-lid)" />
-          <path d="M55 76 C63 44 157 44 165 76" fill="none" stroke="#fff3bd" strokeWidth="10" strokeLinecap="round" opacity="0.45" />
-          <path d="M37 78 C45 28 175 28 183 78" fill="none" stroke="#121417" strokeOpacity="0.2" strokeWidth="5" />
-        </g>
-      ) : (
-        <path d="M37 78 C45 28 175 28 183 78 L170 96 H50 Z" fill="url(#chest-lid)" stroke="#121417" strokeOpacity="0.18" strokeWidth="5" />
-      )}
-      {open ? (
-        <g className="animate-reward-pop">
-          <circle cx="80" cy="75" r="13" fill="url(#coin-shine)" stroke="#9c651b" strokeOpacity="0.28" strokeWidth="3" />
-          <circle cx="116" cy="61" r="16" fill="url(#coin-shine)" stroke="#9c651b" strokeOpacity="0.28" strokeWidth="3" />
-          <circle cx="148" cy="76" r="12" fill="url(#coin-shine)" stroke="#9c651b" strokeOpacity="0.28" strokeWidth="3" />
-          <path d="M103 87 115 72 128 87 115 104 Z" fill="#7dcdf4" stroke="#1f6183" strokeOpacity="0.25" strokeWidth="3" />
-        </g>
+        <span className="absolute -top-2 right-2 h-4 w-4 animate-reward-pop rounded-full bg-white shadow-soft" />
       ) : null}
-      <path d="M30 86 H190 V145 C190 154 184 160 175 160 H45 C36 160 30 154 30 145 Z" fill="url(#chest-body)" />
-      <path d="M30 108 H190" stroke="#121417" strokeOpacity="0.18" strokeWidth="5" />
-      <path d="M56 88 V158 M164 88 V158" stroke="#f4ba4d" strokeWidth="10" strokeLinecap="round" opacity="0.92" />
-      <rect x="91" y="101" width="38" height="40" rx="7" fill="#fff3bd" stroke="#121417" strokeOpacity="0.18" strokeWidth="4" />
-      <circle cx="110" cy="118" r="5" fill="#d49a25" />
-      <path d="M48 160 H172" stroke="#121417" strokeOpacity="0.18" strokeWidth="5" strokeLinecap="round" />
-    </svg>
+    </div>
   );
 }
 

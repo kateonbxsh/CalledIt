@@ -24,8 +24,11 @@ function LoadingScreen() {
   return (
     <div className="grid min-h-screen place-items-center bg-[#edf0e8] text-ink">
       <div className="grid place-items-center gap-3">
-        <img src="./pwa-icon.svg" alt="" className="h-24 w-24 rounded-3xl shadow-lift" />
+        <img src="./pwa-icon.svg" alt="" className="h-28 w-28 animate-soft-enter rounded-[28px] shadow-lift" />
         <p className="text-sm font-black">Called it</p>
+        <div className="h-1.5 w-28 overflow-hidden rounded-full bg-ink/10">
+          <div className="h-full w-1/2 animate-fill-bar rounded-full bg-mint" />
+        </div>
       </div>
     </div>
   );

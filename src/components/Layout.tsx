@@ -102,7 +102,7 @@ export function Layout() {
     ...navItems,
     { to: '/me', label: 'Profile', icon: User },
   ];
-  const canGoBack = location.pathname !== '/';
+  const canGoBack = /^\/bets\/[^/]+/.test(location.pathname) || /^\/profile\/[^/]+/.test(location.pathname);
 
   useEffect(() => {
     setShowInstallNav(isMobileBrowser() && !isStandaloneApp());
@@ -208,27 +208,24 @@ export function Layout() {
       ) : null}
 
       {/* Mobile app controls */}
-      <div className={`fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between border-b border-line/70 bg-[#f8faf4]/95 px-3 shadow-soft backdrop-blur-md transition lg:hidden ${
+      <div className={`fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between bg-[#edf0e8]/92 px-3 backdrop-blur-md transition lg:hidden ${
         mobileNavOpen ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          disabled={!canGoBack}
-          className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white text-ink/70 transition active:scale-95 disabled:opacity-25"
-          aria-label="Go back"
-          title="Back"
-        >
-          <ArrowLeft size={19} />
-        </button>
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-mint" />
-          <span className="text-sm font-black">Called it</span>
-        </div>
+        {canGoBack ? (
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
+            aria-label="Go back"
+            title="Back"
+          >
+            <ArrowLeft size={20} />
+          </button>
+        ) : <span className="h-10 w-10" />}
         <button
           type="button"
           onClick={() => setMobileNavOpen(true)}
-          className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white text-ink/70 transition active:scale-95"
+          className="grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
           aria-label="Open navigation"
           title="Menu"
         >
