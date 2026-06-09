@@ -4,7 +4,7 @@ Tiny VPS worker for closed-app web push notifications.
 
 The web app writes documents to Firestore `notifications`. This worker polls unsent docs, sends FCM web pushes to enabled user tokens, then marks each notification as sent.
 
-It also scans open bets and wager challenges for deadlines, creates one deduped "deadline soon" notification inside the last 24 hours, and one "deadline passed" notification when they expire.
+It also scans open bets and wager challenges for deadlines on a slower cadence, creates one deduped "deadline soon" notification inside the last 24 hours, and one "deadline passed" notification when they expire. Deadline scans only query items whose deadline is inside the configured lookahead window.
 
 ## Files
 
@@ -58,3 +58,10 @@ The frontend can use Firebase's default web push certificate. If you want a cust
 Firebase Console -> Project settings -> Cloud Messaging -> Web Push certificates.
 
 Then set `VITE_FIREBASE_VAPID_KEY` in the frontend environment and redeploy GitHub Pages.
+
+## Firestore Read Budget
+
+- `POLL_INTERVAL_MS` controls how often unsent notification docs are checked.
+- `DEADLINE_SCAN_INTERVAL_MS` controls deadline reminder scans separately. Keep this much higher than `POLL_INTERVAL_MS`; 10 minutes is the default.
+- `DEADLINE_LOOKAHEAD_MS` controls how far ahead deadline reminders are generated.
+- `QUOTA_BACKOFF_MS` controls how long the worker pauses Firestore reads after a quota-exhausted response.

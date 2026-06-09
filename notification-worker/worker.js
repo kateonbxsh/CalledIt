@@ -24,6 +24,8 @@ const batchSize = Number(process.env.NOTIFICATION_BATCH_SIZE || 20);
 const dryRun = String(process.env.DRY_RUN || 'false').toLowerCase() === 'true';
 const publicAppUrl = (process.env.PUBLIC_APP_URL || 'https://kateonbxsh.github.io/CalledIt').replace(/\/$/, '');
 const deadlineLookaheadMs = Number(process.env.DEADLINE_LOOKAHEAD_MS || 24 * 60 * 60 * 1000);
+const deadlineScanIntervalMs = Number(process.env.DEADLINE_SCAN_INTERVAL_MS || 10 * 60 * 1000);
+const quotaBackoffMs = Number(process.env.QUOTA_BACKOFF_MS || 15 * 60 * 1000);
 
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
@@ -34,6 +36,8 @@ const db = admin.firestore();
 const messaging = admin.messaging();
 let running = false;
 let stopping = false;
+let lastDeadlineScanMs = 0;
+let firestoreBackoffUntilMs = 0;
 
 function log(message, extra = {}) {
   const suffix = Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : '';
@@ -225,7 +229,12 @@ async function sendNotification(notification) {
 async function scanBetDeadlines() {
   const nowMs = Date.now();
   const soonMs = nowMs + deadlineLookaheadMs;
-  const snap = await db.collection('bets').where('status', '==', 'open').limit(100).get();
+  const snap = await db
+    .collection('bets')
+    .where('status', '==', 'open')
+    .where('deadline', '<=', admin.firestore.Timestamp.fromMillis(soonMs))
+    .limit(100)
+    .get();
   let created = 0;
 
   for (const doc of snap.docs) {
@@ -270,7 +279,12 @@ async function scanBetDeadlines() {
 async function scanWagerDeadlines() {
   const nowMs = Date.now();
   const soonMs = nowMs + deadlineLookaheadMs;
-  const snap = await db.collection('challenges').where('status', '==', 'open').limit(100).get();
+  const snap = await db
+    .collection('challenges')
+    .where('status', '==', 'open')
+    .where('deadline', '<=', admin.firestore.Timestamp.fromMillis(soonMs))
+    .limit(100)
+    .get();
   let created = 0;
 
   for (const doc of snap.docs) {
@@ -323,9 +337,14 @@ async function scanDeadlineReminders() {
 
 async function tick() {
   if (running || stopping) return;
+  if (Date.now() < firestoreBackoffUntilMs) return;
   running = true;
   try {
-    await scanDeadlineReminders();
+    const nowMs = Date.now();
+    if (nowMs - lastDeadlineScanMs >= deadlineScanIntervalMs) {
+      lastDeadlineScanMs = nowMs;
+      await scanDeadlineReminders();
+    }
     const snap = await db
       .collection('notifications')
       .where('sentAt', '==', null)
@@ -337,6 +356,11 @@ async function tick() {
       if (claimed) await sendNotification(claimed);
     }
   } catch (err) {
+    if (err?.code === 8 || String(err?.message || '').includes('RESOURCE_EXHAUSTED')) {
+      firestoreBackoffUntilMs = Date.now() + quotaBackoffMs;
+      console.error(`[${new Date().toISOString()}] Firestore quota exhausted; backing off for ${quotaBackoffMs}ms`, err);
+      return;
+    }
     console.error(`[${new Date().toISOString()}] Worker tick failed`, err);
   } finally {
     running = false;
@@ -358,6 +382,8 @@ log('Called It notification worker started', {
   batchSize,
   dryRun,
   publicAppUrl,
+  deadlineScanIntervalMs,
+  quotaBackoffMs,
 });
 tick();
 setInterval(tick, pollIntervalMs);
