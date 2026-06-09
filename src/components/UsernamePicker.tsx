@@ -8,12 +8,14 @@ export function UsernamePicker({
   value,
   onChange,
   exclude = [],
+  allowed,
   placeholder = 'Search usernames',
   maxSelections,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   exclude?: string[];
+  allowed?: string[];
   placeholder?: string;
   maxSelections?: number;
 }) {
@@ -21,6 +23,10 @@ export function UsernamePicker({
   const [results, setResults] = useState<UserProfile[]>([]);
   const normalizedValue = useMemo(() => value.map((item) => item.toLowerCase()), [value]);
   const excluded = useMemo(() => new Set(exclude.map((item) => item.toLowerCase())), [exclude]);
+  const allowedSet = useMemo(
+    () => (allowed ? new Set(allowed.map((item) => item.toLowerCase())) : null),
+    [allowed],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +42,10 @@ export function UsernamePicker({
           if (cancelled) return;
           setResults(
             users.filter(
-              (user) => !normalizedValue.includes(user.username) && !excluded.has(user.username),
+              (user) =>
+                !normalizedValue.includes(user.username) &&
+                !excluded.has(user.username) &&
+                (!allowedSet || allowedSet.has(user.username)),
             ),
           );
         })
@@ -49,11 +58,11 @@ export function UsernamePicker({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [excluded, normalizedValue, query]);
+  }, [allowedSet, excluded, normalizedValue, query]);
 
   function add(username: string) {
     const normalized = username.trim().toLowerCase();
-    if (!normalized || normalizedValue.includes(normalized) || excluded.has(normalized)) return;
+    if (!normalized || normalizedValue.includes(normalized) || excluded.has(normalized) || (allowedSet && !allowedSet.has(normalized))) return;
     onChange(maxSelections === 1 ? [normalized] : [...normalizedValue, normalized].slice(0, maxSelections));
     setQuery('');
     setResults([]);

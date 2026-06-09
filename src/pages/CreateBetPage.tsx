@@ -24,6 +24,7 @@ export function CreateBetPage() {
   const [deadline, setDeadline] = useState('');
   const [visibility, setVisibility] = useState<BetVisibility>('public');
   const [invited, setInvited] = useState<string[]>([]);
+  const [masked, setMasked] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [multiOptions, setMultiOptions] = useState('Option A\nOption B\nOption C');
@@ -44,16 +45,20 @@ export function CreateBetPage() {
     }
   }, [profile]);
 
-  // When a group is selected, auto-populate invited usernames
+  const groupUsernames = useMemo(() => {
+    const group = groups.find((g) => g.id === selectedGroupId);
+    if (!group || !profile) return [];
+    return [group.creatorUsername, ...group.memberUsernames]
+      .map((username) => username.trim().toLowerCase())
+      .filter((username) => username && username !== profile.username);
+  }, [groups, profile, selectedGroupId]);
+
+  // When a group is selected, auto-populate invited usernames while respecting masks.
   useEffect(() => {
     if (!selectedGroupId) return;
-    const group = groups.find((g) => g.id === selectedGroupId);
-    if (!group) return;
-    const allMembers = [group.creatorUsername, ...group.memberUsernames].filter(
-      (u) => u !== profile?.username,
-    );
-    setInvited(allMembers.map((username) => username.trim().toLowerCase()).filter(Boolean));
-  }, [selectedGroupId, groups, profile?.username]);
+    const maskedSet = new Set(masked);
+    setInvited(groupUsernames.filter((username) => !maskedSet.has(username)));
+  }, [groupUsernames, masked, selectedGroupId]);
 
   const options = useMemo<BetOption[]>(() => {
     if (type === 'binary') {
@@ -103,6 +108,7 @@ export function CreateBetPage() {
       if (type !== 'closestNumber' && type !== 'closestDate' && type !== 'openChoice' && options.length < 2) {
         throw new Error('Add at least two options.');
       }
+      const maskedSet = new Set(masked.map((username) => username.trim().toLowerCase()));
       await createBet(
         {
           type,
@@ -111,7 +117,8 @@ export function CreateBetPage() {
           category,
           deadline: deadline ? new Date(deadline) : undefined,
           visibility,
-          invitedUsernames: invited,
+          invitedUsernames: invited.filter((username) => !maskedSet.has(username)),
+          maskedUsernames: selectedGroupId ? [...maskedSet] : [],
           options,
           allowDraw,
           allowExactScore,
@@ -291,10 +298,27 @@ export function CreateBetPage() {
                         </option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-xs text-ink/50">
+                  <span className="mt-1 block text-xs text-ink/50">
                       Selecting a group auto-fills the usernames below
                     </span>
                   </label>
+                ) : null}
+                {selectedGroupId ? (
+                  <div className="block text-sm font-medium">
+                    Masked group members
+                    <div className="mt-1">
+                      <UsernamePicker
+                        value={masked}
+                        onChange={(next) => setMasked(next.filter((username) => groupUsernames.includes(username)))}
+                        allowed={groupUsernames}
+                        exclude={profile?.username ? [profile.username] : []}
+                        placeholder="Search group members to hide this bet from"
+                      />
+                    </div>
+                    <span className="mt-1 block text-xs text-ink/50">
+                      Masked members stay in the group, but this bet will not appear for them.
+                    </span>
+                  </div>
                 ) : null}
                 <div className="block text-sm font-medium">
                   Invited users

@@ -1,6 +1,7 @@
 import {
   BarChart3,
   CirclePlus,
+  Download,
   Gamepad2,
   HelpCircle,
   History,
@@ -18,6 +19,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
 import { useAuth } from '../contexts/AuthContext';
+import { isMobileBrowser } from '../utils/device';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: Home },
@@ -90,8 +92,17 @@ function MobileNavItem({
 export function Layout() {
   const { profile, logout } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [showInstallNav, setShowInstallNav] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number; valid: boolean } | null>(null);
-  const mobileNavItems = [...navItems, { to: '/me', label: 'Profile', icon: User }];
+  const mobileNavItems = [
+    ...(showInstallNav ? [{ to: '/install', label: 'Install App', icon: Download }] : []),
+    ...navItems,
+    { to: '/me', label: 'Profile', icon: User },
+  ];
+
+  useEffect(() => {
+    setShowInstallNav(isMobileBrowser());
+  }, []);
 
   useEffect(() => {
     const interactiveSelector = 'a, button, input, textarea, select, label, summary, [role="button"], [data-swipe-ignore="true"]';

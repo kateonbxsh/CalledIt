@@ -73,6 +73,10 @@ function predictionOptionIds(prediction: Prediction) {
   return prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
 }
 
+function normalizeUsernames(usernames: string[]) {
+  return [...new Set(usernames.map((name) => name.trim().toLowerCase()).filter(Boolean))];
+}
+
 function scoreConsistencyError(optionId: string, homeScore?: number, awayScore?: number) {
   if (homeScore === undefined || awayScore === undefined) return '';
   if (optionId === 'home' && homeScore < awayScore) return 'Home cannot win with a lower score.';
@@ -89,7 +93,8 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     category: input.category.trim(),
     description: input.description?.trim() || null,
     visibility: input.visibility,
-    invitedUsernames: input.invitedUsernames.map((name) => name.trim().toLowerCase()).filter(Boolean),
+    invitedUsernames: normalizeUsernames(input.invitedUsernames),
+    maskedUsernames: normalizeUsernames(input.maskedUsernames ?? []),
     options: input.options,
     allowDraw: input.allowDraw ?? false,
     allowExactScore: input.allowExactScore ?? false,
@@ -109,7 +114,8 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     createdAt: now,
     updatedAt: now,
   });
-  const targetUids = await uidsForUsernames(input.invitedUsernames);
+  const masked = new Set(normalizeUsernames(input.maskedUsernames ?? []));
+  const targetUids = await uidsForUsernames(normalizeUsernames(input.invitedUsernames).filter((name) => !masked.has(name)));
   await createNotification({
     type: 'bet_created',
     actor: creator,
@@ -140,6 +146,8 @@ export async function updateBetMetadata(betId: string, input: UpdateBetMetadataI
     description: input.description?.trim() || null,
     deadline: input.deadline ? Timestamp.fromDate(input.deadline) : null,
     imageUrl: input.imageUrl || null,
+    ...(input.invitedUsernames ? { invitedUsernames: normalizeUsernames(input.invitedUsernames) } : {}),
+    ...(input.maskedUsernames ? { maskedUsernames: normalizeUsernames(input.maskedUsernames) } : {}),
     ...(nextStatus ? { status: nextStatus } : {}),
     updatedAt: serverTimestamp(),
   });

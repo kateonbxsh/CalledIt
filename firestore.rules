@@ -25,7 +25,7 @@ service cloud.firestore {
         !resource.data.keys().hasAny(['visibility']) ||
         resource.data.visibility == 'public' ||
         resource.data.creatorId == request.auth.uid ||
-        username() in resource.data.invitedUsernames ||
+        (username() in resource.data.invitedUsernames && notMasked()) ||
         canReadGroupLinkedResource() ||
         isAdmin()
       );
@@ -37,7 +37,13 @@ service cloud.firestore {
         && (
           get(/databases/$(database)/documents/bets/$(betId)).data.visibility == 'public' ||
           get(/databases/$(database)/documents/bets/$(betId)).data.creatorId == request.auth.uid ||
-          username() in get(/databases/$(database)/documents/bets/$(betId)).data.invitedUsernames ||
+          (
+            username() in get(/databases/$(database)/documents/bets/$(betId)).data.invitedUsernames &&
+            (
+              !get(/databases/$(database)/documents/bets/$(betId)).data.keys().hasAny(['maskedUsernames']) ||
+              !(username() in get(/databases/$(database)/documents/bets/$(betId)).data.maskedUsernames)
+            )
+          ) ||
           isAdmin()
         );
     }
@@ -56,11 +62,17 @@ service cloud.firestore {
       return signedIn()
         && resource.data.keys().hasAny(['groupId'])
         && resource.data.groupId != null
+        && notMasked()
         && exists(/databases/$(database)/documents/friendGroups/$(resource.data.groupId))
         && (
           get(/databases/$(database)/documents/friendGroups/$(resource.data.groupId)).data.creatorId == request.auth.uid ||
           request.auth.uid in get(/databases/$(database)/documents/friendGroups/$(resource.data.groupId)).data.memberUids
         );
+    }
+
+    function notMasked() {
+      return !resource.data.keys().hasAny(['maskedUsernames']) ||
+        !(username() in resource.data.maskedUsernames);
     }
 
     // Any signed-in user can write resolution fields — the allowlist is the security boundary.
@@ -109,7 +121,7 @@ service cloud.firestore {
       return signedIn()
         && resource.data.creatorId == request.auth.uid
         && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['title', 'description', 'category', 'deadline', 'imageUrl', 'status', 'updatedAt'])
+          .hasOnly(['title', 'description', 'category', 'deadline', 'imageUrl', 'status', 'invitedUsernames', 'maskedUsernames', 'updatedAt'])
         && (
           !request.resource.data.diff(resource.data).changedKeys().hasAny(['status']) ||
           request.resource.data.status in ['open', 'locked']
@@ -122,7 +134,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/friendGroups/$(resource.data.groupId))
         && get(/databases/$(database)/documents/friendGroups/$(resource.data.groupId)).data.creatorId == request.auth.uid
         && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['invitedUsernames', 'updatedAt']);
+          .hasOnly(['invitedUsernames', 'maskedUsernames', 'updatedAt']);
     }
 
     function canSyncChallengeGroupInvites() {

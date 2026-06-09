@@ -34,7 +34,8 @@ function inferStatus(prediction: Prediction, bet?: Bet): HistoryStatus {
     const winningOptionIds = (bet.resolution.winningOptionIds?.length
       ? bet.resolution.winningOptionIds
       : [bet.resolution.winningOptionId]).filter(Boolean);
-    if (winningOptionIds.includes(prediction.optionId)) return 'won';
+    const pickedOptionIds = prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
+    if (pickedOptionIds.some((optionId) => winningOptionIds.includes(optionId))) return 'won';
     if (bet.resolution.winnerPredictionIds?.includes(prediction.id)) return 'won';
     return 'lost';
   }
@@ -48,6 +49,13 @@ function timestampMs(prediction: Prediction) {
 
 function predictionTimeLabel(prediction: Prediction) {
   return prediction.createdAt ? relativeTime(prediction.createdAt) : 'time unknown';
+}
+
+function pickedLabel(prediction: Prediction, bet?: Bet) {
+  const optionIds = prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
+  return optionIds
+    .map((optionId) => bet?.options.find((item) => item.id === optionId)?.label ?? prediction.customOptionLabel ?? optionId)
+    .join(', ');
 }
 
 function DeltaText({
@@ -107,11 +115,7 @@ function StatusBadge({ status }: { status: HistoryStatus }) {
 
 function HistoryItem({ row }: { row: HistoryRow }) {
   const { prediction, bet, status } = row;
-  const option = bet?.options.find((item) => item.id === prediction.optionId);
-  const pickedLabel =
-    option?.label ??
-    prediction.customOptionLabel ??
-    prediction.optionId;
+  const picked = pickedLabel(prediction, bet);
 
   return (
     <Link
@@ -135,7 +139,7 @@ function HistoryItem({ row }: { row: HistoryRow }) {
         </div>
         <h2 className="truncate text-base font-black">{bet?.title ?? 'Bet unavailable'}</h2>
         <p className="mt-1 truncate text-sm text-ink/60">
-          Picked <span className="font-bold text-ink/75">{pickedLabel}</span>
+          Picked <span className="font-bold text-ink/75">{picked}</span>
         </p>
       </div>
 

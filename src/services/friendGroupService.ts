@@ -103,9 +103,11 @@ export async function updateFriendGroup(
   await Promise.all([
     ...betsSnap.docs.map((item) => {
       const bet = { id: item.id, ...item.data() } as Bet;
-      const invitedUsernames = allGroupUsernames.filter((username) => username !== bet.creatorUsername);
+      const masked = new Set((bet.maskedUsernames ?? []).map((username) => username.trim().toLowerCase()));
+      const invitedUsernames = allGroupUsernames.filter((username) => username !== bet.creatorUsername && !masked.has(username));
       return updateDoc(doc(db, 'bets', item.id), {
         invitedUsernames,
+        maskedUsernames: [...masked],
         updatedAt: serverTimestamp(),
       });
     }),

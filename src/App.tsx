@@ -11,6 +11,7 @@ import { CreateBetPage } from './pages/CreateBetPage';
 import { FeedPage } from './pages/FeedPage';
 import { FriendGroupsPage } from './pages/FriendGroupsPage';
 import { HowToPlayPage } from './pages/HowToPlayPage';
+import { InstallAppPage } from './pages/InstallAppPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { MinigamesPage } from './pages/MinigamesPage';
 import { MyBetsPage } from './pages/MyBetsPage';
@@ -80,6 +81,7 @@ export function App() {
           <Route path="bets/:betId" element={<BetDetailPage />} />
           <Route path="leaderboard" element={<LeaderboardPage />} />
           <Route path="how-to-play" element={<HowToPlayPage />} />
+          <Route path="install" element={<InstallAppPage />} />
           <Route path="profile/:uid" element={<ProfilePage />} />
           <Route path="me" element={<SettingsPage />} />
           <Route path="settings" element={<Navigate to="/me" replace />} />
