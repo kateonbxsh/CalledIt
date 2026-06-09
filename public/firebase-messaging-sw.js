@@ -2,18 +2,24 @@
 importScripts('https://www.gstatic.com/firebasejs/11.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.9.0/firebase-messaging-compat.js');
 
-firebase.initializeApp({
-  apiKey: 'AIzaSyDymnsDBNkA56roJSyAvc1y7kTURXx7WYg',
-  authDomain: 'kent3arf.firebaseapp.com',
-  projectId: 'kent3arf',
-  storageBucket: 'kent3arf.firebasestorage.app',
-  messagingSenderId: '668831049351',
-  appId: '1:668831049351:web:4259cd523ef2613156ba22',
-});
-
-const messaging = firebase.messaging();
 const appIcon = new URL('icons/icon-192.png', self.registration.scope).href;
 const appBadge = new URL('icons/icon-96.png', self.registration.scope).href;
+let messagingPromise = null;
+
+async function messaging() {
+  if (!messagingPromise) {
+    messagingPromise = fetch(new URL('firebase-config.json', self.registration.scope))
+      .then((response) => {
+        if (!response.ok) throw new Error('Missing Firebase config.');
+        return response.json();
+      })
+      .then((config) => {
+        firebase.initializeApp(config);
+        return firebase.messaging();
+      });
+  }
+  return messagingPromise;
+}
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -23,18 +29,24 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-messaging.onBackgroundMessage((payload) => {
-  const notification = payload.notification || {};
-  const data = payload.data || {};
-  self.registration.showNotification(notification.title || data.title || 'Called It', {
-    body: notification.body || data.body || 'Something happened in Called It.',
-    icon: appIcon,
-    badge: appBadge,
-    data: {
-      url: data.url || '/',
-    },
+messaging()
+  .then((instance) => {
+    instance.onBackgroundMessage((payload) => {
+      const notification = payload.notification || {};
+      const data = payload.data || {};
+      self.registration.showNotification(notification.title || data.title || 'Called It', {
+        body: notification.body || data.body || 'Something happened in Called It.',
+        icon: appIcon,
+        badge: appBadge,
+        data: {
+          url: data.url || '/',
+        },
+      });
+    });
+  })
+  .catch((error) => {
+    console.error('Firebase messaging service worker could not start.', error);
   });
-});
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

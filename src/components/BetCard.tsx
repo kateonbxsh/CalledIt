@@ -116,6 +116,19 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
             </span>
           ) : null}
         </div>
+        {bet.visibility === 'private' ? (
+          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-bold">
+            {(bet.invitedUsernames ?? []).slice(0, 4).map((username) => (
+              <span key={username} className="rounded-full bg-mint/10 px-2 py-1 text-mint">@{username}</span>
+            ))}
+            {(bet.invitedUsernames?.length ?? 0) > 4 ? (
+              <span className="rounded-full bg-field px-2 py-1 text-ink/45">+{(bet.invitedUsernames?.length ?? 0) - 4} invited</span>
+            ) : null}
+            {(bet.maskedUsernames?.length ?? 0) > 0 ? (
+              <span className="rounded-full bg-coral/10 px-2 py-1 text-coral">{bet.maskedUsernames!.length} masked</span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </Link>
   );

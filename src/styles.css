@@ -17,9 +17,22 @@
   text-rendering: geometricPrecision;
 }
 
+html {
+  min-height: 100%;
+  background: #edf0e8;
+  overscroll-behavior-y: none;
+}
+
 body {
   margin: 0;
   min-width: 320px;
+  min-height: 100%;
+  background: #edf0e8;
+}
+
+#root {
+  min-height: 100vh;
+  background: #edf0e8;
 }
 
 button,

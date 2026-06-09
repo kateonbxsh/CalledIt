@@ -79,6 +79,15 @@ export async function enablePushNotifications(user: UserProfile) {
   });
   if (!token) throw new Error('Could not create a push token for this device.');
 
+  const tokensRef = collection(db, 'users', user.uid, 'notificationTokens');
+  const existingTokens = await getDocs(tokensRef);
+  await Promise.all(existingTokens.docs
+    .filter((item) => item.id !== tokenDocId(token) && item.data().enabled !== false)
+    .map((item) => setDoc(item.ref, {
+      enabled: false,
+      updatedAt: serverTimestamp(),
+    }, { merge: true })));
+
   await setDoc(doc(db, 'users', user.uid, 'notificationTokens', tokenDocId(token)), {
     token,
     enabled: true,

@@ -665,9 +665,6 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
 export async function failWagerChallenge(challenge: ChallengeActivity, user: UserProfile) {
   if (challenge.status !== 'open') throw new Error('Challenge is not open.');
   if (challenge.creatorId !== user.uid) throw new Error('Only the creator can fail this challenge.');
-  if (!challenge.deadline || Date.now() < challenge.deadline.toMillis()) {
-    throw new Error('Wait until the wager deadline passes.');
-  }
   const refund = (challenge.stake ?? 0) + Math.max(5, Math.floor((challenge.stake ?? 0) * 0.5));
   await runTransaction(db, async (transaction) => {
     transaction.update(doc(db, 'challenges', challenge.id), {
@@ -688,8 +685,8 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
       ...(challenge.targetUsername ? [challenge.targetUsername] : []),
       ...(challenge.invitedUsernames ?? []),
     ]),
-    title: 'Wager expired',
-    body: `${challenge.title} expired without a completion.`,
+    title: 'Wager closed',
+    body: `${challenge.title} was closed by ${user.displayName || user.username}.`,
     url: '/#/challenges',
   });
 }

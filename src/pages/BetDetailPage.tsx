@@ -530,6 +530,36 @@ export function BetDetailPage() {
       </header>
 
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
+      {bet.visibility === 'private' ? (
+        <section className="mb-4 rounded-md border border-line bg-white p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-black uppercase text-ink/35">Invited</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(bet.invitedUsernames ?? []).length > 0 ? (bet.invitedUsernames ?? []).map((username) => (
+                  <span key={username} className="rounded-full bg-mint/10 px-2.5 py-1 text-xs font-black text-mint">
+                    @{username}
+                  </span>
+                )) : (
+                  <span className="text-sm font-semibold text-ink/45">No invitees listed</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase text-ink/35">Masked</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(bet.maskedUsernames ?? []).length > 0 ? (bet.maskedUsernames ?? []).map((username) => (
+                  <span key={username} className="rounded-full bg-coral/10 px-2.5 py-1 text-xs font-black text-coral">
+                    @{username}
+                  </span>
+                )) : (
+                  <span className="text-sm font-semibold text-ink/45">No one masked</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-white p-3">

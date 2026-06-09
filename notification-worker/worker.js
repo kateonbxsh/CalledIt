@@ -97,9 +97,21 @@ async function tokensForUser(uid) {
     .where('enabled', '==', true)
     .get();
 
-  return snap.docs
-    .map((doc) => ({ ref: doc.ref, token: doc.data().token }))
-    .filter((entry) => entry.token);
+  const entries = snap.docs
+    .map((doc) => ({ ref: doc.ref, token: doc.data().token, data: doc.data() }))
+    .filter((entry) => entry.token)
+    .sort((left, right) => {
+      const leftMs = left.data.updatedAt?.toMillis?.() ?? left.data.createdAt?.toMillis?.() ?? 0;
+      const rightMs = right.data.updatedAt?.toMillis?.() ?? right.data.createdAt?.toMillis?.() ?? 0;
+      return rightMs - leftMs;
+    });
+  const [latest, ...older] = entries;
+  await Promise.all(older.map((entry) => entry.ref.update({
+    enabled: false,
+    disabledAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }).catch(() => {})));
+  return latest ? [{ ref: latest.ref, token: latest.token }] : [];
 }
 
 async function claimNotification(ref) {

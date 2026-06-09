@@ -25,6 +25,18 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile=false
+      - name: Write Firebase public config
+        run: |
+          cat > public/firebase-config.json <<'JSON'
+          {
+            "apiKey": "${{ secrets.VITE_FIREBASE_API_KEY }}",
+            "authDomain": "${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}",
+            "projectId": "${{ secrets.VITE_FIREBASE_PROJECT_ID }}",
+            "storageBucket": "${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}",
+            "messagingSenderId": "${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}",
+            "appId": "${{ secrets.VITE_FIREBASE_APP_ID }}"
+          }
+          JSON
       - run: pnpm build
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}

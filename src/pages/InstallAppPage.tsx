@@ -4,30 +4,30 @@ import { mobilePlatform } from '../utils/device';
 
 function IosVisual() {
   return (
-    <div className="mx-auto aspect-square w-full max-w-[320px] rounded-[42px] border border-line bg-[#f6f7fb] p-4 shadow-lift">
-      <div className="h-full rounded-[32px] bg-white p-3">
-        <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-ink/15" />
-        <div className="overflow-hidden rounded-3xl border border-[#d8dce6] bg-[#f8f9fd]">
-          <div className="flex items-center gap-2 border-b border-[#d8dce6] bg-white px-3 py-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-            <div className="ml-auto rounded-full bg-[#eef1f7] px-3 py-1 text-[10px] font-bold text-ink/45">called it</div>
-          </div>
-          <div className="p-4">
-            <div className="mb-4 h-16 rounded-2xl bg-[#edf0e8]" />
-            <div className="rounded-3xl border border-[#d8dce6] bg-white p-3 shadow-soft">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="h-3 w-20 rounded-full bg-ink/20" />
-                <Share size={18} className="text-[#007aff]" />
+    <div className="mx-auto w-full max-w-[300px] rounded-[46px] border-[10px] border-[#1c1c1e] bg-[#1c1c1e] shadow-lift">
+      <div className="relative aspect-[9/19] overflow-hidden rounded-[34px] bg-[#f2f2f7]">
+        <div className="absolute left-1/2 top-2 h-5 w-24 -translate-x-1/2 rounded-b-2xl bg-[#1c1c1e]" />
+        <div className="h-full px-3 pb-4 pt-10">
+          <div className="h-full overflow-hidden rounded-[28px] bg-white">
+            <div className="p-4">
+              <div className="rounded-3xl bg-[#edf0e8] p-3">
+                <img src="./pwa-icon.svg" alt="" className="h-14 w-14 rounded-2xl shadow-soft" />
+                <div className="mt-4 h-4 w-32 rounded-full bg-ink/20" />
+                <div className="mt-2 h-3 w-44 rounded-full bg-ink/10" />
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3 rounded-2xl bg-[#f2f2f7] px-3 py-2">
-                  <Home size={17} className="text-[#007aff]" />
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 rounded-t-[28px] bg-white/95 p-3 shadow-lift">
+              <div className="mb-3 flex items-center justify-around rounded-2xl bg-[#f2f2f7] px-3 py-3">
+                <Share size={22} className="text-[#007aff]" />
+                <Home size={22} className="text-[#007aff]" />
+                <ExternalLink size={22} className="text-[#007aff]" />
+              </div>
+              <div className="rounded-2xl bg-[#f2f2f7] p-2">
+                <div className="flex items-center gap-3 rounded-xl bg-white px-3 py-2">
+                  <Home size={18} className="text-[#007aff]" />
                   <span className="text-xs font-black">Add to Home Screen</span>
                 </div>
-                <div className="h-9 rounded-2xl bg-[#f2f2f7]" />
-                <div className="h-9 rounded-2xl bg-[#f2f2f7]" />
+                <div className="mt-2 h-8 rounded-xl bg-white" />
               </div>
             </div>
           </div>
@@ -39,27 +39,32 @@ function IosVisual() {
 
 function AndroidVisual() {
   return (
-    <div className="mx-auto aspect-square w-full max-w-[320px] rounded-[34px] border border-line bg-[#edf4ff] p-4 shadow-lift">
-      <div className="h-full rounded-[28px] bg-white p-3">
-        <div className="mb-3 flex items-center gap-2 rounded-full bg-[#f1f3f4] px-3 py-2">
+    <div className="mx-auto w-full max-w-[300px] rounded-[38px] border-[10px] border-[#202124] bg-[#202124] shadow-lift">
+      <div className="relative aspect-[9/19] overflow-hidden rounded-[28px] bg-white">
+        <div className="flex items-center gap-2 bg-white px-3 pb-2 pt-5 shadow-soft">
           <span className="h-4 w-4 rounded-full bg-[#34a853]" />
-          <div className="h-2 flex-1 rounded-full bg-ink/15" />
-          <MoreVertical size={16} className="text-ink/55" />
+          <div className="flex-1 rounded-full bg-[#f1f3f4] px-3 py-2 text-[10px] font-bold text-ink/45">called it</div>
+          <MoreVertical size={18} className="text-[#5f6368]" />
         </div>
-        <div className="grid h-[calc(100%-44px)] place-items-center rounded-3xl bg-[#f8fbff] p-4">
-          <div className="w-full rounded-3xl border border-[#dfe4ea] bg-white p-3 shadow-soft">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <div className="h-3 w-24 rounded-full bg-ink/20" />
-                <div className="mt-2 h-2 w-16 rounded-full bg-ink/10" />
-              </div>
-              <Download size={20} className="text-[#1a73e8]" />
+        <div className="p-4">
+          <div className="rounded-3xl bg-[#edf0e8] p-3">
+            <img src="./pwa-icon.svg" alt="" className="h-14 w-14 rounded-2xl shadow-soft" />
+            <div className="mt-4 h-4 w-32 rounded-full bg-ink/20" />
+            <div className="mt-2 h-3 w-44 rounded-full bg-ink/10" />
+          </div>
+        </div>
+        <div className="absolute bottom-5 left-4 right-4 rounded-3xl border border-[#dadce0] bg-white p-4 shadow-lift">
+          <div className="flex items-center gap-3">
+            <img src="./pwa-icon.svg" alt="" className="h-10 w-10 rounded-xl" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-black">Install Called It?</div>
+              <div className="mt-1 text-[11px] font-semibold text-ink/45">Add to Home screen</div>
             </div>
-            <div className="rounded-2xl bg-[#e8f0fe] px-3 py-2 text-xs font-black text-[#1a73e8]">
-              Install app
-            </div>
-            <div className="mt-2 h-9 rounded-2xl bg-[#f1f3f4]" />
-            <div className="mt-2 h-9 rounded-2xl bg-[#f1f3f4]" />
+            <Download size={20} className="text-[#1a73e8]" />
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <span className="rounded-full px-3 py-2 text-xs font-black text-[#1a73e8]">Cancel</span>
+            <span className="rounded-full bg-[#1a73e8] px-3 py-2 text-xs font-black text-white">Install</span>
           </div>
         </div>
       </div>

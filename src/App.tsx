@@ -20,10 +20,21 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { listenForForegroundNotifications, registerAppServiceWorker } from './services/notificationService';
 
+function LoadingScreen() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-[#edf0e8] text-ink">
+      <div className="grid place-items-center gap-3">
+        <img src="./pwa-icon.svg" alt="" className="h-24 w-24 rounded-3xl shadow-lift" />
+        <p className="text-sm font-black">Called it</p>
+      </div>
+    </div>
+  );
+}
+
 function PrivateRoute({ children }: { children: ReactNode }) {
   const { authUser, profile, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="p-6 text-sm text-ink/70">Loading...</div>;
+  if (loading) return <LoadingScreen />;
   if (!authUser) return <Navigate to="/auth" replace />;
   if (!profile && location.pathname !== '/complete-profile') {
     return <Navigate to="/complete-profile" replace />;

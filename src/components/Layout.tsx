@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   BarChart3,
   CirclePlus,
   Download,
@@ -15,11 +16,11 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
 import { useAuth } from '../contexts/AuthContext';
-import { isMobileBrowser } from '../utils/device';
+import { isMobileBrowser, isStandaloneApp } from '../utils/device';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: Home },
@@ -91,6 +92,8 @@ function MobileNavItem({
 
 export function Layout() {
   const { profile, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showInstallNav, setShowInstallNav] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number; valid: boolean } | null>(null);
@@ -99,10 +102,11 @@ export function Layout() {
     ...navItems,
     { to: '/me', label: 'Profile', icon: User },
   ];
+  const canGoBack = location.pathname !== '/';
 
   useEffect(() => {
-    setShowInstallNav(isMobileBrowser());
-  }, []);
+    setShowInstallNav(isMobileBrowser() && !isStandaloneApp());
+  }, [location.pathname]);
 
   useEffect(() => {
     const interactiveSelector = 'a, button, input, textarea, select, label, summary, [role="button"], [data-swipe-ignore="true"]';
@@ -203,17 +207,34 @@ export function Layout() {
         />
       ) : null}
 
-      {/* Mobile expandable nav */}
-      <button
-        type="button"
-        onClick={() => setMobileNavOpen(true)}
-        className={`fixed left-3 top-3 z-30 grid h-11 w-11 place-items-center rounded-xl border border-line bg-[#f8faf4]/95 text-ink/70 shadow-soft backdrop-blur-md transition hover:bg-white hover:text-ink lg:hidden ${
-          mobileNavOpen ? 'pointer-events-none opacity-0' : 'opacity-100'
-        }`}
-        aria-label="Open navigation"
-      >
-        <Menu size={19} />
-      </button>
+      {/* Mobile app controls */}
+      <div className={`fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between border-b border-line/70 bg-[#f8faf4]/95 px-3 shadow-soft backdrop-blur-md transition lg:hidden ${
+        mobileNavOpen ? 'pointer-events-none opacity-0' : 'opacity-100'
+      }`}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          disabled={!canGoBack}
+          className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white text-ink/70 transition active:scale-95 disabled:opacity-25"
+          aria-label="Go back"
+          title="Back"
+        >
+          <ArrowLeft size={19} />
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-mint" />
+          <span className="text-sm font-black">Called it</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white text-ink/70 transition active:scale-95"
+          aria-label="Open navigation"
+          title="Menu"
+        >
+          <Menu size={19} />
+        </button>
+      </div>
 
       <aside
         className={`fixed bottom-0 left-0 top-0 z-30 flex w-64 flex-col border-r border-line/70 bg-[#f8faf4]/95 p-2 shadow-soft backdrop-blur-md transition-transform duration-200 lg:hidden ${

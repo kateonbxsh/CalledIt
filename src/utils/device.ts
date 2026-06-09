@@ -5,6 +5,12 @@ export function isMobileBrowser() {
   return touch && /android|iphone|ipad|ipod|mobile/.test(ua);
 }
 
+export function isStandaloneApp() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    ('standalone' in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+}
+
 export function mobilePlatform() {
   if (typeof navigator === 'undefined') return 'mobile';
   const ua = navigator.userAgent.toLowerCase();

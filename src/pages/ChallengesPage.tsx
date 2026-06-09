@@ -302,7 +302,6 @@ export function ChallengesPage() {
                   && activity.status === 'open'
                   && activity.creatorId !== profile?.uid
                   && (!activity.targetUsername || activity.targetUsername === profile?.username);
-                const deadlinePassed = !!activity.deadline && Date.now() >= activity.deadline.toMillis();
                 const canFail = activity.type === 'wager' && activity.status === 'open' && activity.creatorId === profile?.uid;
                 const actorId = activity.type === 'completion' ? (activity.completerId || activity.creatorId) : activity.creatorId;
                 const actorUsername = activity.type === 'completion'
@@ -354,7 +353,7 @@ export function ChallengesPage() {
                         </p>
                       ) : null}
                       {activity.type === 'wager' ? (
-                        <div className="mt-3 grid gap-2 rounded-md bg-field p-3 text-sm sm:grid-cols-3">
+                        <div className="mt-3 grid gap-2 rounded-md bg-field p-3 text-sm sm:grid-cols-4">
                           <div>
                             <p className="text-xs font-bold text-ink/40">Stake</p>
                             <CoinAmount amount={activity.stake ?? 0} className="mt-1 text-sm" />
@@ -366,6 +365,10 @@ export function ChallengesPage() {
                           <div>
                             <p className="text-xs font-bold text-ink/40">Target</p>
                             <p className="mt-1 font-bold">@{activity.targetUsername || 'anyone'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-ink/40">Deadline</p>
+                            <p className="mt-1 font-bold">{activity.deadline ? relativeTime(activity.deadline) : 'No deadline'}</p>
                           </div>
                         </div>
                       ) : null}
@@ -406,10 +409,10 @@ export function ChallengesPage() {
                       {canFail ? (
                         <button
                           onClick={() => fail(activity)}
-                          disabled={!!busy || !deadlinePassed}
+                          disabled={!!busy}
                           className="mt-3 inline-flex items-center gap-2 rounded-md border border-coral/30 px-4 py-2 text-sm font-bold text-coral disabled:opacity-50"
                         >
-                          <XCircle size={16} /> {deadlinePassed ? 'No one did it, claim stake + 50%' : 'Claim opens after deadline'}
+                          <XCircle size={16} /> Claim stake + 50%
                         </button>
                       ) : null}
                     </div>
@@ -667,7 +670,7 @@ export function ChallengesPage() {
               </label>
             </div>
             <p className="mt-2 text-xs leading-5 text-ink/50">
-              The deadline must be at least one week away. You cannot complete your own dare. If no one does it, close the wager to reclaim your stake plus 50%.
+              The deadline must be at least one week away. You cannot complete your own dare. If the wager fails early, or no one completes it, close it to reclaim your stake plus 50%.
             </p>
             <button disabled={!!busy} className="mt-3 w-full rounded-md bg-citrus px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
               {busy === 'wager' ? 'Creating...' : 'Create wager'}

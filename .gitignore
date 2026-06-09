@@ -44,6 +44,7 @@ pnpm-debug.log*
 .firebaserc
 firebase-debug.log
 .firebase/
+public/firebase-config.json
 
 # Notification worker secrets
 notification-worker/.env
