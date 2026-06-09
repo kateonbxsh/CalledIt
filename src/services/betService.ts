@@ -462,12 +462,16 @@ export async function placePrediction(input: PredictionInput) {
       bet.creatorId,
       ...existing.map((prediction) => prediction.userId),
     ].filter((uid) => uid !== user.uid);
+    const optionLabels = effectiveOptionIds
+      .map((id) => nextOptions.find((option) => option.id === id)?.label)
+      .filter(Boolean)
+      .join(', ');
     notification = {
       type: existingPrediction ? 'prediction_updated' : 'bet_joined',
       targetUids,
       body: existingPrediction
-        ? `${user.displayName || user.username} updated a prediction on ${bet.title}.`
-        : `${user.displayName || user.username} joined ${bet.title}.`,
+        ? `${user.displayName || user.username} updated ${bet.title} with ${input.stake} coins${optionLabels ? ` on ${optionLabels}` : ''}.`
+        : `${user.displayName || user.username} bet ${input.stake} coins on ${bet.title}${optionLabels ? ` (${optionLabels})` : ''}.`,
     };
   });
 

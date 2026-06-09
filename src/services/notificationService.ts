@@ -20,6 +20,7 @@ type NotificationInput = {
   title: string;
   body: string;
   url: string;
+  includeActor?: boolean;
 };
 
 function appBaseUrl() {
@@ -126,7 +127,8 @@ export async function uidsForUsernames(usernames: string[]) {
 }
 
 export async function createNotification(input: NotificationInput) {
-  const targetUids = [...new Set(input.targetUids)].filter((uid) => uid && uid !== input.actor.uid);
+  const targetUids = [...new Set(input.targetUids)]
+    .filter((uid) => uid && (input.includeActor || uid !== input.actor.uid));
   if (targetUids.length === 0) return;
   await addDoc(collection(db, 'notifications'), {
     type: input.type,
@@ -140,6 +142,18 @@ export async function createNotification(input: NotificationInput) {
     readBy: [],
     sentAt: null,
     createdAt: serverTimestamp(),
+  });
+}
+
+export async function createTestPushNotification(user: UserProfile) {
+  await createNotification({
+    type: 'test_push',
+    actor: user,
+    targetUids: [user.uid],
+    includeActor: true,
+    title: 'Test push from Called It',
+    body: 'If this arrived, the app, Firestore queue, VPS worker, FCM, and this device are connected.',
+    url: '/#/me',
   });
 }
 

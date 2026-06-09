@@ -22,6 +22,8 @@ const projectId = process.env.FIREBASE_PROJECT_ID || 'kent3arf';
 const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS || 5000);
 const batchSize = Number(process.env.NOTIFICATION_BATCH_SIZE || 20);
 const dryRun = String(process.env.DRY_RUN || 'false').toLowerCase() === 'true';
+const publicAppUrl = (process.env.PUBLIC_APP_URL || 'https://kateonbxsh.github.io/CalledIt').replace(/\/$/, '');
+const deadlineLookaheadMs = Number(process.env.DEADLINE_LOOKAHEAD_MS || 24 * 60 * 60 * 1000);
 
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
@@ -36,6 +38,55 @@ let stopping = false;
 function log(message, extra = {}) {
   const suffix = Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : '';
   console.log(`[${new Date().toISOString()}] ${message}${suffix}`);
+}
+
+function appUrl(hashPath = '/') {
+  const normalized = hashPath.startsWith('#/')
+    ? hashPath
+    : hashPath.startsWith('/#/')
+      ? hashPath.slice(1)
+      : `#/${String(hashPath).replace(/^\/+/, '')}`;
+  return `${publicAppUrl}/${normalized}`;
+}
+
+function unique(values) {
+  return [...new Set(values)].filter(Boolean);
+}
+
+async function uidsForUsernames(usernames = []) {
+  const normalized = unique(usernames.map((name) => String(name || '').trim().toLowerCase()));
+  const pairs = await Promise.all(normalized.map(async (username) => {
+    const snap = await db.collection('usernames').doc(username).get();
+    return snap.exists ? snap.data().uid : null;
+  }));
+  return unique(pairs);
+}
+
+async function predictionUserIdsForBet(betId) {
+  const snap = await db.collection('predictions').where('betId', '==', betId).get();
+  return unique(snap.docs.map((doc) => doc.data().userId));
+}
+
+async function createSystemNotification(id, data) {
+  const ref = db.collection('notifications').doc(id);
+  const snap = await ref.get();
+  if (snap.exists) return false;
+  const targetUids = unique(data.targetUids || []);
+  if (targetUids.length === 0) return false;
+  await ref.set({
+    type: data.type,
+    actorUid: 'system',
+    actorUsername: 'calledit',
+    actorDisplayName: 'Called It',
+    targetUids,
+    title: data.title,
+    body: data.body,
+    url: data.url,
+    readBy: [],
+    sentAt: null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return true;
 }
 
 async function tokensForUser(uid) {
@@ -95,6 +146,8 @@ async function sendNotification(notification) {
   const title = data.title || 'Called It';
   const body = data.body || 'Something happened in Called It.';
   const url = data.url || '/';
+  const iconUrl = `${publicAppUrl}/icons/icon-192.png`;
+  const badgeUrl = `${publicAppUrl}/icons/icon-96.png`;
 
   if (dryRun) {
     await notification.ref.update({
@@ -122,8 +175,8 @@ async function sendNotification(notification) {
     webpush: {
       fcmOptions: { link: url },
       notification: {
-        icon: '/pwa-icon.svg',
-        badge: '/pwa-icon.svg',
+        icon: iconUrl,
+        badge: badgeUrl,
       },
     },
   });
@@ -157,10 +210,110 @@ async function sendNotification(notification) {
   });
 }
 
+async function scanBetDeadlines() {
+  const nowMs = Date.now();
+  const soonMs = nowMs + deadlineLookaheadMs;
+  const snap = await db.collection('bets').where('status', '==', 'open').limit(100).get();
+  let created = 0;
+
+  for (const doc of snap.docs) {
+    const bet = { id: doc.id, ...doc.data() };
+    const deadlineMs = bet.deadline?.toMillis?.();
+    if (!deadlineMs || deadlineMs > soonMs) continue;
+
+    const targetUids = unique([
+      bet.creatorId,
+      ...(await predictionUserIdsForBet(bet.id)),
+      ...(await uidsForUsernames(bet.invitedUsernames || [])),
+    ]);
+    const title = String(bet.title || 'A bet');
+    if (deadlineMs <= nowMs) {
+      await doc.ref.update({
+        status: 'locked',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => {});
+      const didCreate = await createSystemNotification(`bet_${bet.id}_deadline_passed`, {
+        type: 'bet_deadline_passed',
+        targetUids,
+        title: 'Bet awaiting resolve',
+        body: `${title} passed its deadline and is ready to resolve.`,
+        url: appUrl(`bets/${bet.id}`),
+      });
+      if (didCreate) created += 1;
+    } else {
+      const didCreate = await createSystemNotification(`bet_${bet.id}_deadline_24h`, {
+        type: 'bet_deadline_soon',
+        targetUids,
+        title: 'Bet deadline soon',
+        body: `${title} closes in less than 24 hours.`,
+        url: appUrl(`bets/${bet.id}`),
+      });
+      if (didCreate) created += 1;
+    }
+  }
+
+  return created;
+}
+
+async function scanWagerDeadlines() {
+  const nowMs = Date.now();
+  const soonMs = nowMs + deadlineLookaheadMs;
+  const snap = await db.collection('challenges').where('status', '==', 'open').limit(100).get();
+  let created = 0;
+
+  for (const doc of snap.docs) {
+    const wager = { id: doc.id, ...doc.data() };
+    if (wager.type !== 'wager') continue;
+    const deadlineMs = wager.deadline?.toMillis?.();
+    if (!deadlineMs || deadlineMs > soonMs) continue;
+
+    const targetUids = unique([
+      wager.creatorId,
+      ...(await uidsForUsernames([
+        ...(wager.targetUsername ? [wager.targetUsername] : []),
+        ...(wager.invitedUsernames || []),
+      ])),
+    ]);
+    const title = String(wager.title || 'A wager');
+    if (deadlineMs <= nowMs) {
+      const didCreate = await createSystemNotification(`wager_${wager.id}_deadline_passed`, {
+        type: 'wager_deadline_passed',
+        targetUids,
+        title: 'Wager deadline passed',
+        body: `${title} passed its deadline. The creator can close it if no one completed it.`,
+        url: appUrl('challenges'),
+      });
+      if (didCreate) created += 1;
+    } else {
+      const didCreate = await createSystemNotification(`wager_${wager.id}_deadline_24h`, {
+        type: 'wager_deadline_soon',
+        targetUids,
+        title: 'Wager deadline soon',
+        body: `${title} closes in less than 24 hours.`,
+        url: appUrl('challenges'),
+      });
+      if (didCreate) created += 1;
+    }
+  }
+
+  return created;
+}
+
+async function scanDeadlineReminders() {
+  const [betCount, wagerCount] = await Promise.all([
+    scanBetDeadlines(),
+    scanWagerDeadlines(),
+  ]);
+  if (betCount || wagerCount) {
+    log('Created deadline notifications', { bets: betCount, wagers: wagerCount });
+  }
+}
+
 async function tick() {
   if (running || stopping) return;
   running = true;
   try {
+    await scanDeadlineReminders();
     const snap = await db
       .collection('notifications')
       .where('sentAt', '==', null)
@@ -192,6 +345,7 @@ log('Called It notification worker started', {
   pollIntervalMs,
   batchSize,
   dryRun,
+  publicAppUrl,
 });
 tick();
 setInterval(tick, pollIntervalMs);

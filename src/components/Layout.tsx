@@ -13,7 +13,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
@@ -90,7 +90,38 @@ function MobileNavItem({
 export function Layout() {
   const { profile, logout } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number; valid: boolean } | null>(null);
   const mobileNavItems = [...navItems, { to: '/me', label: 'Profile', icon: User }];
+
+  useEffect(() => {
+    const interactiveSelector = 'a, button, input, textarea, select, label, summary, [role="button"], [data-swipe-ignore="true"]';
+    const onTouchStart = (event: TouchEvent) => {
+      if (window.matchMedia('(min-width: 1024px)').matches || mobileNavOpen) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const touch = event.touches[0];
+      if (!touch || target?.closest(interactiveSelector)) {
+        touchStartRef.current = null;
+        return;
+      }
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY, valid: true };
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      const start = touchStartRef.current;
+      touchStartRef.current = null;
+      if (!start?.valid) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const dx = touch.clientX - start.x;
+      const dy = Math.abs(touch.clientY - start.y);
+      if (dx > 70 && dx > dy * 1.4) setMobileNavOpen(true);
+    };
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [mobileNavOpen]);
 
   return (
     <div className="min-h-screen bg-[#edf0e8] text-ink">

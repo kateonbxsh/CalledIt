@@ -295,12 +295,20 @@ export type NotificationEventType =
   | 'prediction_updated'
   | 'bet_commented'
   | 'bet_resolved'
+  | 'bet_deadline_soon'
+  | 'bet_deadline_passed'
   | 'challenge_posted'
   | 'wager_created'
   | 'wager_completed'
   | 'wager_failed'
+  | 'wager_deadline_soon'
+  | 'wager_deadline_passed'
   | 'group_updated'
-  | 'reward_available';
+  | 'daily_reward_claimed'
+  | 'chest_opened'
+  | 'wheel_spun'
+  | 'reward_available'
+  | 'test_push';
 
 export interface AppNotification {
   id: string;

@@ -12,7 +12,8 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
-const appIcon = new URL('pwa-icon.svg', self.registration.scope).href;
+const appIcon = new URL('icons/icon-192.png', self.registration.scope).href;
+const appBadge = new URL('icons/icon-96.png', self.registration.scope).href;
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -28,7 +29,7 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(notification.title || data.title || 'Called It', {
     body: notification.body || data.body || 'Something happened in Called It.',
     icon: appIcon,
-    badge: appIcon,
+    badge: appBadge,
     data: {
       url: data.url || '/',
     },

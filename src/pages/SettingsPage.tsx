@@ -7,6 +7,7 @@ import { RankBadge } from '../components/RankBadge';
 import { useAuth } from '../contexts/AuthContext';
 import { updateProfile, updateUsername } from '../services/userService';
 import {
+  createTestPushNotification,
   disableCurrentPushToken,
   enablePushNotifications,
   supportsPushNotifications,
@@ -81,6 +82,20 @@ export function SettingsPage() {
       setPushMessage('Push notifications are disabled for this device.');
     } catch (err) {
       setPushMessage(err instanceof Error ? err.message : 'Could not disable push notifications.');
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function sendTestPush() {
+    if (!profile) return;
+    setPushBusy(true);
+    setPushMessage('');
+    try {
+      await createTestPushNotification(profile);
+      setPushMessage('Test push queued. It should arrive in a few seconds if this device is enabled.');
+    } catch (err) {
+      setPushMessage(err instanceof Error ? err.message : 'Could not queue a test push.');
     } finally {
       setPushBusy(false);
     }
@@ -182,6 +197,14 @@ export function SettingsPage() {
                 className="rounded-md border border-line px-4 py-2.5 text-sm font-bold text-ink/65 disabled:opacity-45"
               >
                 Disable this device
+              </button>
+              <button
+                type="button"
+                onClick={sendTestPush}
+                disabled={pushBusy || !supportsPushNotifications()}
+                className="rounded-md border border-mint/30 bg-mint/10 px-4 py-2.5 text-sm font-bold text-mint disabled:opacity-45"
+              >
+                Send test push
               </button>
             </div>
             {!supportsPushNotifications() ? (

@@ -4,6 +4,8 @@ Tiny VPS worker for closed-app web push notifications.
 
 The web app writes documents to Firestore `notifications`. This worker polls unsent docs, sends FCM web pushes to enabled user tokens, then marks each notification as sent.
 
+It also scans open bets and wager challenges for deadlines, creates one deduped "deadline soon" notification inside the last 24 hours, and one "deadline passed" notification when they expire.
+
 ## Files
 
 - `worker.js`: notification sender
@@ -20,8 +22,9 @@ The web app writes documents to Firestore `notifications`. This worker polls uns
 4. Install and start:
 
 ```bash
-npm install --omit=dev
-npm start
+pnpm install --prod
+pnpm pm2:start
+pnpm exec pm2 save
 ```
 
 ## systemd Service
@@ -37,7 +40,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/called-it-notifications
 EnvironmentFile=/opt/called-it-notifications/.env
-ExecStart=/usr/bin/node /opt/called-it-notifications/worker.js
+ExecStart=/home/deployment/.nvm/versions/node/v20.17.0/bin/node /opt/called-it-notifications/worker.js
 Restart=always
 RestartSec=5
 User=calledit
@@ -54,4 +57,4 @@ The frontend can use Firebase's default web push certificate. If you want a cust
 
 Firebase Console -> Project settings -> Cloud Messaging -> Web Push certificates.
 
-Then set `VITE_FIREBASE_VAPID_KEY` in the frontend environment and redeploy Hosting.
+Then set `VITE_FIREBASE_VAPID_KEY` in the frontend environment and redeploy GitHub Pages.
