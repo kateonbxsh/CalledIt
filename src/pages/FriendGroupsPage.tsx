@@ -62,7 +62,7 @@ export function FriendGroupsPage() {
     setError('');
     try {
       if (editing.groupId) {
-        await updateFriendGroup(editing.groupId, name, members, profile.username);
+        await updateFriendGroup(editing.groupId, name, members, profile);
       } else {
         await createFriendGroup(name, members, profile);
       }

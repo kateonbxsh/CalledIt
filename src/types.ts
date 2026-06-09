@@ -115,6 +115,7 @@ export interface Prediction {
   userId: string;
   username: string;
   optionId: string;
+  optionIds?: string[];
   stake: number;
   userBalanceAtBetTime: number;
   displayedChanceAtBetTime: number;
@@ -209,6 +210,7 @@ export interface PredictionInput {
   bet: Bet;
   user: UserProfile;
   optionId: string;
+  optionIds?: string[];
   stake: number;
   scorePrediction?: {
     home: number;
@@ -285,4 +287,31 @@ export interface ChallengeActivity {
   updatedAt: Timestamp;
   completedAt?: Timestamp | null;
   failedAt?: Timestamp | null;
+}
+
+export type NotificationEventType =
+  | 'bet_created'
+  | 'bet_joined'
+  | 'prediction_updated'
+  | 'bet_commented'
+  | 'bet_resolved'
+  | 'challenge_posted'
+  | 'wager_created'
+  | 'wager_completed'
+  | 'wager_failed'
+  | 'group_updated'
+  | 'reward_available';
+
+export interface AppNotification {
+  id: string;
+  type: NotificationEventType;
+  actorUid: string;
+  actorUsername: string;
+  targetUids: string[];
+  title: string;
+  body: string;
+  url: string;
+  readBy?: string[];
+  sentAt?: Timestamp | null;
+  createdAt: Timestamp;
 }

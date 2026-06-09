@@ -6,6 +6,11 @@ import { PageHeader } from '../components/PageHeader';
 import { RankBadge } from '../components/RankBadge';
 import { useAuth } from '../contexts/AuthContext';
 import { updateProfile, updateUsername } from '../services/userService';
+import {
+  disableCurrentPushToken,
+  enablePushNotifications,
+  supportsPushNotifications,
+} from '../services/notificationService';
 import { downscaleProfileImage } from '../utils/image';
 import { rankForRating, rankProgress } from '../utils/ranks';
 
@@ -16,6 +21,8 @@ export function SettingsPage() {
   const [bio, setBio] = useState(profile?.bio ?? '');
   const [photoURL, setPhotoURL] = useState(profile?.photoURL ?? '');
   const [message, setMessage] = useState('');
+  const [pushMessage, setPushMessage] = useState('');
+  const [pushBusy, setPushBusy] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const progress = useMemo(() => rankProgress(profile?.rating ?? 1000), [profile?.rating]);
 
@@ -48,6 +55,34 @@ export function SettingsPage() {
       setMessage(err instanceof Error ? err.message : 'Could not process image.');
     } finally {
       setImageBusy(false);
+    }
+  }
+
+  async function enablePush() {
+    if (!profile) return;
+    setPushBusy(true);
+    setPushMessage('');
+    try {
+      await enablePushNotifications(profile);
+      setPushMessage('Push notifications are enabled on this device.');
+    } catch (err) {
+      setPushMessage(err instanceof Error ? err.message : 'Could not enable push notifications.');
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function disablePush() {
+    if (!profile) return;
+    setPushBusy(true);
+    setPushMessage('');
+    try {
+      await disableCurrentPushToken(profile);
+      setPushMessage('Push notifications are disabled for this device.');
+    } catch (err) {
+      setPushMessage(err instanceof Error ? err.message : 'Could not disable push notifications.');
+    } finally {
+      setPushBusy(false);
     }
   }
 
@@ -125,6 +160,34 @@ export function SettingsPage() {
           <section className="rounded-md border border-line bg-white p-4">
             <p className="text-sm text-ink/55">Coins</p>
             <CoinAmount amount={profile?.coinBalance ?? 0} className="mt-1 text-2xl" />
+          </section>
+          <section className="rounded-md border border-line bg-white p-4">
+            <p className="text-sm font-black">Push notifications</p>
+            <p className="mt-1 text-xs leading-5 text-ink/55">
+              Get bet, challenge, wager, and reward updates on this device.
+            </p>
+            <div className="mt-3 grid gap-2">
+              <button
+                type="button"
+                onClick={enablePush}
+                disabled={pushBusy || !supportsPushNotifications()}
+                className="rounded-md bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45"
+              >
+                {pushBusy ? 'Working...' : 'Enable on this device'}
+              </button>
+              <button
+                type="button"
+                onClick={disablePush}
+                disabled={pushBusy}
+                className="rounded-md border border-line px-4 py-2.5 text-sm font-bold text-ink/65 disabled:opacity-45"
+              >
+                Disable this device
+              </button>
+            </div>
+            {!supportsPushNotifications() ? (
+              <p className="mt-2 text-xs text-coral">This browser does not support web push.</p>
+            ) : null}
+            {pushMessage ? <p className="mt-2 text-xs font-semibold text-ink/55">{pushMessage}</p> : null}
           </section>
           <Link
             to="/how-to-play"

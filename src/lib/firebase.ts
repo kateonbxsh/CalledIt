@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getMessaging, isSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,6 +15,14 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const messagingSupported = isSupported();
+
+export async function messaging() {
+  return (await messagingSupported) ? getMessaging(app) : null;
+}
+
+export const firebasePublicConfig = firebaseConfig;
+export const firebaseVapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
 export const envAdminUids = new Set(
   String(import.meta.env.VITE_ADMIN_UIDS ?? '')

@@ -79,8 +79,11 @@ function predictionDetail(bet: Bet, prediction: Prediction) {
   if (bet.type === 'closestNumber') return closestNumberGuessLabel(prediction.numericGuess);
   if (bet.type === 'closestDate') return closestDateGuessLabel(prediction.dateGuess);
 
-  const option = bet.options.find((item) => item.id === prediction.optionId);
-  const label = option?.label ?? prediction.customOptionLabel ?? prediction.optionId;
+  const optionIds = prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
+  const label = optionIds.map((optionId) => {
+    const option = bet.options.find((item) => item.id === optionId);
+    return option?.label ?? prediction.customOptionLabel ?? optionId;
+  }).join(', ');
   if (bet.type === 'sports' && prediction.scorePrediction) {
     return `${label}, ${prediction.scorePrediction.home}-${prediction.scorePrediction.away}`;
   }
@@ -106,6 +109,7 @@ export function BetDetailPage() {
   const [snapshots, setSnapshots] = useState<ChanceSnapshot[]>([]);
   const [comments, setComments] = useState<BetComment[]>([]);
   const [selected, setSelected] = useState('');
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [stake, setStake] = useState(10);
   const [commentBody, setCommentBody] = useState('');
   const [homeScore, setHomeScore] = useState('');
@@ -171,6 +175,7 @@ export function BetDetailPage() {
     setSnapshots(nextSnapshots);
     setComments(nextComments);
     setSelected(nextBet.options[0]?.id ?? '');
+    setSelectedOptionIds(nextBet.options[0]?.id ? [nextBet.options[0].id] : []);
     setWinningOptionId(nextBet.options[0]?.id ?? '');
     setWinningOptionIds(nextBet.options[0]?.id ? [nextBet.options[0].id] : []);
     setEditTitle(nextBet.title);
@@ -196,6 +201,7 @@ export function BetDetailPage() {
   useEffect(() => {
     if (!myPrediction || !bet || bet.status !== 'open') return;
     setSelected(myPrediction.optionId);
+    setSelectedOptionIds(myPrediction.optionIds?.length ? myPrediction.optionIds : [myPrediction.optionId]);
     setStake(myPrediction.stake);
     setCustomOptionLabel(myPrediction.customOptionLabel ?? '');
     setHomeScore(myPrediction.scorePrediction?.home?.toString() ?? '');
@@ -206,14 +212,20 @@ export function BetDetailPage() {
 
   const closest = bet ? isClosestType(bet.type) : false;
   const multiWinner = bet ? supportsMultipleWinners(bet) : false;
+  const multiPrediction = bet?.type === 'multi';
   const canPredict = bet?.status === 'open';
   const canResolve = !!profile && !!bet;
-  const selectedChance = bet && !closest ? chanceForOption(bet.chanceSummary, selected) : 0;
+  const selectedChance = bet && !closest
+    ? (multiPrediction
+      ? Math.min(0.95, selectedOptionIds.reduce((sum, optionId) => sum + chanceForOption(bet.chanceSummary, optionId), 0))
+      : chanceForOption(bet.chanceSummary, selected))
+    : 0;
   const pendingEstimate = estimatedCoinOutcome(stake, selectedChance);
   const myPredictionEstimate = myPrediction && !closest
     ? estimatedCoinOutcome(myPrediction.stake, myPrediction.displayedChanceAtBetTime)
     : null;
   const selectedOption = bet?.options.find((o) => o.id === selected);
+  const selectedOptions = bet?.options.filter((o) => selectedOptionIds.includes(o.id)) ?? [];
   const winningOptions = bet?.options.filter((o) => (multiWinner ? winningOptionIds : [winningOptionId]).includes(o.id)) ?? [];
   const canEditBet = !!profile && !!bet && profile.uid === bet.creatorId;
   const openChoiceQuery = normalizeOptionLabel(customOptionLabel);
@@ -257,13 +269,18 @@ export function BetDetailPage() {
         return;
       }
     }
+    if (bet.type === 'multi' && selectedOptionIds.length === 0) {
+      setError('Select at least one option.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
       await placePrediction({
         bet,
         user: profile,
-        optionId: closest ? 'guess' : selected,
+        optionId: closest ? 'guess' : (bet.type === 'multi' ? selectedOptionIds[0] : selected),
+        optionIds: bet.type === 'multi' ? selectedOptionIds : undefined,
         stake,
         scorePrediction:
           bet.type === 'sports' && bet.allowExactScore && homeScore !== '' && awayScore !== ''
@@ -739,13 +756,24 @@ export function BetDetailPage() {
                     <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(bet.options.length, 2)}, 1fr)` }}>
                       {bet.options.map((option, index) => {
                         const chance = chanceForOption(bet.chanceSummary, option.id);
-                        const isSelected = selected === option.id;
+                        const isSelected = multiPrediction ? selectedOptionIds.includes(option.id) : selected === option.id;
                         return (
                           <button
                             key={`${option.id}-${index}`}
                             type="button"
                             onClick={() => {
-                              setSelected(option.id);
+                              if (multiPrediction) {
+                                setSelectedOptionIds((current) => {
+                                  const next = current.includes(option.id)
+                                    ? current.filter((id) => id !== option.id)
+                                    : [...current, option.id];
+                                  setSelected(next[0] ?? '');
+                                  return next;
+                                });
+                              } else {
+                                setSelected(option.id);
+                                setSelectedOptionIds([option.id]);
+                              }
                               if (bet.type === 'openChoice') setCustomOptionLabel('');
                             }}
                             className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${
@@ -756,11 +784,21 @@ export function BetDetailPage() {
                           >
                             <p className={`truncate text-xs ${isSelected ? 'text-white/70' : 'text-ink/50'}`}>{option.label}</p>
                             <p className={`mt-0.5 text-base font-black ${isSelected ? 'text-white' : 'text-ink'}`}>{percent(chance)}</p>
+                            {multiPrediction ? (
+                              <p className={`mt-1 text-[11px] font-black ${isSelected ? 'text-white/75' : 'text-ink/35'}`}>
+                                {isSelected ? 'selected' : 'tap to add'}
+                              </p>
+                            ) : null}
                           </button>
                         );
                       })}
+                      </div>
+                      {multiPrediction ? (
+                        <p className="mt-2 text-xs font-semibold text-ink/45">
+                          Select one or more options. You win if any selected option resolves as correct.
+                        </p>
+                      ) : null}
                     </div>
-                  </div>
                 ) : null}
 
                 {bet.type === 'openChoice' ? (
@@ -781,6 +819,7 @@ export function BetDetailPage() {
                             type="button"
                             onClick={() => {
                               setSelected(option.id);
+                              setSelectedOptionIds([option.id]);
                               setCustomOptionLabel('');
                             }}
                             className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-field"
@@ -855,7 +894,15 @@ export function BetDetailPage() {
                 {!closest && selectedChance > 0 ? (
                   <div className="rounded-xl bg-field px-3 py-2.5 text-xs text-ink/60">
                     <div className="flex items-center justify-between">
-                      <span>Est. profit if <span className="font-semibold text-ink/80">{selectedOption?.label}</span> wins</span>
+                      <span>
+                        Est. profit if{' '}
+                        <span className="font-semibold text-ink/80">
+                          {multiPrediction
+                            ? (selectedOptions.map((option) => option.label).join(', ') || 'your picks')
+                            : selectedOption?.label}
+                        </span>
+                        {' '}wins
+                      </span>
                       <CoinAmount amount={pendingEstimate.profit} className="text-xs" />
                     </div>
                     <div className="mt-1 flex items-center justify-between text-ink/45">

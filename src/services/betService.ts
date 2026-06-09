@@ -47,6 +47,7 @@ import {
 } from '../utils/closestGuess';
 import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution } from './userService';
+import { createNotification, uidsForUsernames, usersWhoPredictedBet } from './notificationService';
 
 function optionId(label: string, existingIds: string[]) {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'option';
@@ -68,6 +69,10 @@ function winningOptionIds(resolution: BetResolution) {
     .filter((id): id is string => Boolean(id));
 }
 
+function predictionOptionIds(prediction: Prediction) {
+  return prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
+}
+
 function scoreConsistencyError(optionId: string, homeScore?: number, awayScore?: number) {
   if (homeScore === undefined || awayScore === undefined) return '';
   if (optionId === 'home' && homeScore < awayScore) return 'Home cannot win with a lower score.';
@@ -78,7 +83,7 @@ function scoreConsistencyError(optionId: string, homeScore?: number, awayScore?:
 
 export async function createBet(input: CreateBetInput, creator: UserProfile) {
   const now = serverTimestamp();
-  await addDoc(collection(db, 'bets'), {
+  const ref = await addDoc(collection(db, 'bets'), {
     type: input.type,
     title: input.title.trim(),
     category: input.category.trim(),
@@ -104,6 +109,16 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     createdAt: now,
     updatedAt: now,
   });
+  const targetUids = await uidsForUsernames(input.invitedUsernames);
+  await createNotification({
+    type: 'bet_created',
+    actor: creator,
+    targetUids,
+    title: 'New bet invitation',
+    body: `${creator.displayName || creator.username} posted: ${input.title.trim()}`,
+    url: `/#/bets/${ref.id}`,
+  });
+  return ref.id;
 }
 
 export async function updateBetMetadata(betId: string, input: UpdateBetMetadataInput) {
@@ -229,6 +244,17 @@ export async function addBetComment(betId: string, user: UserProfile, body: stri
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  const betSnap = await getDoc(doc(db, 'bets', betId));
+  const bet = betSnap.exists() ? ({ id: betSnap.id, ...betSnap.data() } as Bet) : null;
+  const predictionUserIds = await usersWhoPredictedBet(betId);
+  await createNotification({
+    type: 'bet_commented',
+    actor: user,
+    targetUids: [...predictionUserIds, bet?.creatorId ?? ''],
+    title: 'New bet comment',
+    body: `${user.displayName || user.username} commented on ${bet?.title ?? 'a bet'}.`,
+    url: `/#/bets/${betId}`,
+  });
 }
 
 export async function deleteBetComment(commentId: string) {
@@ -243,6 +269,9 @@ export async function placePrediction(input: PredictionInput) {
   const eventRef = doc(collection(db, 'predictionEvents'));
   const closest = isClosestType(input.bet.type);
   const openChoice = input.bet.type === 'openChoice';
+  let notification:
+    | { type: 'bet_joined' | 'prediction_updated'; targetUids: string[]; body: string }
+    | null = null;
 
   await runTransaction(db, async (transaction) => {
     const [predictionSnap, betSnap, userSnap] = await Promise.all([
@@ -270,6 +299,7 @@ export async function placePrediction(input: PredictionInput) {
 
     let nextOptions = bet.options;
     let effectiveOptionId = closest ? 'guess' : input.optionId;
+    let effectiveOptionIds = closest ? ['guess'] : (input.optionIds?.length ? input.optionIds : [input.optionId]);
     const customOptionLabel = input.customOptionLabel?.trim();
     if (openChoice) {
       const selectedExistingOption = bet.options.find((option) => option.id === input.optionId);
@@ -286,9 +316,11 @@ export async function placePrediction(input: PredictionInput) {
             createdBy: user.uid,
           };
         effectiveOptionId = customOption.id;
+        effectiveOptionIds = [customOption.id];
         nextOptions = existingOption ? bet.options : [...bet.options, customOption];
       } else if (selectedExistingOption) {
         effectiveOptionId = selectedExistingOption.id;
+        effectiveOptionIds = [selectedExistingOption.id];
       } else {
         throw new Error('Pick or add an answer.');
       }
@@ -303,7 +335,11 @@ export async function placePrediction(input: PredictionInput) {
     }
     const displayedChanceAtBetTime = closest
       ? 1 / (existing.length + 1)
-      : chanceForOption(bet.chanceSummary, effectiveOptionId) || 1 / Math.max(1, nextOptions.length);
+      : Math.min(
+          0.95,
+          effectiveOptionIds.reduce((sum, id) => sum + chanceForOption(bet.chanceSummary, id), 0)
+            || 1 / Math.max(1, nextOptions.length),
+        );
 
     const now = Timestamp.now();
     const previousStake = existingPrediction?.stake ?? 0;
@@ -327,6 +363,7 @@ export async function placePrediction(input: PredictionInput) {
       userId: user.uid,
       username: user.username,
       optionId: effectiveOptionId,
+      optionIds: effectiveOptionIds,
       stake: input.stake,
       userBalanceAtBetTime: user.coinBalance,
       displayedChanceAtBetTime,
@@ -382,6 +419,7 @@ export async function placePrediction(input: PredictionInput) {
           userId: user.uid,
           username: user.username,
           optionId: effectiveOptionId,
+          optionIds: effectiveOptionIds,
           stake: input.stake,
           userBalanceAtBetTime: user.coinBalance,
           displayedChanceAtBetTime,
@@ -419,7 +457,33 @@ export async function placePrediction(input: PredictionInput) {
         createdAt: serverTimestamp(),
       });
     }
+
+    const targetUids = [
+      bet.creatorId,
+      ...existing.map((prediction) => prediction.userId),
+    ].filter((uid) => uid !== user.uid);
+    notification = {
+      type: existingPrediction ? 'prediction_updated' : 'bet_joined',
+      targetUids,
+      body: existingPrediction
+        ? `${user.displayName || user.username} updated a prediction on ${bet.title}.`
+        : `${user.displayName || user.username} joined ${bet.title}.`,
+    };
   });
+
+  const notificationPayload = notification as
+    | { type: 'bet_joined' | 'prediction_updated'; targetUids: string[]; body: string }
+    | null;
+  if (notificationPayload) {
+    await createNotification({
+      type: notificationPayload.type,
+      actor: input.user,
+      targetUids: notificationPayload.targetUids,
+      title: notificationPayload.type === 'bet_joined' ? 'Someone joined your bet' : 'Prediction updated',
+      body: notificationPayload.body,
+      url: `/#/bets/${input.bet.id}`,
+    });
+  }
 }
 
 export async function lockExpiredBet(bet: Bet) {
@@ -543,7 +607,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
 
       const correct = closest
         ? winnerPredictionIds.includes(prediction.id)
-        : winningOptionIds(finalResolution).includes(prediction.optionId);
+        : predictionOptionIds(prediction).some((id) => winningOptionIds(finalResolution).includes(id));
 
       const scoreBonus = scoreBonusResult.winners.find((w) => w.predictionId === prediction.id);
       const payout = coinPayouts.find((p) => p.predictionId === prediction.id);
@@ -601,6 +665,19 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       updatedAt: serverTimestamp(),
     });
   });
+
+  const resolverSnap = await getDoc(doc(db, 'users', resolverUid));
+  const resolver = resolverSnap.exists() ? (resolverSnap.data() as UserProfile) : null;
+  if (resolver) {
+    await createNotification({
+      type: 'bet_resolved',
+      actor: resolver,
+      targetUids: predictions.map((prediction) => prediction.userId),
+      title: 'Bet resolved',
+      body: `${bet.title} has been resolved.`,
+      url: `/#/bets/${bet.id}`,
+    });
+  }
 }
 
 export async function reopenBet(bet: Bet) {

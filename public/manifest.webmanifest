@@ -1,0 +1,19 @@
+{
+  "name": "Called It",
+  "short_name": "Called It",
+  "description": "Predict, wager, complete challenges, and earn coins with friends.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#edf0e8",
+  "theme_color": "#111417",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

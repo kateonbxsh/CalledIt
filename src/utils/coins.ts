@@ -40,6 +40,10 @@ function timestampMs(value: Prediction['createdAt'] | Prediction['lastChangedAt'
   return value?.toMillis?.() ?? Date.now();
 }
 
+function predictionOptionIds(prediction: Prediction) {
+  return prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
+}
+
 export function canClaimDailyReward(lastClaimAt?: Date | null) {
   if (!lastClaimAt) return true;
   const oneDay = 24 * 60 * 60 * 1000;
@@ -80,13 +84,13 @@ export function calculateTimingMultiplier(params: {
 
 export function calculatePredictionRewards(input: PredictionRewardInput): CoinPayout[] {
   const winningOptionIds = Array.isArray(input.winningOptionId) ? input.winningOptionId : [input.winningOptionId];
-  const winners = input.predictions.filter((prediction) => winningOptionIds.includes(prediction.optionId));
-  const losers = input.predictions.filter((prediction) => !winningOptionIds.includes(prediction.optionId));
+  const winners = input.predictions.filter((prediction) => predictionOptionIds(prediction).some((id) => winningOptionIds.includes(id)));
+  const losers = input.predictions.filter((prediction) => !predictionOptionIds(prediction).some((id) => winningOptionIds.includes(id)));
   const winningStake = winners.reduce((sum, prediction) => sum + prediction.stake, 0);
   const losingPool = Math.max(0, losers.reduce((sum, prediction) => sum + prediction.stake, 0) - (input.bonusPool ?? 0));
 
   return input.predictions.map((prediction) => {
-    const isWinner = winningOptionIds.includes(prediction.optionId);
+    const isWinner = predictionOptionIds(prediction).some((id) => winningOptionIds.includes(id));
     if (!isWinner || winningStake <= 0) {
       return {
         userId: prediction.userId,

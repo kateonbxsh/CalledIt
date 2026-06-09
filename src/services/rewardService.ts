@@ -24,6 +24,7 @@ import type {
   RewardClaim,
   UserProfile,
 } from '../types';
+import { createNotification, uidsForUsernames } from './notificationService';
 import { canClaimDailyReward } from '../utils/coins';
 
 const SAFE_FORECAST_REWARD = 60;
@@ -490,6 +491,14 @@ export async function postCompletedChallenge(params: {
       updatedAt: serverTimestamp(),
     });
   });
+  await createNotification({
+    type: 'challenge_posted',
+    actor: params.user,
+    targetUids: await uidsForUsernames(audience.invitedUsernames),
+    title: 'Challenge completed',
+    body: `${params.user.displayName || params.user.username} completed ${params.challenge.title}.`,
+    url: '/#/challenges',
+  });
 }
 
 export async function legacyPostCompletedChallenge(params: {
@@ -575,6 +584,18 @@ export async function createWagerChallenge(params: {
       updatedAt: serverTimestamp(),
     });
   });
+  const targetUids = await uidsForUsernames([
+    ...(normalizedTarget ? [normalizedTarget] : []),
+    ...audience.invitedUsernames,
+  ]);
+  await createNotification({
+    type: 'wager_created',
+    actor: params.user,
+    targetUids,
+    title: 'New wager',
+    body: `${params.user.displayName || params.user.username} posted a wager: ${params.title.trim()}.`,
+    url: '/#/challenges',
+  });
 }
 
 export async function completeWagerChallenge(challenge: ChallengeActivity, user: UserProfile, proofImageUrl: string) {
@@ -600,6 +621,14 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
       updatedAt: serverTimestamp(),
     });
   });
+  await createNotification({
+    type: 'wager_completed',
+    actor: user,
+    targetUids: [challenge.creatorId],
+    title: 'Wager completed',
+    body: `${user.displayName || user.username} completed ${challenge.title}.`,
+    url: '/#/challenges',
+  });
 }
 
 export async function failWagerChallenge(challenge: ChallengeActivity, user: UserProfile) {
@@ -620,5 +649,16 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
       coinBalance: increment(refund),
       updatedAt: serverTimestamp(),
     });
+  });
+  await createNotification({
+    type: 'wager_failed',
+    actor: user,
+    targetUids: await uidsForUsernames([
+      ...(challenge.targetUsername ? [challenge.targetUsername] : []),
+      ...(challenge.invitedUsernames ?? []),
+    ]),
+    title: 'Wager expired',
+    body: `${challenge.title} expired without a completion.`,
+    url: '/#/challenges',
   });
 }

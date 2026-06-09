@@ -43,6 +43,11 @@ pnpm-debug.log*
 # Firebase
 .firebaserc
 firebase-debug.log
+.firebase/
+
+# Notification worker secrets
+notification-worker/.env
+notification-worker/service-account*.json
 
 # Vite
 .vite

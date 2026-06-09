@@ -191,6 +191,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).changedKeys()
           .hasOnly([
             'optionId',
+            'optionIds',
             'stake',
             'userBalanceAtBetTime',
             'displayedChanceAtBetTime',
@@ -208,6 +209,42 @@ service cloud.firestore {
             'customOptionLabel'
           ])
       );
+      allow delete: if false;
+    }
+
+    match /users/{userId}/notificationTokens/{tokenId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['token', 'enabled', 'userAgent', 'createdAt', 'updatedAt']);
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (
+        request.auth.uid in resource.data.targetUids ||
+        resource.data.actorUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if signedIn()
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.targetUids is list
+        && request.resource.data.keys().hasOnly([
+          'type',
+          'actorUid',
+          'actorUsername',
+          'actorDisplayName',
+          'targetUids',
+          'title',
+          'body',
+          'url',
+          'readBy',
+          'sentAt',
+          'createdAt'
+        ]);
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.targetUids
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['readBy']);
       allow delete: if false;
     }
 

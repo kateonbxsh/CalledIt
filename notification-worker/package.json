@@ -1,0 +1,17 @@
+{
+  "name": "called-it-notification-worker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tiny VPS worker that sends Called It web push notifications from Firestore notification docs.",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js",
+    "check": "node --check worker.js",
+    "pm2:start": "pm2 start worker.js --name called-it-notifications",
+    "pm2:logs": "pm2 logs called-it-notifications"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "pm2": "^5.4.3"
+  }
+}

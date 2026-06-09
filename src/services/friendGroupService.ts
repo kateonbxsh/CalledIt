@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Bet, ChallengeActivity, FriendGroup, UserProfile } from '../types';
+import { createNotification } from './notificationService';
 
 async function resolveUids(usernames: string[]): Promise<string[]> {
   const results = await Promise.all(
@@ -75,14 +76,14 @@ export async function updateFriendGroup(
   groupId: string,
   name: string,
   memberUsernames: string[],
-  creatorUsername: string,
+  creator: UserProfile,
 ) {
   const groupRef = doc(db, 'friendGroups', groupId);
   const previousSnap = await getDoc(groupRef);
   const previousGroup = previousSnap.exists() ? ({ id: previousSnap.id, ...previousSnap.data() } as FriendGroup) : null;
   const filtered = memberUsernames
     .map((u) => u.trim().toLowerCase())
-    .filter((u) => u && u !== creatorUsername);
+    .filter((u) => u && u !== creator.username);
   const memberUids = await resolveUids(filtered);
 
   await updateDoc(groupRef, {
@@ -96,7 +97,7 @@ export async function updateFriendGroup(
     return;
   }
 
-  const allGroupUsernames = [creatorUsername, ...filtered];
+  const allGroupUsernames = [creator.username, ...filtered];
   const betsSnap = await getDocs(query(collection(db, 'bets'), where('groupId', '==', groupId), limit(100)));
   const challengesSnap = await getDocs(query(collection(db, 'challenges'), where('groupId', '==', groupId), limit(100)));
   await Promise.all([
@@ -117,6 +118,14 @@ export async function updateFriendGroup(
       });
     }),
   ]);
+  await createNotification({
+    type: 'group_updated',
+    actor: creator,
+    targetUids: previousGroup?.memberUids ?? memberUids,
+    title: 'Friend group updated',
+    body: `${creator.displayName || creator.username} updated ${name.trim()}.`,
+    url: '/#/groups',
+  });
 }
 
 export async function deleteFriendGroup(groupId: string) {

@@ -8,7 +8,11 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-type PredictionSlice = Pick<Prediction, 'optionId' | 'stake' | 'userRating'>;
+type PredictionSlice = Pick<Prediction, 'optionId' | 'optionIds' | 'stake' | 'userRating'>;
+
+function predictionOptionIds(prediction: PredictionSlice) {
+  return prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
+}
 
 export function calculateRawChanceSummary(
   options: BetOption[],
@@ -24,18 +28,25 @@ export function calculateRawChanceSummary(
   }
 
   return options.map((option) => {
-    const optionPredictions = predictions.filter((p) => p.optionId === option.id);
-    const coins = optionPredictions.reduce((sum, p) => sum + p.stake, 0);
-    const ratingSum = optionPredictions.reduce((sum, p) => sum + (p.userRating ?? DEFAULT_RATING), 0);
+    const weightedPredictions = predictions
+      .map((prediction) => {
+        const optionIds = predictionOptionIds(prediction);
+        return optionIds.includes(option.id)
+          ? { prediction, weight: 1 / Math.max(1, optionIds.length) }
+          : null;
+      })
+      .filter((item): item is { prediction: PredictionSlice; weight: number } => item !== null);
+    const coins = weightedPredictions.reduce((sum, item) => sum + item.prediction.stake * item.weight, 0);
+    const ratingSum = weightedPredictions.reduce((sum, item) => sum + (item.prediction.userRating ?? DEFAULT_RATING) * item.weight, 0);
 
-    const userShare = optionPredictions.length / totalUsers;
+    const userShare = weightedPredictions.reduce((sum, item) => sum + item.weight, 0) / totalUsers;
     const stakeShare = coins / totalCoins;
     const ratingShare = totalRating > 0 ? ratingSum / totalRating : 1 / options.length;
 
     return {
       optionId: option.id,
-      users: optionPredictions.length,
-      coins,
+      users: weightedPredictions.length,
+      coins: Math.round(coins),
     // Coins should matter, but not dominate: crowd signal is primary, stake is secondary.
     chance: 0.62 * userShare + 0.23 * stakeShare + 0.15 * ratingShare,
     };
