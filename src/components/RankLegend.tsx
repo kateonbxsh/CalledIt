@@ -11,105 +11,111 @@ export function RankLegend() {
     { elo: 2800, label: '2800+' },
   ];
 
-  const SVG_WIDTH = 1000;
-  const SVG_HEIGHT = 60;
-  const LINE_Y = 30;
-  const maxElo = 3200;
-
-  // Calculate x position for any ELO value
-  const getX = (elo: number) => ((elo - 300) / (maxElo - 300)) * SVG_WIDTH;
+  // ELO ranges for each rank
+  const rankBoundaries = [
+    { start: 300, end: 1249 },
+    { start: 1250, end: 1499 },
+    { start: 1500, end: 1749 },
+    { start: 1750, end: 2049 },
+    { start: 2050, end: 2399 },
+    { start: 2400, end: 2799 },
+    { start: 2800, end: 3200 },
+  ];
 
   return (
-    <div className="px-4 py-2 overflow-x-auto">
-      <svg
-        width="100%"
-        height={SVG_HEIGHT}
-        viewBox={`-30 0 ${SVG_WIDTH + 60} ${SVG_HEIGHT}`}
-        preserveAspectRatio="xMidYMid meet"
-        className="min-w-max"
-      >
-        {/* Colored segments for each rank */}
+    <div className="px-4 py-2 space-y-3">
+      {/* Rank names row */}
+      <div className="flex gap-0 h-5">
         {rankRanges.map((rank, idx) => {
           const colorMatch = rank.className.match(/#[0-9a-f]+/i);
           const rankColor = colorMatch ? colorMatch[0] : '#121417';
-
-          const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
-          const endElos = [1249, 1499, 1749, 2049, 2399, 2799, 3200];
-
-          const x1 = getX(startElos[idx]);
-          const x2 = getX(endElos[idx]);
+          const boundary = rankBoundaries[idx];
+          const rangeSize = boundary.end - boundary.start + 1;
+          const totalSize = 3200 - 300; // 2900
+          const widthPercent = (rangeSize / totalSize) * 100;
 
           return (
-            <rect
+            <div
               key={rank.rank}
-              x={x1}
-              y={LINE_Y - 2}
-              width={x2 - x1}
-              height={4}
-              fill={rankColor}
-              rx={2}
+              style={{ width: `${widthPercent}%` }}
+              className="flex items-center justify-start px-1"
+            >
+              <span
+                className="text-xs font-black whitespace-nowrap text-left"
+                style={{ color: rankColor }}
+              >
+                {rank.rank}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Colored segments bar with points */}
+      <div className="relative flex gap-0 h-2 rounded-full overflow-hidden">
+        {/* Colored segments */}
+        {rankRanges.map((rank, idx) => {
+          const colorMatch = rank.className.match(/#[0-9a-f]+/i);
+          const rankColor = colorMatch ? colorMatch[0] : '#121417';
+          const boundary = rankBoundaries[idx];
+          const rangeSize = boundary.end - boundary.start + 1;
+          const totalSize = 3200 - 300;
+          const widthPercent = (rangeSize / totalSize) * 100;
+
+          return (
+            <div
+              key={rank.rank}
+              style={{
+                width: `${widthPercent}%`,
+                backgroundColor: rankColor,
+              }}
             />
           );
         })}
 
-        {/* Rank names above the line */}
-        {rankRanges.map((rank, idx) => {
-          const colorMatch = rank.className.match(/#[0-9a-f]+/i);
-          const rankColor = colorMatch ? colorMatch[0] : '#121417';
-
-          const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
-          const x = getX(startElos[idx]);
-
-          return (
-            <text
-              key={`name-${rank.rank}`}
-              x={x}
-              y={8}
-              textAnchor="middle"
-              className="text-xs font-black"
-              fill={rankColor}
-              fontSize="11"
-              fontWeight="900"
-            >
-              {rank.rank}
-            </text>
-          );
-        })}
-
-        {/* Points and values at boundaries - colored points */}
+        {/* Points overlay */}
         {ranges.map((r, idx) => {
-          const x = getX(r.elo);
-          // Find which rank segment this point belongs to
+          const eloFromStart = r.elo - 300;
+          const totalSize = 3200 - 300;
+          const posPercent = (eloFromStart / totalSize) * 100;
           const rankIndex = idx < 6 ? idx : 6;
           const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
           const pointColor = colorMatch ? colorMatch[0] : '#121417';
 
           return (
-            <g key={`marker-${r.elo}`}>
-              {/* Point on line - colored */}
-              <circle
-                cx={x}
-                cy={LINE_Y}
-                r="3"
-                fill={pointColor}
-                filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
+            <div
+              key={`point-${r.elo}`}
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
+              style={{ left: `${posPercent}%` }}
+            >
+              {/* Point */}
+              <div
+                className="w-3 h-3 rounded-full shadow-soft"
+                style={{ backgroundColor: pointColor }}
               />
-              {/* Value below */}
-              <text
-                x={x}
-                y={48}
-                textAnchor="middle"
-                className="text-xs"
-                fill="#121417"
-                fillOpacity="0.6"
-                fontSize="10"
-              >
-                {r.label}
-              </text>
-            </g>
+            </div>
           );
         })}
-      </svg>
+      </div>
+
+      {/* ELO values row below */}
+      <div className="relative h-5">
+        {ranges.map((r) => {
+          const eloFromStart = r.elo - 300;
+          const totalSize = 3200 - 300;
+          const posPercent = (eloFromStart / totalSize) * 100;
+
+          return (
+            <div
+              key={`label-${r.elo}`}
+              className="absolute text-xs text-ink/40 whitespace-nowrap"
+              style={{ left: `${posPercent}%`, transform: 'translateX(-50%)' }}
+            >
+              {r.label}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

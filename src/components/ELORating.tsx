@@ -11,29 +11,26 @@ export function ELORating({ rating, coins }: { rating: number; coins?: number })
   const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
   return (
-    <div className="flex flex-col gap-2 items-end">
-      {/* Row with rank on left, ELO on right, and progress line */}
-      <div className="w-full flex items-center gap-2">
-        {/* Rank name on left */}
-        <span className="text-xs font-black whitespace-nowrap shrink-0" style={{ color: rankColor }}>
+    <div className="flex flex-col gap-1.5 items-end">
+      {/* Rank and ELO above the line */}
+      <div className="w-full flex items-center justify-between gap-2 text-xs font-black">
+        <span style={{ color: rankColor }}>
           {rank}
         </span>
-
-        {/* Scale line showing progress */}
-        <div className="flex-1 h-2 bg-field rounded-full overflow-hidden min-w-12">
-          <div
-            className="h-full transition-all duration-300 rounded-full"
-            style={{
-              width: `${progress.percent}%`,
-              backgroundColor: rankColor,
-            }}
-          />
-        </div>
-
-        {/* ELO number on right */}
-        <span className="text-sm font-black text-ink/70 whitespace-nowrap shrink-0">
+        <span className="text-ink/70">
           {rating}
         </span>
+      </div>
+
+      {/* Scale line showing progress */}
+      <div className="w-full h-2 bg-field rounded-full overflow-hidden">
+        <div
+          className="h-full transition-all duration-300 rounded-full"
+          style={{
+            width: `${progress.percent}%`,
+            backgroundColor: rankColor,
+          }}
+        />
       </div>
 
       {/* Coin balance below, right-aligned, smaller */}
