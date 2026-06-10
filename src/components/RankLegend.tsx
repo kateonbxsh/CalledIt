@@ -52,7 +52,7 @@ export function RankLegend() {
               <div className="flex gap-8 items-stretch">
                 {/* Left: User indicator */}
                 {profile && (
-                  <div className="relative" style={{ width: '80px' }}>
+                  <div className="relative" style={{ width: '100px' }}>
                     {/* Calculate user's position on scale */}
                     {(() => {
                       const userPosPercent = Math.max(0, Math.min(100, ((profile.rating - minElo) / totalRange) * 100));
@@ -60,24 +60,22 @@ export function RankLegend() {
 
                       return (
                         <div
-                          className="absolute flex items-center gap-2 left-0"
+                          className="absolute flex items-center gap-1.5 right-0"
                           style={{
                             top: `${topOffset}px`,
                             transform: 'translateY(-50%)',
                           }}
                         >
+                          <span className="text-xs font-black text-ink/70 whitespace-nowrap">
+                            {profile.rating}
+                          </span>
                           <Avatar
                             name={profile.displayName}
                             src={profile.photoURL}
                             size="md"
                             round
                           />
-                          <div className="flex flex-col items-start">
-                            <ChevronRight size={14} className="text-ink/50" />
-                            <span className="text-xs font-black text-ink/70">
-                              {profile.rating}
-                            </span>
-                          </div>
+                          <ChevronRight size={14} className="text-ink/50 shrink-0" />
                         </div>
                       );
                     })()}
