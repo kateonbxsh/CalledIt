@@ -11,84 +11,101 @@ export function RankLegend() {
     { elo: 2800, label: '2800+' },
   ];
 
+  const SVG_WIDTH = 1000;
+  const SVG_HEIGHT = 120;
+  const LINE_Y = 60;
   const maxElo = 3200;
 
+  // Calculate x position for any ELO value
+  const getX = (elo: number) => ((elo - 300) / (maxElo - 300)) * SVG_WIDTH;
+
   return (
-    <div className="space-y-6">
-      {/* Rank names positioned above the scale */}
-      <div className="relative h-5">
-        {rankRanges.map((r, idx) => {
-          const colorMatch = r.className.match(/#[0-9a-f]+/i);
+    <div className="space-y-4">
+      <svg
+        width="100%"
+        height={SVG_HEIGHT}
+        viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+        preserveAspectRatio="none"
+        className="w-full"
+      >
+        {/* Colored segments for each rank */}
+        {rankRanges.map((rank, idx) => {
+          const colorMatch = rank.className.match(/#[0-9a-f]+/i);
           const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-          // Position based on range start
           const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
-          const startPos = ((startElos[idx] - 300) / (maxElo - 300)) * 100;
+          const endElos = [1249, 1499, 1749, 2049, 2399, 2799, 3200];
+
+          const x1 = getX(startElos[idx]);
+          const x2 = getX(endElos[idx]);
 
           return (
-            <div
-              key={r.rank}
-              className="absolute text-xs font-black whitespace-nowrap"
-              style={{
-                color: rankColor,
-                left: `${startPos}%`,
-                top: 0,
-                transform: 'translateX(-50%)',
-              }}
-            >
-              {r.rank}
-            </div>
+            <rect
+              key={rank.rank}
+              x={x1}
+              y={LINE_Y - 2}
+              width={x2 - x1}
+              height={4}
+              fill={rankColor}
+              rx={2}
+            />
           );
         })}
-      </div>
 
-      {/* Colored scale bar with overlaid points and values */}
-      <div className="relative">
-        {/* Colored bar */}
-        <div className="h-1 rounded-full overflow-hidden flex">
-          {rankRanges.map((r, idx) => {
-            const colorMatch = r.className.match(/#[0-9a-f]+/i);
-            const rankColor = colorMatch ? colorMatch[0] : '#121417';
+        {/* Rank names above the line */}
+        {rankRanges.map((rank, idx) => {
+          const colorMatch = rank.className.match(/#[0-9a-f]+/i);
+          const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-            // Calculate segment widths
-            const widths = [949, 250, 250, 300, 350, 400, 400];
-            const totalWidth = widths.slice(0, 6).reduce((a, b) => a + b, 0);
-            const widthPercent = idx < 6 ? (widths[idx] / totalWidth) * 100 : 8;
+          const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
+          const x = getX(startElos[idx]);
 
-            return (
-              <div
-                key={r.rank}
-                style={{
-                  backgroundColor: rankColor,
-                  width: idx < 6 ? `${widthPercent}%` : '8%',
-                }}
-              />
-            );
-          })}
-        </div>
+          return (
+            <text
+              key={`name-${rank.rank}`}
+              x={x}
+              y={LINE_Y - 15}
+              textAnchor="middle"
+              className="text-xs font-black"
+              fill={rankColor}
+              fontSize="12"
+              fontWeight="900"
+            >
+              {rank.rank}
+            </text>
+          );
+        })}
 
-        {/* Points and values overlaid on the line */}
+        {/* Points and values at boundaries */}
         {ranges.map((r) => {
-          const pos = ((r.elo - 300) / (maxElo - 300)) * 100;
+          const x = getX(r.elo);
 
           return (
-            <div
-              key={r.elo}
-              className="absolute flex flex-col items-center"
-              style={{
-                left: `${pos}%`,
-                transform: 'translateX(-50%)',
-                top: '-0.25rem', // Vertically center on the line
-              }}
-            >
-              {/* Value above */}
-              <span className="text-xs text-ink/40 mb-1">{r.label}</span>
+            <g key={`marker-${r.elo}`}>
               {/* Point on line */}
-              <div className="w-2 h-2 rounded-full bg-ink shadow-soft" />
-            </div>
+              <circle
+                cx={x}
+                cy={LINE_Y}
+                r="3"
+                fill="#121417"
+                filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
+              />
+              {/* Value below */}
+              <text
+                x={x}
+                y={LINE_Y + 20}
+                textAnchor="middle"
+                className="text-xs"
+                fill="#121417"
+                fillOpacity="0.6"
+                fontSize="11"
+              >
+                {r.label}
+              </text>
+            </g>
           );
         })}
-      </div>
+      </svg>
     </div>
   );
 }
