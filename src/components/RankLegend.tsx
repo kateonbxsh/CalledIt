@@ -131,26 +131,25 @@ export function RankLegend() {
                   })}
                 </div>
 
-                {/* Right: Rank information */}
-                <div className="flex-1 space-y-8" style={{ paddingTop: '0' }}>
-                  {rankRanges.map((rank, idx) => {
+                {/* Right: Rank information - positioned to align with boundary points */}
+                <div className="flex-1 relative" style={{ height: `${scaleHeight}px` }}>
+                  {boundaries.map((b, idx) => {
+                    const rank = rankRanges[idx];
                     const colorMatch = rank.className.match(/#[0-9a-f]+/i);
                     const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-                    const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
-                    const endElos = [1249, 1499, 1749, 2049, 2399, 2799, 2800];
-                    const rangeSize = endElos[idx] - startElos[idx] + 1;
-                    const heightPercent = (rangeSize / totalRange) * 100;
+                    // Position at boundary point
+                    const posPercent = ((b.elo - minElo) / totalRange) * 100;
+                    const topOffset = (posPercent / 100) * scaleHeight;
 
-                    // Match height to scale segments
                     return (
                       <div
                         key={rank.rank}
+                        className="absolute"
                         style={{
-                          flex: heightPercent,
-                          minHeight: '32px',
+                          top: `${topOffset}px`,
+                          transform: 'translateY(-50%)',
                         }}
-                        className="flex flex-col justify-center"
                       >
                         <h3 className="font-black text-sm" style={{ color: rankColor }}>
                           {rank.rank}
