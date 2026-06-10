@@ -32,12 +32,12 @@ export function LeaderboardPage() {
 
   return (
     <>
-      <PageHeader title="Leaderboard" />
+      <PageHeader
+        title="Leaderboard"
+        action={<RankLegend />}
+      />
 
-      {/* Rank legend */}
-      <div className="mb-6">
-        <RankLegend />
-      </div>
+      {/* Player list */}
 
       {/* Player list */}
       <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
