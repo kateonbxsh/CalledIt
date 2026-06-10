@@ -285,6 +285,11 @@ export function ChallengesPage() {
                           ) : (
                             <span className="rounded-full bg-mint/10 px-2 py-0.5 text-xs font-black text-mint">weekly</span>
                           )}
+                          {activity.groupId && groups.find(g => g.id === activity.groupId) && (
+                            <span className="rounded-full bg-field px-2 py-0.5 text-xs font-semibold text-ink/60">
+                              {groups.find(g => g.id === activity.groupId)?.name}
+                            </span>
+                          )}
                           <span className="text-xs font-semibold text-ink/35">
                             {activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}
                           </span>
