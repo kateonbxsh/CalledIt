@@ -46,20 +46,11 @@ export function ChallengesPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [wagerTitle, setWagerTitle] = useState('');
-  const [wagerBody, setWagerBody] = useState('');
-  const [targetUsername, setTargetUsername] = useState('');
-  const [stake, setStake] = useState(50);
-  const [deadline, setDeadline] = useState(datetimeLocalValue(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000)));
   const [postVisibility, setPostVisibility] = useState<BetVisibility>('public');
   const [postGroupId, setPostGroupId] = useState('');
-  const [wagerVisibility, setWagerVisibility] = useState<BetVisibility>('public');
-  const [wagerGroupId, setWagerGroupId] = useState('');
-  const [wagerInvited, setWagerInvited] = useState<string[]>([]);
   const [activeWeeklyId, setActiveWeeklyId] = useState('');
   const [weeklyModalOpen, setWeeklyModalOpen] = useState(false);
   const [weeklyModalChallenge, setWeeklyModalChallenge] = useState<WeeklyChallengeDefinition | null>(null);
-  const [wagerModalOpen, setWagerModalOpen] = useState(false);
   const [proofByChallenge, setProofByChallenge] = useState<Record<string, string>>({});
   const [commentByChallenge, setCommentByChallenge] = useState<Record<string, string>>({});
   const [weeklyReward, setWeeklyReward] = useState<{ coins: number; chest: number } | null>(null);
@@ -122,12 +113,6 @@ export function ChallengesPage() {
     if (!activeWeeklyId && weekly[0]) setActiveWeeklyId(weekly[0].id);
   }, [activeWeeklyId, weekly]);
 
-  useEffect(() => {
-    if ((location.state as { openWager?: boolean } | null)?.openWager) {
-      setWagerModalOpen(true);
-      navigate(location.pathname, { replace: true, state: null });
-    }
-  }, [location, navigate]);
 
   async function processImage(file: File, setter: (value: string) => void) {
     setBusy('image');
@@ -171,40 +156,6 @@ export function ChallengesPage() {
     }
   }
 
-  async function submitWager(event: FormEvent) {
-    event.preventDefault();
-    if (!profile) return;
-    setBusy('wager');
-    setError('');
-    try {
-      await createWagerChallenge({
-        user: profile,
-        title: wagerTitle,
-        body: wagerBody || undefined,
-        targetUsername: targetUsername || undefined,
-        stake,
-        deadline: new Date(deadline),
-        visibility: wagerGroupId ? 'private' : wagerVisibility,
-        groupId: wagerGroupId || undefined,
-        groups,
-        invitedUsernames: wagerInvited,
-      });
-      setWagerTitle('');
-      setWagerBody('');
-      setTargetUsername('');
-      setWagerVisibility('public');
-      setWagerGroupId('');
-      setWagerInvited([]);
-      setStake(50);
-      setDeadline(datetimeLocalValue(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000)));
-      setWagerModalOpen(false);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create wager.');
-    } finally {
-      setBusy('');
-    }
-  }
 
   async function complete(challenge: ChallengeActivity) {
     if (!profile) return;
@@ -593,97 +544,7 @@ export function ChallengesPage() {
         </div>
       ) : null}
 
-      {wagerModalOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
-          <form onSubmit={submitWager} className="max-h-[90vh] w-full max-w-lg animate-soft-enter overflow-y-auto rounded-md border border-line bg-white p-5 shadow-lift">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Target size={18} className="text-citrus" />
-                <h2 className="text-xl font-black">Create wager</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setWagerModalOpen(false)}
-                className="rounded-md border border-line px-3 py-1.5 text-sm font-bold"
-              >
-                Close
-              </button>
-            </div>
-            <label className="block text-sm font-medium">
-              Challenge
-              <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={wagerTitle} onChange={(e) => setWagerTitle(e.target.value)} placeholder="Run 5k before Friday" required />
-            </label>
-            <label className="mt-3 block text-sm font-medium">
-              Target username
-              <div className="mt-1">
-                <UsernamePicker
-                  value={targetUsername ? [targetUsername] : []}
-                  onChange={(next) => setTargetUsername(next[0] ?? '')}
-                  exclude={profile?.username ? [profile.username] : []}
-                  placeholder="Search one username, or leave blank for anyone"
-                  maxSelections={1}
-                />
-              </div>
-            </label>
-            <label className="mt-3 block text-sm font-medium">
-              Post to
-              <select
-                className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
-                value={wagerGroupId || wagerVisibility}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === 'public') {
-                    setWagerVisibility('public');
-                    setWagerGroupId('');
-                  } else if (value === 'private') {
-                    setWagerVisibility('private');
-                    setWagerGroupId('');
-                  } else {
-                    setWagerVisibility('private');
-                    setWagerGroupId(value);
-                  }
-                }}
-              >
-                <option value="public">Public</option>
-                <option value="private">Private users</option>
-                {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-              </select>
-            </label>
-            {wagerVisibility === 'private' && !wagerGroupId ? (
-              <div className="mt-3 block text-sm font-medium">
-                Invited users
-                <div className="mt-1">
-                  <UsernamePicker
-                    value={wagerInvited}
-                    onChange={setWagerInvited}
-                    exclude={profile?.username ? [profile.username] : []}
-                    placeholder="Search usernames"
-                  />
-                </div>
-              </div>
-            ) : null}
-            <label className="mt-3 block text-sm font-medium">
-              Proof rules
-              <textarea className="mt-1 min-h-20 w-full rounded-md border border-line bg-field px-3 py-2" value={wagerBody} onChange={(e) => setWagerBody(e.target.value)} placeholder="What counts as proof?" />
-            </label>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <StakeInput value={stake} onChange={setStake} />
-              <label className="block text-sm font-medium">
-                Deadline
-                <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-              </label>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-ink/50">
-              The deadline must be at least one week away. You cannot complete your own dare. If the wager fails early, or no one completes it, close it to reclaim your stake plus 50%.
-            </p>
-            <button disabled={!!busy} className="mt-3 w-full rounded-md bg-citrus px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
-              {busy === 'wager' ? 'Creating...' : 'Create wager'}
-            </button>
-          </form>
-        </div>
-      ) : null}
-
-      {weeklyReward ? (
+{weeklyReward ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-reward-pop rounded-md border border-line bg-white p-6 text-center shadow-lift">
             <RewardChest open className="mx-auto mb-4 h-28 w-32" />

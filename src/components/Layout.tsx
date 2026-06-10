@@ -151,9 +151,14 @@ export function Layout() {
     };
   }, [actionMenuOpen, profileMenuOpen]);
 
-  function createWager() {
+  function handleCreateWager() {
     setActionMenuOpen(false);
     navigate('/create-wager');
+  }
+
+  function handleCreateBet() {
+    setActionMenuOpen(false);
+    navigate('/create');
   }
 
   return (
@@ -170,6 +175,33 @@ export function Layout() {
           {navItems.map((item) => (
             <NavItem key={item.to} {...item} />
           ))}
+          <div className="relative pt-2">
+            <button
+              onClick={() => setActionMenuOpen((open) => !open)}
+              className="group w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-150 bg-ink text-white shadow-sm hover:shadow-soft"
+            >
+              <CirclePlus size={17} className="text-white" />
+              <span>Create</span>
+            </button>
+            {actionMenuOpen && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 animate-soft-enter rounded-xl border border-line bg-white shadow-lift overflow-hidden">
+                <Link
+                  to="/create"
+                  onClick={() => setActionMenuOpen(false)}
+                  className="block w-full px-3 py-2.5 text-sm font-bold text-ink hover:bg-field transition"
+                >
+                  Create bet
+                </Link>
+                <Link
+                  to="/create-wager"
+                  onClick={() => setActionMenuOpen(false)}
+                  className="block w-full px-3 py-2.5 text-sm font-bold text-ink hover:bg-field transition border-t border-line"
+                >
+                  Create wager
+                </Link>
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="mt-4 rounded-2xl border border-line/70 bg-white p-3 shadow-soft">
@@ -222,21 +254,21 @@ export function Layout() {
       ) : null}
 
       {actionMenuOpen ? (
-        <div className="fixed bottom-24 left-4 right-4 z-40 grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift lg:hidden">
+        <div className="fixed bottom-24 left-4 right-4 z-40 lg:fixed lg:bottom-auto lg:left-auto lg:right-24 lg:top-20 lg:w-56 grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift">
           <Link
             to="/create"
-            className="rounded-xl bg-ink px-4 py-3 text-center text-sm font-black text-white"
             onClick={() => setActionMenuOpen(false)}
+            className="rounded-xl bg-ink px-4 py-3 text-center text-sm font-black text-white transition hover:shadow-soft active:scale-95"
           >
             Create bet
           </Link>
-          <button
-            type="button"
-            onClick={createWager}
-            className="rounded-xl border border-line bg-field px-4 py-3 text-center text-sm font-black text-ink"
+          <Link
+            to="/create-wager"
+            onClick={() => setActionMenuOpen(false)}
+            className="rounded-xl border border-line bg-field px-4 py-3 text-center text-sm font-black text-ink transition hover:shadow-soft active:scale-95"
           >
             Create wager
-          </button>
+          </Link>
         </div>
       ) : null}
 
