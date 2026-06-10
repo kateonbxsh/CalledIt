@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Avatar } from '../components/Avatar';
 import { CoinAmount } from '../components/CoinAmount';
+import { ELORating } from '../components/ELORating';
 import { PageHeader } from '../components/PageHeader';
 import { RankBadge } from '../components/RankBadge';
 import { getLeaderboard } from '../services/userService';
@@ -84,12 +85,9 @@ export function LeaderboardPage() {
                     <p className="truncate text-xs text-ink/40">@{user.username}</p>
                   </div>
 
-                  {/* Right side: rank badge + ELO + coins */}
-                  <div className="shrink-0 text-right">
-                    <div className="mb-1 flex justify-end">
-                      <RankBadge rank={rank} />
-                    </div>
-                    <p className="text-sm font-black text-ink/80">{user.rating} ELO</p>
+                  {/* Right side: ELO rating + coins */}
+                  <div className="shrink-0 space-y-2">
+                    <ELORating rating={user.rating} />
                     <CoinAmount amount={user.coinBalance} className="justify-end text-xs" />
                   </div>
                 </div>
