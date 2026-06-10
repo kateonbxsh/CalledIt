@@ -174,7 +174,7 @@ export function Layout() {
           {navItems.map((item) => (
             <NavItem key={item.to} {...item} />
           ))}
-          <div className="relative pt-2">
+          <div className="relative pt-2 hidden lg:block">
             <button
               onClick={() => setActionMenuOpen((open) => !open)}
               className="btn-special group w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold"
@@ -182,23 +182,30 @@ export function Layout() {
               <CirclePlus size={17} />
               <span>Create</span>
             </button>
-            {actionMenuOpen && (
-              <div className="absolute bottom-full left-0 right-0 mb-2 animate-soft-enter rounded-xl border border-line bg-white shadow-lift overflow-hidden">
-                <Link
-                  to="/create"
+            {actionMenuOpen && window.matchMedia('(min-width: 1024px)').matches && (
+              <>
+                <button
+                  className="fixed inset-0 z-20"
                   onClick={() => setActionMenuOpen(false)}
-                  className="block w-full px-3 py-2.5 text-sm font-bold text-ink hover:bg-field transition"
-                >
-                  Create bet
-                </Link>
-                <Link
-                  to="/create-wager"
-                  onClick={() => setActionMenuOpen(false)}
-                  className="block w-full px-3 py-2.5 text-sm font-bold text-ink hover:bg-field transition border-t border-line"
-                >
-                  Create wager
-                </Link>
-              </div>
+                  aria-label="Close menu"
+                />
+                <div className="absolute top-full left-0 right-0 mt-2 animate-soft-enter rounded-xl border border-line bg-white shadow-lift overflow-hidden z-30">
+                  <Link
+                    to="/create"
+                    onClick={() => setActionMenuOpen(false)}
+                    className="block w-full px-3 py-2.5 text-sm font-bold text-ink hover:bg-field transition"
+                  >
+                    Create bet
+                  </Link>
+                  <Link
+                    to="/create-wager"
+                    onClick={() => setActionMenuOpen(false)}
+                    className="block w-full px-3 py-2.5 text-sm font-bold text-ink hover:bg-field transition border-t border-line"
+                  >
+                    Create wager
+                  </Link>
+                </div>
+              </>
             )}
           </div>
         </nav>
@@ -240,10 +247,10 @@ export function Layout() {
         </div>
       </main>
 
-      {actionMenuOpen || profileMenuOpen ? (
+      {(actionMenuOpen || profileMenuOpen) && !window.matchMedia('(min-width: 1024px)').matches ? (
         <button
           type="button"
-          className="fixed inset-0 z-30 animate-fade-in bg-ink/35 transition lg:hidden"
+          className="fixed inset-0 z-30 animate-fade-in bg-ink/35 transition"
           onClick={() => {
             setActionMenuOpen(false);
             setProfileMenuOpen(false);
@@ -252,8 +259,8 @@ export function Layout() {
         />
       ) : null}
 
-      {actionMenuOpen ? (
-        <div className="fixed bottom-24 left-4 right-4 z-40 lg:fixed lg:bottom-auto lg:left-auto lg:right-24 lg:top-20 lg:w-56 grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift">
+      {actionMenuOpen && !window.matchMedia('(min-width: 1024px)').matches ? (
+        <div className="fixed bottom-24 left-4 right-4 z-40 grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift">
           <Link
             to="/create"
             onClick={() => setActionMenuOpen(false)}
