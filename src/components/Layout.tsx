@@ -60,7 +60,7 @@ function BottomNavLink({ to, label, icon: Icon }: (typeof navItems)[number]) {
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `grid h-12 min-w-0 place-items-center rounded-2xl transition ${
+        `flex min-w-0 items-center justify-center rounded-2xl py-2 px-1 transition will-change-transform ${
           isActive ? 'bg-ink text-white shadow-soft' : 'text-ink/50 active:bg-field'
         }`
       }
@@ -68,7 +68,7 @@ function BottomNavLink({ to, label, icon: Icon }: (typeof navItems)[number]) {
       title={label}
     >
       {({ isActive }) => (
-        <Icon size={21} strokeWidth={isActive ? 2.8 : 2.2} />
+        <Icon size={21} strokeWidth={isActive ? 2.8 : 2.2} className="drop-shadow-sm" />
       )}
     </NavLink>
   );
@@ -152,7 +152,7 @@ export function Layout() {
 
   function createWager() {
     setActionMenuOpen(false);
-    navigate('/challenges', { state: { openWager: true } });
+    navigate('/create-wager');
   }
 
   return (
@@ -265,9 +265,10 @@ export function Layout() {
       ) : null}
 
       <nav
-        className={`fixed bottom-0 left-0 right-0 z-50 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
+        className={`fixed bottom-0 left-0 right-0 z-50 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4] px-2 pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
           bottomNavVisible || actionMenuOpen || profileMenuOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
+        style={{ paddingBottom: `max(0.5rem, calc(env(safe-area-inset-bottom) + 0.5rem))` }}
       >
         <BottomNavLink to="/" label="Bets" icon={Home} />
         <BottomNavLink to="/challenges" label="Challenges" icon={Trophy} />
@@ -279,12 +280,12 @@ export function Layout() {
             setActionMenuOpen((open) => !open);
             setBottomNavVisible(true);
           }}
-          className={`mx-auto -mt-8 grid h-16 w-16 place-items-center rounded-full border-[6px] border-[#edf0e8] shadow-lift transition active:scale-95 ${
+          className={`mx-auto -mt-8 h-16 w-16 rounded-full border-[6px] border-[#edf0e8] shadow-lift transition active:scale-95 ${
             actionMenuOpen ? 'bg-ink text-white' : 'bg-white text-ink'
-          }`}
+          } grid place-items-center`}
           aria-label="Create"
         >
-          <CirclePlus size={30} />
+          <CirclePlus size={30} className="drop-shadow-sm" />
         </button>
         <BottomNavLink to="/minigames" label="Games" icon={Gamepad2} />
         <BottomNavLink to="/leaderboard" label="Ranks" icon={Medal} />
@@ -295,14 +296,14 @@ export function Layout() {
             setProfileMenuOpen((open) => !open);
             setBottomNavVisible(true);
           }}
-          className="grid h-12 min-w-0 place-items-center rounded-2xl transition active:bg-field"
+          className="rounded-2xl transition active:bg-field lg:hidden grid h-12 min-w-0 place-items-center"
           aria-label="Profile menu"
         >
-          <span className={`grid h-10 w-10 place-items-center rounded-full transition ${
+          <span className={`rounded-full transition ${
             location.pathname === '/me' || location.pathname.startsWith('/profile/')
               ? 'bg-ink shadow-soft ring-2 ring-ink'
               : 'bg-transparent'
-          }`}
+          } grid h-10 w-10 place-items-center shrink-0`}
           >
             <Avatar name={profile?.displayName ?? 'Me'} src={profile?.photoURL} round />
           </span>

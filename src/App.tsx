@@ -8,6 +8,7 @@ import { BetDetailPage } from './pages/BetDetailPage';
 import { ChallengesPage } from './pages/ChallengesPage';
 import { CompleteProfilePage } from './pages/CompleteProfilePage';
 import { CreateBetPage } from './pages/CreateBetPage';
+import { CreateWagerPage } from './pages/CreateWagerPage';
 import { FeedPage } from './pages/FeedPage';
 import { FriendGroupsPage } from './pages/FriendGroupsPage';
 import { HowToPlayPage } from './pages/HowToPlayPage';
@@ -92,6 +93,7 @@ export function App() {
           <Route path="challenges" element={<ChallengesPage />} />
           <Route path="minigames" element={<MinigamesPage />} />
           <Route path="create" element={<CreateBetPage />} />
+          <Route path="create-wager" element={<CreateWagerPage />} />
           <Route path="bets/:betId" element={<BetDetailPage />} />
           <Route path="leaderboard" element={<LeaderboardPage />} />
           <Route path="how-to-play" element={<HowToPlayPage />} />
