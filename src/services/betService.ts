@@ -687,8 +687,8 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
 
       const scoreBonus = scoreBonusResult.winners.find((w) => w.predictionId === prediction.id);
       const payout = coinPayouts.find((p) => p.predictionId === prediction.id);
-      const hadSpicyForecast = !!user.pendingSpicyForecast;
-      const spicyForecastBonus = correct ? (user.pendingSpicyForecast?.bonus ?? 0) : 0;
+      const pendingBonuses = user.pendingSpicyForecasts ?? [];
+      const totalSpicyBonus = correct ? pendingBonuses.reduce((sum, b) => sum + b.bonus, 0) : 0;
       const ratingDelta = calculateRatingDelta({
         displayedChanceAtBetTime: prediction.displayedChanceAtBetTime,
         correct,
@@ -700,14 +700,14 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       }) + (scoreBonus?.ratingBonus ?? 0);
 
       const nextRating = applyRatingDelta(user.rating, ratingDelta);
-      const coinDelta = (payout?.coinDelta ?? 0) + spicyForecastBonus;
+      const coinDelta = (payout?.coinDelta ?? 0) + totalSpicyBonus;
       const netCoinDelta = correct ? coinDelta - prediction.stake : -prediction.stake;
 
       transaction.update(userRef, {
         coinBalance: increment(coinDelta),
         rating: nextRating,
         rank: rankForRating(nextRating),
-        ...(hadSpicyForecast ? { pendingSpicyForecast: null } : {}),
+        ...(correct && pendingBonuses.length > 0 ? { pendingSpicyForecasts: [] } : {}),
         stats: buildStatsAfterResolution({
           stats: user.stats,
           correct,
@@ -725,7 +725,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
         poolCoinProfit: payout?.poolProfit ?? 0,
         mintedCoinReward: payout?.mintedReward ?? 0,
         timingMultiplier: payout?.timingMultiplier ?? 1,
-        spicyForecastBonus,
+        spicyForecastBonus: totalSpicyBonus,
         resolvedAt: serverTimestamp(),
         winningOptionId: closest
           ? (resolution.actualValue?.toString() ?? resolution.actualDateValue ?? '')

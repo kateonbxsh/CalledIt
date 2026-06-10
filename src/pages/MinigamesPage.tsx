@@ -248,9 +248,10 @@ export function MinigamesPage() {
               );
             })}
           </div>
-          {profile?.pendingSpicyForecast ? (
+          {profile?.pendingSpicyForecasts && profile.pendingSpicyForecasts.length > 0 ? (
             <p className="mt-3 rounded-md bg-citrus/10 p-3 text-xs font-bold text-citrus">
-              Spicy bonus armed: +{profile.pendingSpicyForecast.bonus} on your next win.
+              Spicy bonus armed: +{profile.pendingSpicyForecasts.reduce((sum, b) => sum + b.bonus, 0)} on your next win.
+              {profile.pendingSpicyForecasts.length > 1 && ` (${profile.pendingSpicyForecasts.length} stacked)`}
             </p>
           ) : null}
         </section>

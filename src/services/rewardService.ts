@@ -318,12 +318,15 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
       amount: reward.amount,
       createdAt: serverTimestamp(),
     });
+    const nextPendingForecasts = current.pendingSpicyForecasts ?? [];
+    if (reward.spicyBonus) {
+      nextPendingForecasts.push({ bonus: reward.spicyBonus, claimedAt: Timestamp.now() });
+    }
+
     transaction.update(userRef, {
       coinBalance: Math.max(0, current.coinBalance + reward.amount),
       lastDailyForecastAt: serverTimestamp(),
-      pendingSpicyForecast: reward.spicyBonus
-        ? { bonus: reward.spicyBonus, claimedAt: Timestamp.now() }
-        : current.pendingSpicyForecast ?? null,
+      pendingSpicyForecasts: nextPendingForecasts,
       updatedAt: serverTimestamp(),
     });
   });

@@ -35,10 +35,10 @@ export interface UserProfile {
   isAdmin?: boolean;
   lastRefillAt?: Timestamp | null;
   lastDailyForecastAt?: Timestamp | null;
-  pendingSpicyForecast?: {
+  pendingSpicyForecasts?: Array<{
     bonus: number;
     claimedAt: Timestamp;
-  } | null;
+  }>;
   lastWheelSpinAt?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
