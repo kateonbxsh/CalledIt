@@ -5,6 +5,21 @@ import { rankRanges } from '../utils/ranks';
 export function RankLegend() {
   const [showPopup, setShowPopup] = useState(false);
 
+  // ELO boundaries
+  const boundaries = [
+    { elo: 300, label: '300' },
+    { elo: 1250, label: '1250' },
+    { elo: 1500, label: '1500' },
+    { elo: 1750, label: '1750' },
+    { elo: 2050, label: '2050' },
+    { elo: 2400, label: '2400' },
+    { elo: 2800, label: '2800+' },
+  ];
+
+  const minElo = 300;
+  const maxElo = 2800;
+  const totalRange = maxElo - minElo;
+
   return (
     <>
       {/* Button */}
@@ -28,34 +43,67 @@ export function RankLegend() {
             <div className="w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-lift animate-soft-enter">
               <h2 className="mb-6 text-lg font-black">Rank Ranges</h2>
 
-              {/* Vertical scale with ranks */}
+              {/* Vertical scale with segments */}
               <div className="flex gap-6">
-                {/* Vertical line */}
-                <div className="relative w-1 min-h-96 bg-gradient-to-b from-[#8f5f3d] via-[#6aa6b8] to-[#121417] rounded-full" />
-
-                {/* Rank items */}
-                <div className="space-y-6">
+                {/* Vertical scale bar */}
+                <div className="relative w-3 min-h-96 rounded-full overflow-hidden">
+                  {/* Colored segments */}
                   {rankRanges.map((rank, idx) => {
                     const colorMatch = rank.className.match(/#[0-9a-f]+/i);
                     const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-                    return (
-                      <div key={rank.rank} className="flex items-start gap-3">
-                        {/* Point */}
-                        <div
-                          className="w-3 h-3 rounded-full shadow-soft shrink-0 mt-1"
-                          style={{ backgroundColor: rankColor }}
-                        />
+                    const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
+                    const endElos = [1249, 1499, 1749, 2049, 2399, 2799, 2800];
 
-                        {/* Rank info */}
-                        <div>
-                          <h3 className="font-black text-sm" style={{ color: rankColor }}>
-                            {rank.rank}
-                          </h3>
-                          <p className="text-xs text-ink/50 mt-0.5">
-                            {rank.range}
-                          </p>
-                        </div>
+                    const rangeSize = endElos[idx] - startElos[idx] + 1;
+                    const heightPercent = (rangeSize / totalRange) * 100;
+
+                    return (
+                      <div
+                        key={rank.rank}
+                        style={{
+                          backgroundColor: rankColor,
+                          height: `${heightPercent}%`,
+                        }}
+                      />
+                    );
+                  })}
+
+                  {/* Boundary points */}
+                  {boundaries.map((b, idx) => {
+                    const posPercent = ((b.elo - minElo) / totalRange) * 100;
+                    const rankIndex = Math.min(idx, 6);
+                    const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
+                    const pointColor = colorMatch ? colorMatch[0] : '#121417';
+
+                    return (
+                      <div
+                        key={`point-${b.elo}`}
+                        className="absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white shadow-soft"
+                        style={{
+                          top: `${posPercent}%`,
+                          transform: 'translate(-50%, -50%)',
+                          backgroundColor: pointColor,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Rank items */}
+                <div className="space-y-6 flex-1">
+                  {rankRanges.map((rank) => {
+                    const colorMatch = rank.className.match(/#[0-9a-f]+/i);
+                    const rankColor = colorMatch ? colorMatch[0] : '#121417';
+
+                    return (
+                      <div key={rank.rank}>
+                        <h3 className="font-black text-sm" style={{ color: rankColor }}>
+                          {rank.rank}
+                        </h3>
+                        <p className="text-xs text-ink/50 mt-0.5">
+                          {rank.range}
+                        </p>
                       </div>
                     );
                   })}
