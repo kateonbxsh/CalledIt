@@ -264,7 +264,7 @@ export function Layout() {
           <Link
             to="/create"
             onClick={() => setActionMenuOpen(false)}
-            className="rounded-xl bg-ink px-4 py-3 text-center text-sm font-black text-white transition hover:shadow-soft active:scale-95"
+            className="btn-special rounded-xl px-4 py-3 text-center text-sm font-black"
           >
             Create bet
           </Link>

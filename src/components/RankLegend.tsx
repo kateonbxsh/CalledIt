@@ -1,61 +1,72 @@
 import { rankRanges } from '../utils/ranks';
 
 export function RankLegend() {
-  // Calculate segment widths based on ELO ranges
-  // Bronze: 300-1249 (949)
-  // Silver: 1250-1499 (250)
-  // Gold: 1500-1749 (250)
-  // Platinum: 1750-2049 (300)
-  // Diamond: 2050-2399 (350)
-  // Master: 2400-2799 (400)
-  // Legend: 2800+ (infinite, use fixed)
-
-  const totalWidth = 949 + 250 + 250 + 300 + 350 + 400;
-  const segments = [
-    { width: 949, range: 949 },
-    { width: 250, range: 250 },
-    { width: 250, range: 250 },
-    { width: 300, range: 300 },
-    { width: 350, range: 350 },
-    { width: 400, range: 400 },
+  const ranges = [
+    { elo: 300, label: '300' },
+    { elo: 1250, label: '1250' },
+    { elo: 1500, label: '1500' },
+    { elo: 1750, label: '1750' },
+    { elo: 2050, label: '2050' },
+    { elo: 2400, label: '2400' },
+    { elo: 2800, label: '2800+' },
   ];
 
+  const maxElo = 3200;
+
   return (
-    <div className="space-y-3">
-      {/* Horizontal scale bar */}
-      <div className="flex gap-0 h-8 rounded-lg overflow-hidden border border-line shadow-soft">
+    <div className="space-y-6">
+      {/* Scale line with rank names on top */}
+      <div className="relative pt-8">
+        {/* Rank names positioned absolutely above the line */}
         {rankRanges.map((r, idx) => {
           const colorMatch = r.className.match(/#[0-9a-f]+/i);
           const rankColor = colorMatch ? colorMatch[0] : '#121417';
-          const widthPercent = idx < 6 ? (segments[idx].width / totalWidth) * 100 : 8;
+
+          // Position based on range
+          const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
+          const startPos = ((startElos[idx] - 300) / (maxElo - 300)) * 100;
 
           return (
             <div
               key={r.rank}
-              className="relative group"
+              className="absolute text-xs font-black whitespace-nowrap"
               style={{
-                backgroundColor: rankColor,
-                width: `${widthPercent}%`,
-                opacity: 0.8,
+                color: rankColor,
+                left: `${startPos}%`,
+                top: 0,
+                transform: 'translateX(-50%)',
               }}
-              title={`${r.rank}: ${r.range}`}
             >
-              {/* Tooltip on hover */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-ink text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
-                {r.rank}
-              </div>
+              {r.rank}
             </div>
           );
         })}
-        {/* Infinity indicator */}
-        <div className="text-ink/30 text-xs flex items-center px-1">•••</div>
+
+        {/* Thin line */}
+        <div className="h-0.5 bg-line rounded-full" />
       </div>
 
-      {/* Legend labels */}
-      <div className="flex justify-between text-xs text-ink/50 px-1">
-        <span>300 ELO</span>
-        <span>~1600 ELO</span>
-        <span>2800+ ELO</span>
+      {/* Range markers with values */}
+      <div className="relative h-6">
+        {ranges.map((r) => {
+          const pos = ((r.elo - 300) / (maxElo - 300)) * 100;
+
+          return (
+            <div
+              key={r.elo}
+              className="absolute flex flex-col items-center"
+              style={{
+                left: `${pos}%`,
+                transform: 'translateX(-50%)',
+              }}
+            >
+              {/* Point/dot */}
+              <div className="w-2 h-2 rounded-full bg-ink/30 mb-1" />
+              {/* Value below */}
+              <span className="text-xs text-ink/40">{r.label}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

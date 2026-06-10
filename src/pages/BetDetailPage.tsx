@@ -707,7 +707,7 @@ export function BetDetailPage() {
                   })}
                 </div>
               </div>
-              <div>
+              <div className="rounded-md border border-line bg-white p-4">
                 <h2 className="mb-3 font-bold">Chance History</h2>
                 <ChanceChart bet={bet} snapshots={snapshots} />
               </div>
