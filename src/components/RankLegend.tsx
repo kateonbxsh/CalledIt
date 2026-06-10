@@ -46,49 +46,57 @@ export function RankLegend() {
               {/* Vertical scale with segments */}
               <div className="flex gap-6">
                 {/* Vertical scale bar */}
-                <div className="relative w-3 min-h-96 rounded-full overflow-hidden">
-                  {/* Colored segments */}
-                  {rankRanges.map((rank, idx) => {
-                    const colorMatch = rank.className.match(/#[0-9a-f]+/i);
-                    const rankColor = colorMatch ? colorMatch[0] : '#121417';
+                <div className="relative rounded-full overflow-visible" style={{ width: '6px' }}>
+                  {/* Top padding space */}
+                  <div style={{ height: '20px' }} />
 
-                    const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
-                    const endElos = [1249, 1499, 1749, 2049, 2399, 2799, 2800];
+                  {/* Scale bar container */}
+                  <div className="relative rounded-full overflow-hidden" style={{ width: '6px', minHeight: '300px' }}>
+                    {/* Colored segments */}
+                    {rankRanges.map((rank, idx) => {
+                      const colorMatch = rank.className.match(/#[0-9a-f]+/i);
+                      const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-                    const rangeSize = endElos[idx] - startElos[idx] + 1;
-                    const heightPercent = (rangeSize / totalRange) * 100;
+                      const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
+                      const endElos = [1249, 1499, 1749, 2049, 2399, 2799, 2800];
 
-                    return (
-                      <div
-                        key={rank.rank}
-                        style={{
-                          backgroundColor: rankColor,
-                          height: `${heightPercent}%`,
-                        }}
-                      />
-                    );
-                  })}
+                      const rangeSize = endElos[idx] - startElos[idx] + 1;
+                      const heightPercent = (rangeSize / totalRange) * 100;
 
-                  {/* Boundary points */}
-                  {boundaries.map((b, idx) => {
-                    const posPercent = ((b.elo - minElo) / totalRange) * 100;
-                    const rankIndex = Math.min(idx, 6);
-                    const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
-                    const pointColor = colorMatch ? colorMatch[0] : '#121417';
+                      return (
+                        <div
+                          key={rank.rank}
+                          style={{
+                            backgroundColor: rankColor,
+                            height: `${heightPercent}%`,
+                          }}
+                        />
+                      );
+                    })}
 
-                    return (
-                      <div
-                        key={`point-${b.elo}`}
-                        className="absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-white shadow-soft"
-                        style={{
-                          top: `${posPercent}%`,
-                          transform: 'translate(-50%, -50%)',
-                          backgroundColor: pointColor,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
+                    {/* Boundary points */}
+                    {boundaries.map((b, idx) => {
+                      const posPercent = ((b.elo - minElo) / totalRange) * 100;
+                      const rankIndex = Math.min(idx, 6);
+                      const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
+                      const pointColor = colorMatch ? colorMatch[0] : '#121417';
+
+                      return (
+                        <div
+                          key={`point-${b.elo}`}
+                          className="absolute left-1/2 w-4 h-4 rounded-full border-2 border-white shadow-soft"
+                          style={{
+                            top: `${posPercent}%`,
+                            transform: 'translate(-50%, -50%)',
+                            backgroundColor: pointColor,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  {/* Bottom padding space */}
+                  <div style={{ height: '20px' }} />
 
                 {/* Rank items */}
                 <div className="space-y-6 flex-1">
