@@ -1,122 +1,84 @@
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { rankRanges } from '../utils/ranks';
 
 export function RankLegend() {
-  const ranges = [
-    { elo: 300, label: '300' },
-    { elo: 1250, label: '1250' },
-    { elo: 1500, label: '1500' },
-    { elo: 1750, label: '1750' },
-    { elo: 2050, label: '2050' },
-    { elo: 2400, label: '2400' },
-    { elo: 2800, label: '2800+' },
-  ];
-
-  // ELO ranges for each rank
-  const rankBoundaries = [
-    { start: 300, end: 1249 },
-    { start: 1250, end: 1499 },
-    { start: 1500, end: 1749 },
-    { start: 1750, end: 2049 },
-    { start: 2050, end: 2399 },
-    { start: 2400, end: 2799 },
-    { start: 2800, end: 3200 },
-  ];
+  const [showPopup, setShowPopup] = useState(false);
 
   return (
-    <div className="px-4 py-2 space-y-3">
-      {/* Rank names row */}
-      <div className="flex gap-0 h-4">
-        {rankRanges.map((rank, idx) => {
-          const colorMatch = rank.className.match(/#[0-9a-f]+/i);
-          const rankColor = colorMatch ? colorMatch[0] : '#121417';
-          const boundary = rankBoundaries[idx];
-          const rangeSize = boundary.end - boundary.start + 1;
-          const totalSize = 3200 - 300; // 2900
-          const widthPercent = (rangeSize / totalSize) * 100;
+    <>
+      {/* Button */}
+      <button
+        onClick={() => setShowPopup(true)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-ink/70 hover:bg-field transition"
+      >
+        View ranks
+        <ChevronDown size={16} />
+      </button>
 
-          return (
-            <div
-              key={rank.rank}
-              style={{ width: `${widthPercent}%` }}
-              className="flex items-center justify-center px-0.5 min-w-0"
-            >
-              <span
-                className="text-[10px] font-black whitespace-nowrap text-center truncate"
-                style={{ color: rankColor }}
-                title={rank.rank}
-              >
-                {rank.rank}
-              </span>
+      {/* Popup modal */}
+      {showPopup && (
+        <>
+          <button
+            className="fixed inset-0 z-40"
+            onClick={() => setShowPopup(false)}
+            aria-label="Close"
+          />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-96 max-w-[90vw] rounded-2xl border border-line bg-white p-6 shadow-lift animate-soft-enter max-h-[80vh] overflow-y-auto">
+            <h2 className="mb-4 text-lg font-black">Rank Ranges</h2>
+
+            {/* Vertical scale with ranks */}
+            <div className="relative">
+              {/* Vertical line */}
+              <div className="absolute left-12 top-0 bottom-0 w-1 bg-line rounded-full" />
+
+              {/* Rank items */}
+              <div className="space-y-4">
+                {rankRanges.map((rank, idx) => {
+                  const colorMatch = rank.className.match(/#[0-9a-f]+/i);
+                  const rankColor = colorMatch ? colorMatch[0] : '#121417';
+
+                  // Calculate position on vertical scale
+                  const startElo = [300, 1250, 1500, 1750, 2050, 2400, 2800][idx];
+                  const topPercent = ((startElo - 300) / 2500) * 100; // Scale from 300-2800
+
+                  return (
+                    <div key={rank.rank} className="relative flex items-start gap-4 pl-28">
+                      {/* Point on line */}
+                      <div
+                        className="absolute left-9 w-4 h-4 rounded-full border-4 border-white shadow-soft"
+                        style={{
+                          backgroundColor: rankColor,
+                          top: `${topPercent}%`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      />
+
+                      {/* Rank info */}
+                      <div>
+                        <h3 className="font-black text-sm" style={{ color: rankColor }}>
+                          {rank.rank}
+                        </h3>
+                        <p className="text-xs text-ink/50 mt-0.5">
+                          {rank.range}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Colored segments bar with points */}
-      <div className="relative flex gap-0 h-2 rounded-full overflow-hidden">
-        {/* Colored segments */}
-        {rankRanges.map((rank, idx) => {
-          const colorMatch = rank.className.match(/#[0-9a-f]+/i);
-          const rankColor = colorMatch ? colorMatch[0] : '#121417';
-          const boundary = rankBoundaries[idx];
-          const rangeSize = boundary.end - boundary.start + 1;
-          const totalSize = 3200 - 300;
-          const widthPercent = (rangeSize / totalSize) * 100;
-
-          return (
-            <div
-              key={rank.rank}
-              style={{
-                width: `${widthPercent}%`,
-                backgroundColor: rankColor,
-              }}
-            />
-          );
-        })}
-
-        {/* Points overlay */}
-        {ranges.map((r, idx) => {
-          const eloFromStart = r.elo - 300;
-          const totalSize = 3200 - 300;
-          const posPercent = (eloFromStart / totalSize) * 100;
-          const rankIndex = idx < 6 ? idx : 6;
-          const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
-          const pointColor = colorMatch ? colorMatch[0] : '#121417';
-
-          return (
-            <div
-              key={`point-${r.elo}`}
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
-              style={{ left: `${posPercent}%` }}
+            {/* Close button */}
+            <button
+              onClick={() => setShowPopup(false)}
+              className="mt-6 w-full rounded-xl border border-line bg-field px-3 py-2 text-sm font-bold text-ink transition hover:bg-line active:scale-95"
             >
-              {/* Point */}
-              <div
-                className="w-3 h-3 rounded-full shadow-soft"
-                style={{ backgroundColor: pointColor }}
-              />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ELO values row below */}
-      <div className="relative h-5">
-        {ranges.map((r) => {
-          const eloFromStart = r.elo - 300;
-          const totalSize = 3200 - 300;
-          const posPercent = (eloFromStart / totalSize) * 100;
-
-          return (
-            <div
-              key={`label-${r.elo}`}
-              className="absolute text-xs text-ink/40 whitespace-nowrap"
-              style={{ left: `${posPercent}%`, transform: 'translateX(-50%)' }}
-            >
-              {r.label}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+              Close
+            </button>
+          </div>
+        </>
+      )}
+    </>
   );
 }
