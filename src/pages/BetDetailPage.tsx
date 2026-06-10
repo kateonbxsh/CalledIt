@@ -486,6 +486,7 @@ export function BetDetailPage() {
         return 0;
       })
     : predictions;
+  const linkedGroup = bet.groupId ? groups.find((group) => group.id === bet.groupId) : null;
 
   return (
     <>
@@ -501,6 +502,11 @@ export function BetDetailPage() {
                 @{bet.creatorUsername}
               </Link>
               <span className="rounded-full bg-field px-2.5 py-1 text-xs font-black text-ink/65">{bet.category || 'General'}</span>
+              {bet.groupId ? (
+                <span className="rounded-full bg-sky/10 px-2.5 py-1 text-xs font-black text-sky">
+                  {linkedGroup ? `Group: ${linkedGroup.name}` : 'Group bet'}
+                </span>
+              ) : null}
               <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
                 bet.status === 'open' ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-coral/12 text-coral'
               }`}>
@@ -532,6 +538,11 @@ export function BetDetailPage() {
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
       {bet.visibility === 'private' ? (
         <section className="mb-4 rounded-md border border-line bg-white p-4">
+          {bet.groupId ? (
+            <div className="mb-3 rounded-md bg-sky/10 px-3 py-2 text-sm font-bold text-sky">
+              Linked to {linkedGroup?.name ?? 'a friend group'}
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-xs font-black uppercase text-ink/35">Invited</p>

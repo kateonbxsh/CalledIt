@@ -208,14 +208,14 @@ export function Layout() {
       ) : null}
 
       {/* Mobile app controls */}
-      <div className={`fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between bg-[#edf0e8]/92 px-3 backdrop-blur-md transition lg:hidden ${
+      <div className={`pointer-events-none fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between px-3 transition lg:hidden ${
         mobileNavOpen ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}>
         {canGoBack ? (
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
+            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
             aria-label="Go back"
             title="Back"
           >
@@ -225,7 +225,7 @@ export function Layout() {
         <button
           type="button"
           onClick={() => setMobileNavOpen(true)}
-          className="grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
+          className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
           aria-label="Open navigation"
           title="Menu"
         >
