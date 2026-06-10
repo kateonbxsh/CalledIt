@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { Cloud, Zap } from 'lucide-react';
 
 interface GameState {
   x: number;
@@ -9,7 +8,6 @@ interface GameState {
   angle: number;
   isLanded: boolean;
   crashed: boolean;
-  fuel: number;
 }
 
 interface Obstacle {
@@ -23,15 +21,14 @@ interface Obstacle {
 interface Platform {
   x: number;
   width: number;
-  quality: 'good' | 'ok' | 'risky';
+  color: string;
 }
 
-const GAME_WIDTH = 400;
-const GAME_HEIGHT = 600;
+const GAME_WIDTH = 420;
+const GAME_HEIGHT = 700;
 const GRAVITY = 0.25;
 const MAX_VELOCITY = 15;
 const BOOST_STRENGTH = -7;
-const AIRPLANE_SIZE = 20;
 
 export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, score: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,25 +36,28 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
   const [gameOver, setGameOver] = useState(false);
   const [gameState, setGameState] = useState<GameState>({
     x: GAME_WIDTH / 2,
-    y: 40,
+    y: 50,
     velocityY: 1,
     velocityX: 0,
     angle: 0,
     isLanded: false,
     crashed: false,
-    fuel: 100,
   });
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [score, setScore] = useState(0);
   const [landingQuality, setLandingQuality] = useState<'perfect' | 'good' | 'ok' | 'crash' | null>(null);
+  const [particles, setParticles] = useState<Array<{ x: number; y: number; vx: number; vy: number; life: number }>>([]);
   const gameStateRef = useRef(gameState);
   const obstaclesRef = useRef(obstacles);
   const scoreRef = useRef(score);
-  const platformsRef = useRef<Platform[]>([
-    { x: 40, width: 70, quality: 'good' },
-    { x: 160, width: 80, quality: 'ok' },
-    { x: 290, width: 70, quality: 'good' },
-  ]);
+  const particlesRef = useRef(particles);
+  const keysPressed = useRef<Record<string, boolean>>({});
+
+  const platforms: Platform[] = [
+    { x: 30, width: 80, color: '#4CAF50' },
+    { x: 165, width: 90, color: '#FFC107' },
+    { x: 310, width: 80, color: '#FF9800' },
+  ];
 
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -68,61 +68,102 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
   }, [obstacles]);
 
   useEffect(() => {
-    scoreRef.useRef = score;
-  }, [score]);
+    particlesRef.current = particles;
+  }, [particles]);
 
   useEffect(() => {
     if (!gameStarted) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      keysPressed.current[e.key.toLowerCase()] = true;
+      if (e.key === ' ') {
+        e.preventDefault();
+        setGameState((prev) => ({ ...prev, velocityY: BOOST_STRENGTH }));
+      }
+    };
 
-    let animationId: number;
-    let obstacleSpawner: NodeJS.Timeout;
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysPressed.current[e.key.toLowerCase()] = false;
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches[0].clientY < window.innerHeight / 2) {
+        setGameState((prev) => ({ ...prev, velocityY: BOOST_STRENGTH }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('touchstart', handleTouchStart);
+    };
+  }, [gameStarted]);
+
+  useEffect(() => {
+    if (!gameStarted || gameOver) return;
 
     const gameLoop = () => {
       const state = gameStateRef.current;
-      if (state.crashed || state.isLanded || gameOver) return;
 
-      // Physics
+      // Keyboard input
+      let newVelocityX = state.velocityX * 0.98;
+      if (keysPressed.current['arrowleft'] || keysPressed.current['a']) {
+        newVelocityX = Math.max(-8, newVelocityX - 0.5);
+      }
+      if (keysPressed.current['arrowright'] || keysPressed.current['d']) {
+        newVelocityX = Math.min(8, newVelocityX + 0.5);
+      }
+
       let newVelocityY = Math.min(state.velocityY + GRAVITY, MAX_VELOCITY);
-      let newVelocityX = state.velocityX * 0.98; // Air resistance
       let newX = state.x + newVelocityX;
       let newY = state.y + newVelocityY;
 
-      // Boundary wrapping
+      // Wrapping
       if (newX < 0) newX = GAME_WIDTH;
       if (newX > GAME_WIDTH) newX = 0;
 
-      // Angle based on velocity
-      const newAngle = Math.min(Math.max(newVelocityY / 2, -30), 30);
-
       // Spawn obstacles
-      if (Math.random() < 0.015 && obstaclesRef.current.length < 8) {
-        const newObstacle: Obstacle = {
-          id: Math.random().toString(),
-          x: Math.random() * GAME_WIDTH,
-          y: -30,
-          type: ['coin', 'coin', 'storm', 'wind'][Math.floor(Math.random() * 4)] as 'coin' | 'storm' | 'wind',
-        };
-        setObstacles([...obstaclesRef.current, newObstacle]);
+      if (Math.random() < 0.016 && obstaclesRef.current.length < 10) {
+        const type = Math.random() < 0.5 ? 'coin' : Math.random() < 0.7 ? 'storm' : 'wind';
+        setObstacles([
+          ...obstaclesRef.current,
+          {
+            id: Math.random().toString(),
+            x: Math.random() * GAME_WIDTH,
+            y: -30,
+            type,
+          },
+        ]);
       }
 
       // Update obstacles
       const newObstacles = obstaclesRef.current
-        .map((obs) => ({ ...obs, y: obs.y + 3 }))
+        .map((obs) => ({ ...obs, y: obs.y + 3.5 }))
         .filter((obs) => obs.y < GAME_HEIGHT + 50);
 
-      // Check obstacle collisions
+      // Check collisions
       newObstacles.forEach((obs) => {
         const dist = Math.sqrt((newX - obs.x) ** 2 + (newY - obs.y) ** 2);
-        if (dist < 30 && !obs.collected) {
+        if (dist < 35 && !obs.collected) {
           if (obs.type === 'coin') {
-            setScore(scoreRef.current + 15);
+            setScore((s) => s + 15);
+            // Particle burst
+            const newParticles = Array.from({ length: 6 }, (_, i) => ({
+              x: obs.x,
+              y: obs.y,
+              vx: Math.cos((i / 6) * Math.PI * 2) * 4,
+              vy: Math.sin((i / 6) * Math.PI * 2) * 4 - 2,
+              life: 1,
+            }));
+            setParticles([...particlesRef.current, ...newParticles]);
           } else if (obs.type === 'storm') {
-            newVelocityY += 3;
-          } else if (obs.type === 'wind') {
-            newVelocityX += (Math.random() - 0.5) * 4;
+            newVelocityY += 2.5;
+          } else {
+            newVelocityX += (Math.random() - 0.5) * 3;
           }
           obs.collected = true;
         }
@@ -130,74 +171,57 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
 
       setObstacles(newObstacles.filter((obs) => !obs.collected));
 
+      // Update particles
+      const newParticles = particlesRef.current
+        .map((p) => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, vy: p.vy + 0.3, life: p.life - 0.02 }))
+        .filter((p) => p.life > 0);
+      setParticles(newParticles);
+
       // Check landing
-      const landingZone = platformsRef.current.find(
-        (p) => newY >= GAME_HEIGHT - 60 && newX >= p.x && newX <= p.x + p.width,
-      );
+      const angle = Math.min(Math.max(newVelocityY / 2, -30), 30);
+      const landingZone = platforms.find((p) => newY >= GAME_HEIGHT - 80 && newX >= p.x && newX <= p.x + p.width);
 
-      if (newY >= GAME_HEIGHT - 60) {
+      if (newY >= GAME_HEIGHT - 80) {
+        const speed = Math.abs(newVelocityY);
+        let quality: 'perfect' | 'good' | 'ok' = 'ok';
+        let bonus = 0;
+
+        if (speed < 2 && Math.abs(newVelocityX) < 1 && landingZone) {
+          quality = 'perfect';
+          bonus = 100;
+        } else if (speed < 4 && Math.abs(newVelocityX) < 2 && landingZone) {
+          quality = 'good';
+          bonus = 50;
+        }
+
         if (landingZone) {
-          const speedFactor = Math.abs(newVelocityY);
-          let quality: 'perfect' | 'good' | 'ok' = 'ok';
-          let bonusScore = 0;
-
-          if (speedFactor < 2 && Math.abs(newVelocityX) < 1) {
-            quality = 'perfect';
-            bonusScore = 100;
-          } else if (speedFactor < 4 && Math.abs(newVelocityX) < 2) {
-            quality = 'good';
-            bonusScore = 50;
-          }
-
           setLandingQuality(quality);
-          setScore(scoreRef.current + bonusScore);
-          setGameState({ ...state, y: GAME_HEIGHT - 60, isLanded: true, velocityY: 0 });
+          setGameState({ ...state, y: GAME_HEIGHT - 80, isLanded: true, velocityY: 0, angle });
           setGameOver(true);
-          onGameEnd(true, scoreRef.current + bonusScore);
-          return;
+          onGameEnd(true, scoreRef.current + bonus);
         } else {
           setLandingQuality('crash');
-          setGameState({ ...state, crashed: true });
+          setGameState({ ...state, crashed: true, angle });
           setGameOver(true);
-          onGameEnd(false, Math.floor(scoreRef.current * 0.5));
-          return;
+          onGameEnd(false, Math.floor(scoreRef.current * 0.4));
         }
-      }
-
-      setGameState({
-        ...state,
-        x: newX,
-        y: newY,
-        velocityY: newVelocityY,
-        velocityX: newVelocityX,
-        angle: newAngle,
-      });
-
-      animationId = requestAnimationFrame(gameLoop);
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === ' ' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        setGameState((prev) => ({ ...prev, velocityY: BOOST_STRENGTH, fuel: Math.max(0, prev.fuel - 15) }));
-      } else if (e.key === 'ArrowLeft') {
-        setGameState((prev) => ({ ...prev, velocityX: Math.max(-8, prev.velocityX - 1) }));
-      } else if (e.key === 'ArrowRight') {
-        setGameState((prev) => ({ ...prev, velocityX: Math.min(8, prev.velocityX + 1) }));
+      } else {
+        setGameState({
+          ...state,
+          x: newX,
+          y: newY,
+          velocityY: newVelocityY,
+          velocityX: newVelocityX,
+          angle,
+        });
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    animationId = requestAnimationFrame(gameLoop);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      cancelAnimationFrame(animationId);
-      clearInterval(obstacleSpawner);
-    };
+    const id = requestAnimationFrame(gameLoop);
+    return () => cancelAnimationFrame(id);
   }, [gameStarted, gameOver, onGameEnd]);
 
-  // Draw canvas
+  // Draw
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -205,42 +229,51 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Sky gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
-    gradient.addColorStop(0, '#87ceeb');
-    gradient.addColorStop(1, '#e0f6ff');
-    ctx.fillStyle = gradient;
+    // Sky
+    const sky = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+    sky.addColorStop(0, '#87CEEB');
+    sky.addColorStop(1, '#E0F6FF');
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
     // Clouds
-    for (let i = 0; i < 3; i++) {
-      const cloudY = 50 + i * 100;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    [50, 180, 320].forEach((y, i) => {
       ctx.beginPath();
-      ctx.ellipse(100 + i * 120, cloudY, 60, 25, 0, 0, Math.PI * 2);
+      ctx.ellipse(80 + i * 140, y, 55, 22, 0, 0, Math.PI * 2);
       ctx.fill();
-    }
+    });
 
     // Water
-    ctx.fillStyle = '#1e90ff';
-    ctx.fillRect(0, GAME_HEIGHT - 50, GAME_WIDTH, 50);
-    ctx.strokeStyle = '#0066cc';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 10; i++) {
+    const water = ctx.createLinearGradient(0, GAME_HEIGHT - 80, 0, GAME_HEIGHT);
+    water.addColorStop(0, '#1E90FF');
+    water.addColorStop(1, '#0055BB');
+    ctx.fillStyle = water;
+    ctx.fillRect(0, GAME_HEIGHT - 80, GAME_WIDTH, 80);
+
+    // Wave pattern
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 6; i++) {
       ctx.beginPath();
-      ctx.moveTo(i * 50, GAME_HEIGHT - 40);
-      ctx.bezierCurveTo(i * 50 + 15, GAME_HEIGHT - 45, i * 50 + 25, GAME_HEIGHT - 35, i * 50 + 40, GAME_HEIGHT - 40);
+      ctx.moveTo(i * 70, GAME_HEIGHT - 50);
+      ctx.quadraticCurveTo(i * 70 + 20, GAME_HEIGHT - 55, i * 70 + 40, GAME_HEIGHT - 50);
       ctx.stroke();
     }
 
-    // Platforms
-    platformsRef.current.forEach((platform, idx) => {
-      const colors = ['#4CAF50', '#FFC107', '#FF9800'];
-      ctx.fillStyle = colors[idx];
-      ctx.fillRect(platform.x, GAME_HEIGHT - 50, platform.width, 15);
-      ctx.strokeStyle = '#333';
+    // Landing platforms
+    platforms.forEach((platform) => {
+      ctx.fillStyle = platform.color;
+      ctx.fillRect(platform.x, GAME_HEIGHT - 80, platform.width, 20);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
       ctx.lineWidth = 2;
-      ctx.strokeRect(platform.x, GAME_HEIGHT - 50, platform.width, 15);
+      ctx.strokeRect(platform.x, GAME_HEIGHT - 80, platform.width, 20);
+
+      // Platform label
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.font = 'bold 11px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText('LAND', platform.x + platform.width / 2, GAME_HEIGHT - 60);
     });
 
     // Airplane
@@ -248,37 +281,29 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
     ctx.translate(gameState.x, gameState.y);
     ctx.rotate((gameState.angle * Math.PI) / 180);
 
-    // Airplane body
-    ctx.fillStyle = gameState.crashed ? '#FF6B6B' : '#FFD700';
+    ctx.fillStyle = gameState.crashed ? '#FF5252' : '#FFD700';
     ctx.beginPath();
-    ctx.ellipse(0, 0, 22, 12, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, 24, 14, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#333';
+
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Cockpit
     ctx.fillStyle = '#333';
     ctx.beginPath();
-    ctx.arc(8, -2, 4, 0, Math.PI * 2);
+    ctx.arc(10, -3, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Wings
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(-15, -3);
-    ctx.lineTo(-25, -8);
+    ctx.moveTo(-12, -4);
+    ctx.lineTo(-26, -10);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(15, -3);
-    ctx.lineTo(25, -8);
-    ctx.stroke();
-
-    // Tail
-    ctx.beginPath();
-    ctx.moveTo(-20, 0);
-    ctx.lineTo(-28, 5);
+    ctx.moveTo(12, -4);
+    ctx.lineTo(26, -10);
     ctx.stroke();
 
     ctx.restore();
@@ -288,109 +313,105 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
       if (obs.type === 'coin') {
         ctx.fillStyle = '#FFD700';
         ctx.beginPath();
-        ctx.arc(obs.x, obs.y, 8, 0, Math.PI * 2);
+        ctx.arc(obs.x, obs.y, 9, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#FF8C00';
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.fillStyle = '#FF8C00';
-        ctx.fillText('$', obs.x - 3, obs.y + 3);
       } else if (obs.type === 'storm') {
-        ctx.fillStyle = '#4A4A4A';
-        for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = '#505050';
+        [0, 6, 12].forEach((offset) => {
           ctx.beginPath();
-          ctx.arc(obs.x - 6 + i * 6, obs.y - 3, 5, 0, Math.PI * 2);
+          ctx.arc(obs.x - 6 + offset, obs.y - 2, 6, 0, Math.PI * 2);
           ctx.fill();
-        }
+        });
       } else {
         ctx.fillStyle = '#87CEEB';
         ctx.beginPath();
-        ctx.moveTo(obs.x, obs.y - 10);
-        ctx.lineTo(obs.x - 8, obs.y + 10);
-        ctx.lineTo(obs.x + 8, obs.y + 10);
+        ctx.moveTo(obs.x, obs.y - 12);
+        ctx.lineTo(obs.x - 10, obs.y + 12);
+        ctx.lineTo(obs.x + 10, obs.y + 12);
         ctx.closePath();
         ctx.fill();
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
+    });
+
+    // Particles
+    particles.forEach((p) => {
+      ctx.fillStyle = `rgba(255, 215, 0, ${p.life})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      ctx.fill();
     });
 
     // UI
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 16px Inter, sans-serif';
-    ctx.fillText(`Score: ${score}`, 15, 30);
-    ctx.font = '12px Inter, sans-serif';
-    ctx.fillText('↑ SPACE / ↑↓← → Arrows', 15, GAME_HEIGHT - 15);
-  }, [gameState, obstacles, score]);
+    ctx.font = 'bold 18px Inter';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Score: ${score}`, 15, 35);
+
+    ctx.font = '11px Inter';
+    ctx.fillStyle = '#333';
+    ctx.fillText('SPACE or TAP to boost • Arrow keys to steer', 15, GAME_HEIGHT - 15);
+  }, [gameState, obstacles, score, particles]);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4">
+    <div className="flex flex-col items-center justify-center gap-4 w-full">
       {!gameStarted ? (
-        <div className="text-center space-y-4">
-          <div className="text-5xl">✈️</div>
-          <h3 className="text-xl font-black">Airplane Landing</h3>
-          <p className="text-sm text-ink/60 max-w-xs">
-            Guide your plane to a safe landing. Collect coins for bonuses, avoid storms and wind gusts. Land smoothly for extra points!
+        <div className="text-center space-y-4 p-4">
+          <div className="text-6xl animate-bounce">✈️</div>
+          <h3 className="text-2xl font-black">Airplane Landing</h3>
+          <p className="text-sm text-ink/60 max-w-sm leading-relaxed">
+            Guide your plane safely to a landing platform. Collect coins for bonus points, avoid storms and wind. Land smoothly for extra rewards!
           </p>
+          <div className="flex gap-3 justify-center text-xs text-ink/40">
+            <span>🪙 +15pts</span>
+            <span>⛈️ -gravity</span>
+            <span>💨 drift</span>
+          </div>
           <button
             onClick={() => {
               setGameStarted(true);
               setGameOver(false);
-              setGameState({
-                x: GAME_WIDTH / 2,
-                y: 40,
-                velocityY: 1,
-                velocityX: 0,
-                angle: 0,
-                isLanded: false,
-                crashed: false,
-                fuel: 100,
-              });
+              setGameState({ x: GAME_WIDTH / 2, y: 50, velocityY: 1, velocityX: 0, angle: 0, isLanded: false, crashed: false });
               setScore(0);
               setObstacles([]);
+              setParticles([]);
               setLandingQuality(null);
             }}
-            className="mt-4 rounded-xl bg-sky px-6 py-3 text-sm font-bold text-white"
+            className="mt-4 rounded-xl bg-sky px-8 py-3 text-sm font-bold text-white shadow-soft hover:shadow-lift transition"
           >
             Start flying
           </button>
         </div>
       ) : (
-        <>
+        <div className="relative w-full flex justify-center">
           <canvas
             ref={canvasRef}
             width={GAME_WIDTH}
             height={GAME_HEIGHT}
-            className="rounded-2xl border-4 border-white shadow-lift max-w-full"
+            className="rounded-3xl border-4 border-white shadow-lift w-full max-w-lg"
+            style={{ aspectRatio: `${GAME_WIDTH}/${GAME_HEIGHT}` }}
           />
           {gameOver && (
-            <div className="text-center space-y-3 animate-reward-pop">
-              <div
-                className={`text-4xl ${
-                  gameState.isLanded
-                    ? landingQuality === 'perfect'
-                      ? 'text-mint'
-                      : landingQuality === 'good'
-                        ? 'text-sky'
-                        : 'text-ink'
-                    : 'text-coral'
-                }`}
-              >
-                {gameState.isLanded ? (landingQuality === 'perfect' ? '🎯' : landingQuality === 'good' ? '✓' : '✓') : '💥'}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 animate-reward-pop pointer-events-none">
+              <div className={`text-6xl drop-shadow-lg ${gameState.isLanded ? 'text-mint animate-bounce' : 'text-coral animate-bounce'}`}>
+                {gameState.isLanded ? (landingQuality === 'perfect' ? '🎯' : '✅') : '💥'}
               </div>
-              <div>
-                <p className={`font-black text-lg ${gameState.isLanded ? 'text-mint' : 'text-coral'}`}>
-                  {gameState.isLanded
-                    ? landingQuality === 'perfect'
-                      ? 'Perfect landing!'
-                      : landingQuality === 'good'
-                        ? 'Great landing!'
-                        : 'Safe landing'
-                    : 'Crashed!'}
+              <div className="text-center drop-shadow-lg">
+                <p className={`font-black text-xl ${gameState.isLanded ? 'text-mint' : 'text-coral'}`}>
+                  {gameState.isLanded ? (landingQuality === 'perfect' ? 'Perfect landing!' : landingQuality === 'good' ? 'Great landing!' : 'Safe landing') : 'Crashed!'}
                 </p>
-                <p className="text-sm text-ink/60">Score: {gameState.isLanded ? score : Math.floor(score * 0.5)}</p>
+                <p className="text-sm text-ink/70 font-semibold">
+                  Score: {gameState.isLanded ? score : Math.floor(score * 0.4)}
+                </p>
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
