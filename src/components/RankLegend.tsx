@@ -20,7 +20,7 @@ export function RankLegend() {
   const getX = (elo: number) => ((elo - 300) / (maxElo - 300)) * SVG_WIDTH;
 
   return (
-    <div className="space-y-4">
+    <div className="px-4 py-2">
       <svg
         width="100%"
         height={SVG_HEIGHT}
