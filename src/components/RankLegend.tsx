@@ -12,8 +12,8 @@ export function RankLegend() {
   ];
 
   const SVG_WIDTH = 1000;
-  const SVG_HEIGHT = 120;
-  const LINE_Y = 60;
+  const SVG_HEIGHT = 60;
+  const LINE_Y = 30;
   const maxElo = 3200;
 
   // Calculate x position for any ELO value
@@ -24,7 +24,7 @@ export function RankLegend() {
       <svg
         width="100%"
         height={SVG_HEIGHT}
-        viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+        viewBox={`-30 0 ${SVG_WIDTH + 60} ${SVG_HEIGHT}`}
         preserveAspectRatio="none"
         className="w-full"
       >
@@ -64,11 +64,11 @@ export function RankLegend() {
             <text
               key={`name-${rank.rank}`}
               x={x}
-              y={LINE_Y - 15}
+              y={8}
               textAnchor="middle"
               className="text-xs font-black"
               fill={rankColor}
-              fontSize="12"
+              fontSize="11"
               fontWeight="900"
             >
               {rank.rank}
@@ -93,12 +93,12 @@ export function RankLegend() {
               {/* Value below */}
               <text
                 x={x}
-                y={LINE_Y + 20}
+                y={48}
                 textAnchor="middle"
                 className="text-xs"
                 fill="#121417"
                 fillOpacity="0.6"
-                fontSize="11"
+                fontSize="10"
               >
                 {r.label}
               </text>
