@@ -426,7 +426,7 @@ export function CreateBetPage() {
             )}
           </section>
           {error ? <p className="rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
-          <button disabled={busy} className="w-full rounded-md bg-ink px-4 py-3 font-semibold text-white disabled:opacity-60">
+          <button disabled={busy} className="btn-special w-full rounded-md px-4 py-3 font-semibold disabled:opacity-60">
             {busy ? 'Creating…' : 'Create bet'}
           </button>
         </aside>

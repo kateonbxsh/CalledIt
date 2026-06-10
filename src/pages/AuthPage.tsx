@@ -164,7 +164,7 @@ export function AuthPage() {
 
             <button
               disabled={busy}
-              className="mt-1 w-full rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 disabled:opacity-60"
+              className="btn-special mt-1 w-full rounded-xl px-4 py-3 text-sm font-bold disabled:opacity-60"
             >
               {busy
                 ? 'Working…'

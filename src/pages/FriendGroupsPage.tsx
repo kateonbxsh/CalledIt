@@ -96,7 +96,7 @@ export function FriendGroupsPage() {
         action={
           <button
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
+            className="btn-special inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold"
           >
             <Plus size={17} /> New Group
           </button>
@@ -145,7 +145,7 @@ export function FriendGroupsPage() {
               <button
                 type="submit"
                 disabled={busy}
-                className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="btn-special rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
               >
                 {busy ? 'Saving…' : 'Save'}
               </button>

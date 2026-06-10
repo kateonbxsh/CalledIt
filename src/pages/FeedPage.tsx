@@ -87,7 +87,7 @@ export function FeedPage() {
         action={
           <Link
             to="/create"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
+            className="btn-special inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold"
           >
             <Plus size={17} /> Create
           </Link>

@@ -1054,7 +1054,7 @@ export function BetDetailPage() {
                   </div>
                 ) : null}
 
-                <button disabled={busy} className="w-full rounded-xl bg-ink px-4 py-3 font-bold text-white disabled:opacity-60">
+                <button disabled={busy} className="btn-special w-full rounded-xl px-4 py-3 font-bold disabled:opacity-60">
                   {busy ? 'Submitting...' : myPrediction ? 'Update prediction' : 'Submit prediction'}
                 </button>
               </form>
@@ -1188,7 +1188,7 @@ export function BetDetailPage() {
               <span className="text-xs font-semibold text-ink/40">{commentBody.trim().length}/1000</span>
               <button
                 disabled={commentBusy || !commentBody.trim()}
-                className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-white transition active:scale-95 disabled:opacity-50"
+                className="btn-special rounded-md px-4 py-2 text-sm font-bold disabled:opacity-50"
               >
                 {commentBusy ? 'Posting...' : 'Post'}
               </button>
@@ -1409,7 +1409,7 @@ export function BetDetailPage() {
               >
                 Cancel
               </button>
-              <button disabled={busy || editImageBusy} className="flex-1 rounded-md bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+              <button disabled={busy || editImageBusy} className="btn-special flex-1 rounded-md px-4 py-3 text-sm font-bold disabled:opacity-60">
                 {busy ? 'Saving...' : 'Save changes'}
               </button>
             </div>

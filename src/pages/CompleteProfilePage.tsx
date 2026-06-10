@@ -70,7 +70,7 @@ export function CompleteProfilePage() {
             />
           </label>
           {error ? <p className="rounded-lg bg-coral/10 px-3 py-2 text-xs font-medium text-coral">{error}</p> : null}
-          <button disabled={busy} className="w-full rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+          <button disabled={busy} className="btn-special w-full rounded-xl px-4 py-3 text-sm font-bold disabled:opacity-60">
             {busy ? 'Saving...' : 'Continue'}
           </button>
         </form>

@@ -194,13 +194,12 @@ export function ChallengesPage() {
         title="Challenges"
         description="Weekly proof challenges and coin-backed wagers."
         action={
-          <button
-            type="button"
-            onClick={() => setWagerModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-bold text-white"
+          <Link
+            to="/create-wager"
+            className="btn-special inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-bold"
           >
             <Target size={17} /> Create wager
-          </button>
+          </Link>
         }
       />
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
@@ -237,7 +236,7 @@ export function ChallengesPage() {
               <button
                 type="button"
                 onClick={() => setWeeklyModalOpen(true)}
-                className="rounded-md bg-ink px-4 py-3 text-sm font-bold text-white"
+                className="btn-special rounded-md px-4 py-3 text-sm font-bold"
               >
                 Open weekly challenges
               </button>
@@ -457,7 +456,7 @@ export function ChallengesPage() {
             <button
               onClick={() => completeWeekly(weeklyModalChallenge)}
               disabled={!!busy}
-              className="mt-4 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-45"
+              className="btn-special mt-4 w-full rounded-md px-4 py-3 text-sm font-bold disabled:opacity-45"
             >
               {busy === `weekly-${weeklyModalChallenge.id}` ? 'Completing...' : 'Complete challenge'}
             </button>
@@ -532,7 +531,7 @@ export function ChallengesPage() {
                     <button
                       onClick={() => setWeeklyModalChallenge(activeWeekly)}
                       disabled={completedWeeklyIds.has(activeWeekly.id) || !!busy}
-                      className="mt-4 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-45"
+                      className="btn-special mt-4 w-full rounded-md px-4 py-3 text-sm font-bold disabled:opacity-45"
                     >
                       {completedWeeklyIds.has(activeWeekly.id) ? 'Completed' : 'Complete this challenge'}
                     </button>
@@ -562,7 +561,7 @@ export function ChallengesPage() {
             </div>
             <button
               onClick={() => setWeeklyReward(null)}
-              className="mt-5 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white"
+              className="mt-5 w-full rounded-md border border-line bg-white px-4 py-3 text-sm font-bold text-ink hover:bg-field transition"
             >
               Nice
             </button>
