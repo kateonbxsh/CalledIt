@@ -273,40 +273,34 @@ export function ChallengesPage() {
                   : (activity.creatorDisplayName || activity.creatorUsername);
                 return (
                   <article key={activity.id} className="rounded-md border border-line bg-white p-4 shadow-soft">
+                    <div className="relative mb-2">
+                      {/* Group badge aligned to far right */}
+                      {activity.groupId && groups.find(g => g.id === activity.groupId) && (
+                        <div className="absolute right-0 top-0 flex items-center gap-1.5 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/60">
+                          <Users size={12} />
+                          {groups.find(g => g.id === activity.groupId)?.name}
+                        </div>
+                      )}
+                      {/* Left side badges and info */}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-40">
+                        <Link to={`/profile/${actorId}`} className="text-xs font-semibold text-ink/45 hover:text-ink hover:underline">
+                          @{actorUsername}
+                        </Link>
+                        {activity.type === 'wager' ? (
+                          <span className="rounded-full bg-citrus/10 px-2 py-0.5 text-xs font-black text-citrus">wager</span>
+                        ) : (
+                          <span className="rounded-full bg-mint/10 px-2 py-0.5 text-xs font-black text-mint">weekly</span>
+                        )}
+                        <span className="text-xs font-semibold text-ink/35">
+                          {activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-black ${statusStyle(activity.status)}`}>
+                          {activity.status}
+                        </span>
+                      </div>
+                    </div>
                     <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
                       <div className="min-w-0">
-                      <div className="mb-2 flex flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <Link to={`/profile/${actorId}`} className="text-xs font-semibold text-ink/45 hover:text-ink hover:underline">
-                            @{actorUsername}
-                          </Link>
-                          {activity.type === 'wager' ? (
-                            <span className="rounded-full bg-citrus/10 px-2 py-0.5 text-xs font-black text-citrus">wager</span>
-                          ) : (
-                            <span className="rounded-full bg-mint/10 px-2 py-0.5 text-xs font-black text-mint">weekly</span>
-                          )}
-                          <span className="text-xs font-semibold text-ink/35">
-                            {activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}
-                          </span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-black ${statusStyle(activity.status)}`}>
-                            {activity.status}
-                          </span>
-                        </div>
-                        {/* Group badge and reward on same row, aligned right */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 sm:mt-2">
-                          {activity.groupId && groups.find(g => g.id === activity.groupId) ? (
-                            <div className="flex items-center gap-1.5 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/60">
-                              <Users size={12} />
-                              {groups.find(g => g.id === activity.groupId)?.name}
-                            </div>
-                          ) : null}
-                          {activity.type === 'completion' && activity.reward ? (
-                            <div className="inline-flex shrink-0 rounded-md bg-citrus/10 px-2.5 py-1">
-                              <CoinAmount amount={activity.reward} className="text-sm" />
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
                       {activity.type === 'completion' ? (
                         <h2 className="text-base leading-snug">
                           <span className="font-black">{actorDisplayName}</span>
