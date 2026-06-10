@@ -98,13 +98,14 @@ export function UsernamePicker({
         />
       </div>
       {results.length > 0 ? (
-        <div className="mt-1 overflow-hidden rounded-md border border-line bg-white shadow-soft">
+        <div className="relative z-50 mt-1 overflow-hidden rounded-md border border-line bg-white shadow-soft">
           {results.map((user) => (
             <button
               key={user.uid}
               type="button"
               onClick={() => add(user.username)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-field"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-field active:bg-field"
+              style={{ WebkitTouchCallout: 'none' }}
             >
               <Avatar name={user.displayName || user.username} src={user.photoURL} />
               <span className="min-w-0">
