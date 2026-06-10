@@ -42,31 +42,32 @@ export function RankLegend() {
         })}
       </div>
 
-      {/* Colored scale bar with sections */}
-      <div className="relative h-1 rounded-full overflow-hidden flex">
-        {rankRanges.map((r, idx) => {
-          const colorMatch = r.className.match(/#[0-9a-f]+/i);
-          const rankColor = colorMatch ? colorMatch[0] : '#121417';
+      {/* Colored scale bar with overlaid points and values */}
+      <div className="relative">
+        {/* Colored bar */}
+        <div className="h-1 rounded-full overflow-hidden flex">
+          {rankRanges.map((r, idx) => {
+            const colorMatch = r.className.match(/#[0-9a-f]+/i);
+            const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-          // Calculate segment widths based on ELO ranges
-          const widths = [949, 250, 250, 300, 350, 400, 400]; // Legend gets fixed width
-          const totalWidth = widths.slice(0, 6).reduce((a, b) => a + b, 0);
-          const widthPercent = idx < 6 ? (widths[idx] / totalWidth) * 100 : 8;
+            // Calculate segment widths
+            const widths = [949, 250, 250, 300, 350, 400, 400];
+            const totalWidth = widths.slice(0, 6).reduce((a, b) => a + b, 0);
+            const widthPercent = idx < 6 ? (widths[idx] / totalWidth) * 100 : 8;
 
-          return (
-            <div
-              key={r.rank}
-              style={{
-                backgroundColor: rankColor,
-                width: idx < 6 ? `${widthPercent}%` : '8%',
-              }}
-            />
-          );
-        })}
-      </div>
+            return (
+              <div
+                key={r.rank}
+                style={{
+                  backgroundColor: rankColor,
+                  width: idx < 6 ? `${widthPercent}%` : '8%',
+                }}
+              />
+            );
+          })}
+        </div>
 
-      {/* Range markers with values - positioned on the line */}
-      <div className="relative h-5 flex items-center">
+        {/* Points and values overlaid on the line */}
         {ranges.map((r) => {
           const pos = ((r.elo - 300) / (maxElo - 300)) * 100;
 
@@ -77,9 +78,10 @@ export function RankLegend() {
               style={{
                 left: `${pos}%`,
                 transform: 'translateX(-50%)',
+                top: '-0.25rem', // Vertically center on the line
               }}
             >
-              {/* Value above dot */}
+              {/* Value above */}
               <span className="text-xs text-ink/40 mb-1">{r.label}</span>
               {/* Point on line */}
               <div className="w-2 h-2 rounded-full bg-ink shadow-soft" />
