@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BadgeDollarSign, Gift, Sparkles } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { BadgeDollarSign, Dice5, Flame, Gift, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
+import { RewardChest } from '../components/RewardChest';
 import { useAuth } from '../contexts/AuthContext';
 import {
   claimChest,
@@ -15,6 +17,53 @@ import { canClaimDailyReward } from '../utils/coins';
 
 const wheelColors = ['#2f7d63', '#d95f46', '#d49a25', '#8c98a5', '#3b75af', '#d95f46', '#6f5ca8', '#121417'];
 const WHEEL_SPIN_MS = 4400;
+
+const forecastCards = {
+  safe: {
+    title: 'Safe',
+    reward: <CoinAmount amount={60} className="text-2xs" />,
+    copy: <>Claim <CoinAmount amount={60} className="text-xs" /> now.</>,
+    Icon: ShieldCheck,
+    shell: 'border-mint/25 bg-mint/10 hover:border-mint/40 hover:bg-mint/15',
+    icon: 'bg-mint text-white',
+    pill: 'bg-mint/10 text-mint',
+  },
+  random: {
+    title: 'Random',
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={10} className="text-2xs" /><span>to</span><CoinAmount amount={100} className="text-2xs" /></span>,
+    copy: <>Roll once for <CoinAmount amount={10} className="text-xs" /> to <CoinAmount amount={100} className="text-xs" />.</>,
+    Icon: Dice5,
+    shell: 'border-sky/25 bg-sky/10 hover:border-sky/40 hover:bg-sky/15',
+    icon: 'bg-sky text-white',
+    pill: 'bg-sky/10 text-sky',
+  },
+  chaos: {
+    title: 'Chaos',
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={-20} className="text-2xs text-coral" /><span>/</span><CoinAmount amount={5} className="text-2xs" /><span>/</span><CoinAmount amount={130} className="text-2xs" /></span>,
+    copy: <>Roll: <CoinAmount amount={-20} className="text-xs text-coral" />, <CoinAmount amount={5} className="text-xs" />, or <CoinAmount amount={130} className="text-xs" />.</>,
+    Icon: Zap,
+    shell: 'border-coral/25 bg-coral/10 hover:border-coral/40 hover:bg-coral/15',
+    icon: 'bg-coral text-white',
+    pill: 'bg-coral/10 text-coral',
+  },
+  spicy: {
+    title: 'Spicy',
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={20} className="text-2xs" /><span>then</span><CoinAmount amount={120} className="text-2xs" /></span>,
+    copy: <>Claim <CoinAmount amount={20} className="text-xs" /> now; arm <CoinAmount amount={120} className="text-xs" /> if your next prediction wins.</>,
+    Icon: Flame,
+    shell: 'border-plum/25 bg-plum/10 hover:border-plum/40 hover:bg-plum/15',
+    icon: 'bg-plum text-white',
+    pill: 'bg-plum/10 text-plum',
+  },
+} satisfies Record<DailyForecastMode, {
+  title: string;
+  reward: ReactNode;
+  copy: ReactNode;
+  Icon: typeof ShieldCheck;
+  shell: string;
+  icon: string;
+  pill: string;
+}>;
 
 type RewardPopupState = {
   title: string;
@@ -46,21 +95,6 @@ function wheelSlicePath(index: number, total: number) {
 
 function signedCoins(amount: number) {
   return amount > 0 ? `+${amount} coins` : amount < 0 ? `${amount} coins` : '0 coins';
-}
-
-function RewardChest({ open = false, className = '' }: { open?: boolean; className?: string }) {
-  return (
-    <div className={`relative grid place-items-center rounded-2xl bg-[radial-gradient(circle_at_45%_20%,#ffe48f,#d49a25_48%,#70482f)] p-2 shadow-soft ${open ? 'animate-chest-open' : ''} ${className}`} aria-hidden="true">
-      <img
-        src="./chest-locked-game-icons.svg"
-        alt=""
-        className="h-full w-full drop-shadow-[0_8px_12px_rgba(18,20,23,0.24)]"
-      />
-      {open ? (
-        <span className="absolute -top-2 right-2 h-4 w-4 animate-reward-pop rounded-full bg-white shadow-soft" />
-      ) : null}
-    </div>
-  );
 }
 
 export function MinigamesPage() {
@@ -188,25 +222,28 @@ export function MinigamesPage() {
           <div className="grid gap-3">
             {(['safe', 'random', 'chaos', 'spicy'] as DailyForecastMode[]).map((mode) => {
               const selected = forecastMode === mode;
-              const copy: Record<DailyForecastMode, string> = {
-                safe: '+60 coins immediately',
-                random: '+10 to +100 coins',
-                chaos: '-20, +5, or +130 coins',
-                spicy: '+20 now, +120 only if your next prediction wins',
-              };
+              const card = forecastCards[mode];
+              const ForecastIcon = card.Icon;
               return (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => forecast(mode)}
                   disabled={!!busy || !forecastAvailable}
-                  className={`min-h-28 rounded-md border p-4 text-left transition disabled:opacity-50 ${
-                    selected ? 'animate-reward-pop border-citrus bg-citrus/10' : 'border-line bg-field hover:bg-white'
+                  className={`group min-h-28 rounded-2xl border p-3 text-left shadow-card transition disabled:opacity-50 ${
+                    selected ? 'animate-reward-pop border-citrus bg-white ring-2 ring-citrus/20' : card.shell
                   }`}
                 >
-                  <p className="text-lg font-black capitalize">{mode}</p>
-                  <p className="mt-1 text-sm text-ink/60">{copy[mode]}</p>
-                  {selected ? <p className="mt-3 text-xs font-black text-citrus">Revealed</p> : null}
+                  <div className="flex items-start gap-3">
+                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl shadow-soft transition group-hover:scale-105 ${card.icon}`}>
+                      <ForecastIcon size={22} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-base font-black">{card.title}</span>
+                      <span className="mt-1 block text-sm leading-6 text-ink/60">{card.copy}</span>
+                      {selected ? <span className="mt-3 inline-flex rounded-full bg-citrus/10 px-2 py-0.5 text-2xs font-black text-citrus">Revealed</span> : null}
+                    </span>
+                  </div>
                 </button>
               );
             })}

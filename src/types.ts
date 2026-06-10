@@ -81,6 +81,8 @@ export interface Bet {
   invitedUsernames: string[];
   maskedUsernames?: string[];
   options: BetOption[];
+  allowMultipleChoices?: boolean;
+  allowMultipleOutcomes?: boolean;
   allowDraw?: boolean;
   allowExactScore?: boolean;
   homeTeam?: string;
@@ -192,6 +194,8 @@ export interface CreateBetInput {
   invitedUsernames: string[];
   maskedUsernames?: string[];
   options: BetOption[];
+  allowMultipleChoices?: boolean;
+  allowMultipleOutcomes?: boolean;
   allowDraw?: boolean;
   allowExactScore?: boolean;
   homeTeam?: string;
@@ -206,8 +210,12 @@ export interface UpdateBetMetadataInput {
   category: string;
   deadline?: Date | null;
   imageUrl?: string;
+  visibility?: BetVisibility;
+  groupId?: string | null;
   invitedUsernames?: string[];
   maskedUsernames?: string[];
+  allowMultipleChoices?: boolean;
+  allowMultipleOutcomes?: boolean;
 }
 
 export interface PredictionInput {

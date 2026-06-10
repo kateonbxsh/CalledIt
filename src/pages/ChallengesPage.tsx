@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, ImageIcon, Target, Trophy, XCircle } from 'lucide-react';
+import { CheckCircle2, Target, Trophy, XCircle } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
+import { RewardChest } from '../components/RewardChest';
+import { StakeInput } from '../components/StakeInput';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { listMyFriendGroups } from '../services/friendGroupService';
@@ -384,11 +386,7 @@ export function ChallengesPage() {
                       </div>
                       {activity.proofImageUrl ? (
                         <img src={activity.proofImageUrl} alt="" className="h-40 w-full rounded-md border border-line object-cover sm:h-36" loading="lazy" />
-                      ) : (
-                        <div className="grid h-32 place-items-center rounded-md bg-field text-ink/25 sm:h-36">
-                          <ImageIcon size={24} />
-                        </div>
-                      )}
+                      ) : null}
                     </div>
                     <div>
                       {canComplete ? (
@@ -668,11 +666,8 @@ export function ChallengesPage() {
               Proof rules
               <textarea className="mt-1 min-h-20 w-full rounded-md border border-line bg-field px-3 py-2" value={wagerBody} onChange={(e) => setWagerBody(e.target.value)} placeholder="What counts as proof?" />
             </label>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <label className="block text-sm font-medium">
-                Stake
-                <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="number" min={10} value={stake} onChange={(e) => setStake(Number(e.target.value))} />
-              </label>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <StakeInput value={stake} onChange={setStake} />
               <label className="block text-sm font-medium">
                 Deadline
                 <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
@@ -691,10 +686,7 @@ export function ChallengesPage() {
       {weeklyReward ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-reward-pop rounded-md border border-line bg-white p-6 text-center shadow-lift">
-            <div className="mx-auto mb-4 grid h-24 w-28 animate-chest-open place-items-end">
-              <div className="h-14 w-24 rounded-md bg-[#8f5f3d] shadow-lift" />
-              <div className="-mt-20 h-8 w-24 rotate-[-8deg] rounded-t-md bg-citrus shadow-soft" />
-            </div>
+            <RewardChest open className="mx-auto mb-4 h-28 w-32" />
             <h2 className="text-xl font-black">Challenge complete</h2>
             <p className="mt-2 text-sm text-ink/60">Coins plus chest bonus unlocked.</p>
             <div className="mt-4 grid grid-cols-2 gap-2">

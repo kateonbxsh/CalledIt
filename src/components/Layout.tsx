@@ -12,7 +12,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
@@ -60,16 +60,15 @@ function BottomNavLink({ to, label, icon: Icon }: (typeof navItems)[number]) {
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `grid min-w-0 place-items-center gap-0.5 text-[10px] font-black transition ${
-          isActive ? 'text-ink' : 'text-ink/42'
+        `grid h-12 min-w-0 place-items-center rounded-2xl transition ${
+          isActive ? 'bg-ink text-white shadow-soft' : 'text-ink/50 active:bg-field'
         }`
       }
+      aria-label={label}
+      title={label}
     >
       {({ isActive }) => (
-        <>
-          <Icon size={19} strokeWidth={isActive ? 2.8 : 2.2} />
-          <span className="max-w-full truncate">{label}</span>
-        </>
+        <Icon size={21} strokeWidth={isActive ? 2.8 : 2.2} />
       )}
     </NavLink>
   );
@@ -83,6 +82,8 @@ export function Layout() {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
+  const scrollIntentRef = useRef(0);
 
   useEffect(() => {
     setShowInstallNav(isMobileBrowser() && !isStandaloneApp());
@@ -91,21 +92,63 @@ export function Layout() {
   useEffect(() => {
     setActionMenuOpen(false);
     setProfileMenuOpen(false);
+    setBottomNavVisible(true);
+    scrollIntentRef.current = 0;
+    lastScrollYRef.current = window.scrollY;
   }, [location.pathname]);
 
   useEffect(() => {
-    let lastY = window.scrollY;
     const onScroll = () => {
       if (window.matchMedia('(min-width: 1024px)').matches) return;
+      if (actionMenuOpen || profileMenuOpen) return;
+      const active = document.activeElement;
+      const editing = active instanceof HTMLElement && (
+        active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        active.tagName === 'SELECT' ||
+        active.isContentEditable
+      );
+      if (editing) return;
       const nextY = window.scrollY;
-      const delta = nextY - lastY;
-      if (Math.abs(delta) <= 8) return;
-      setBottomNavVisible(delta < 0 || nextY < 24);
-      lastY = nextY;
+      const delta = nextY - lastScrollYRef.current;
+      if (Math.abs(delta) <= 3) return;
+      scrollIntentRef.current = Math.sign(delta) === Math.sign(scrollIntentRef.current)
+        ? scrollIntentRef.current + delta
+        : delta;
+      const nearTop = nextY < 32;
+      const nearBottom = window.innerHeight + nextY >= document.documentElement.scrollHeight - 48;
+      if (nearTop || nearBottom) {
+        setBottomNavVisible(true);
+      } else if (scrollIntentRef.current > 36 && nextY > 96) {
+        setBottomNavVisible(false);
+      } else if (scrollIntentRef.current < -18) {
+        setBottomNavVisible(true);
+      }
+      lastScrollYRef.current = nextY;
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      )) {
+        setBottomNavVisible(false);
+      }
+    };
+    const onFocusOut = () => {
+      window.setTimeout(() => setBottomNavVisible(true), 120);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+    window.addEventListener('focusin', onFocusIn);
+    window.addEventListener('focusout', onFocusOut);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('focusin', onFocusIn);
+      window.removeEventListener('focusout', onFocusOut);
+    };
+  }, [actionMenuOpen, profileMenuOpen]);
 
   function createWager() {
     setActionMenuOpen(false);
@@ -113,7 +156,7 @@ export function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#edf0e8] text-ink">
+    <div className="min-h-screen overflow-x-hidden bg-[#edf0e8] text-ink">
       <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col border-r border-line/70 bg-[#f8faf4] p-4 lg:flex">
         <div className="mb-7 flex items-baseline justify-between gap-3 px-1">
           <div className="flex items-baseline gap-2">
@@ -159,8 +202,8 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="pb-24 lg:ml-64 lg:pb-6">
-        <div className="mx-auto max-w-5xl px-4 pb-6 pt-6 sm:px-6 lg:px-8">
+      <main className="max-w-full overflow-x-hidden pb-24 lg:ml-64 lg:pb-6">
+        <div className="mx-auto max-w-5xl overflow-x-hidden px-4 pb-6 pt-6 sm:px-6 lg:px-8">
           <Outlet />
         </div>
       </main>
@@ -168,7 +211,7 @@ export function Layout() {
       {actionMenuOpen || profileMenuOpen ? (
         <button
           type="button"
-          className="fixed inset-0 z-30 bg-ink/25 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-30 animate-fade-in bg-ink/35 transition lg:hidden"
           onClick={() => {
             setActionMenuOpen(false);
             setProfileMenuOpen(false);
@@ -178,7 +221,7 @@ export function Layout() {
       ) : null}
 
       {actionMenuOpen ? (
-        <div className="fixed bottom-24 left-4 right-4 z-40 grid gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift lg:hidden">
+        <div className="fixed bottom-24 left-4 right-4 z-40 grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift lg:hidden">
           <Link
             to="/create"
             className="rounded-xl bg-ink px-4 py-3 text-center text-sm font-black text-white"
@@ -197,7 +240,7 @@ export function Layout() {
       ) : null}
 
       {profileMenuOpen ? (
-        <div className="fixed bottom-24 right-4 z-40 w-56 rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden">
+        <div className="fixed bottom-24 right-4 z-40 w-56 animate-soft-enter rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden">
           <Link to="/me" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
             Profile
           </Link>
@@ -222,7 +265,7 @@ export function Layout() {
       ) : null}
 
       <nav
-        className={`fixed bottom-0 left-0 right-0 z-40 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4]/96 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
+        className={`fixed bottom-0 left-0 right-0 z-50 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
           bottomNavVisible || actionMenuOpen || profileMenuOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
@@ -236,7 +279,9 @@ export function Layout() {
             setActionMenuOpen((open) => !open);
             setBottomNavVisible(true);
           }}
-          className="mx-auto -mt-8 grid h-16 w-16 place-items-center rounded-full border-[6px] border-[#edf0e8] bg-ink text-white shadow-lift transition active:scale-95"
+          className={`mx-auto -mt-8 grid h-16 w-16 place-items-center rounded-full border-[6px] border-[#edf0e8] shadow-lift transition active:scale-95 ${
+            actionMenuOpen ? 'bg-ink text-white' : 'bg-white text-ink'
+          }`}
           aria-label="Create"
         >
           <CirclePlus size={30} />
@@ -250,13 +295,17 @@ export function Layout() {
             setProfileMenuOpen((open) => !open);
             setBottomNavVisible(true);
           }}
-          className={`grid min-w-0 place-items-center gap-0.5 text-[10px] font-black transition ${
-            location.pathname === '/me' || location.pathname.startsWith('/profile/') ? 'text-ink' : 'text-ink/42'
-          }`}
+          className="grid h-12 min-w-0 place-items-center rounded-2xl transition active:bg-field"
           aria-label="Profile menu"
         >
-          <Avatar name={profile?.displayName ?? 'Me'} src={profile?.photoURL} round />
-          <span className="max-w-full truncate">Profile</span>
+          <span className={`grid h-10 w-10 place-items-center rounded-full transition ${
+            location.pathname === '/me' || location.pathname.startsWith('/profile/')
+              ? 'bg-ink shadow-soft ring-2 ring-ink'
+              : 'bg-transparent'
+          }`}
+          >
+            <Avatar name={profile?.displayName ?? 'Me'} src={profile?.photoURL} round />
+          </span>
         </button>
       </nav>
     </div>

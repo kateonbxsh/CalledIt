@@ -25,7 +25,7 @@ function statusLabel(bet: Bet) {
   return bet.status === 'open' ? 'Open' : 'Resolved';
 }
 
-export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction }) {
+export function BetCard({ bet, prediction, groupName }: { bet: Bet; prediction?: Prediction; groupName?: string }) {
   const isOpen = bet.status === 'open';
   const meta = betTypeMeta[bet.type];
   const TypeIcon = meta.icon;
@@ -117,16 +117,22 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
             <Users size={12} /> {bet.predictionCount}
           </span>
           <CoinAmount amount={bet.totalCoinsStaked} className="text-xs" />
+          {bet.groupId ? (
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-field px-2 py-1 text-[11px] font-semibold text-ink/45">
+              <Users size={11} />
+              <span className="truncate">{groupName ?? 'Group'}</span>
+            </span>
+          ) : null}
           {prediction ? (
             <span className="ml-auto inline-flex items-center gap-1 font-semibold text-mint">
               <CheckCircle2 size={12} /> Predicted
             </span>
           ) : null}
         </div>
-        {bet.visibility === 'private' ? (
-          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-bold">
+        {bet.visibility === 'private' && !bet.groupId ? (
+          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold">
             {(bet.invitedUsernames ?? []).slice(0, 4).map((username) => (
-              <span key={username} className="rounded-full bg-mint/10 px-2 py-1 text-mint">@{username}</span>
+              <span key={username} className="rounded-full bg-field px-2 py-1 text-ink/50">@{username}</span>
             ))}
             {(bet.invitedUsernames?.length ?? 0) > 4 ? (
               <span className="rounded-full bg-field px-2 py-1 text-ink/45">+{(bet.invitedUsernames?.length ?? 0) - 4} invited</span>

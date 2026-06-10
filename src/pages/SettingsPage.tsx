@@ -109,7 +109,7 @@ export function SettingsPage() {
     <>
       <PageHeader title="Profile" />
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <form onSubmit={save} className="space-y-4 rounded-md border border-line bg-white p-4">
+        <form onSubmit={save} className="space-y-4 rounded-2xl border border-line bg-white p-3 shadow-soft sm:p-4">
           <div className="rounded-2xl bg-field p-3">
             <div className="flex items-center gap-3">
               <Avatar name={displayName || profile?.username || 'FF'} src={photoURL} size="lg" />
@@ -179,14 +179,14 @@ export function SettingsPage() {
             <textarea className="mt-1 min-h-28 w-full rounded-md border border-line bg-field px-3 py-2" value={bio} onChange={(event) => setBio(event.target.value)} />
           </label>
           {message ? <p className="rounded-md bg-mint/10 p-3 text-sm text-mint">{message}</p> : null}
-          <button className="rounded-md bg-ink px-4 py-3 font-semibold text-white">Save profile</button>
+          <button className="w-full rounded-md bg-ink px-4 py-3 font-semibold text-white sm:w-auto">Save profile</button>
         </form>
-        <aside className="space-y-4">
-          <section className="rounded-md border border-line bg-white p-4">
+        <aside className="grid gap-3 sm:grid-cols-2 lg:block lg:space-y-4">
+          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft">
             <p className="text-sm text-ink/55">Username</p>
             <p className="font-bold">@{username || profile?.username}</p>
           </section>
-          <section className="rounded-md border border-line bg-white p-4">
+          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft">
             <div className="flex items-center justify-between">
               <p className="text-sm font-black">Rating/ELO</p>
               <RankBadge rank={rankForRating(profile?.rating ?? 1000)} />
@@ -197,14 +197,14 @@ export function SettingsPage() {
             </div>
             <p className="mt-2 text-xs font-semibold text-ink/55">
               {progress.currentRange}
-              {progress.nextRank ? ` · next ${progress.nextRank}` : ''}
+              {progress.nextRank ? ` - next ${progress.nextRank}` : ''}
             </p>
           </section>
-          <section className="rounded-md border border-line bg-white p-4">
+          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft">
             <p className="text-sm text-ink/55">Coins</p>
             <CoinAmount amount={profile?.coinBalance ?? 0} className="mt-1 text-2xl" />
           </section>
-          <section className="rounded-md border border-line bg-white p-4">
+          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft sm:col-span-2 lg:col-span-1">
             <p className="text-sm font-black">Push notifications</p>
             <p className="mt-1 text-xs leading-5 text-ink/55">
               Get bet, challenge, wager, and reward updates on this device.
@@ -242,11 +242,11 @@ export function SettingsPage() {
           </section>
           <Link
             to="/how-to-play"
-            className="block rounded-md border border-line bg-white p-4 text-sm font-bold transition hover:bg-field"
+            className="block rounded-2xl border border-line bg-white p-4 text-sm font-bold shadow-soft transition hover:bg-field"
           >
             How to Play
           </Link>
-          <button onClick={logout} className="w-full rounded-md bg-coral px-4 py-3 font-semibold text-white">
+          <button onClick={logout} className="w-full rounded-2xl bg-coral px-4 py-3 font-semibold text-white shadow-soft">
             Sign out
           </button>
         </aside>

@@ -36,16 +36,22 @@ export function ProfilePage() {
             </div>
             <RankBadge rank={rankForRating(user.rating)} />
           </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-field px-3 py-3">
+              <p className="text-xs font-black uppercase text-ink/35">Rating</p>
+              <p className="mt-1 text-2xl font-black">{user.rating}</p>
+            </div>
+            <div className="rounded-xl bg-field px-3 py-3">
+              <p className="text-xs font-black uppercase text-ink/35">Coins</p>
+              <CoinAmount amount={user.coinBalance} className="mt-1 text-2xl" />
+            </div>
+          </div>
         </div>
       </section>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded-md border border-line bg-white p-4">
-          <p className="text-sm text-ink/55">Rating/ELO</p>
-          <p className="mt-1 text-2xl font-black">{user.rating}</p>
-        </div>
-        <div className="rounded-md border border-line bg-white p-4">
-          <p className="text-sm text-ink/55">Coins</p>
-          <CoinAmount amount={user.coinBalance} className="mt-1 text-2xl" />
+          <p className="text-sm text-ink/55">Record</p>
+          <p className="mt-1 text-2xl font-black">{user.stats.wins}-{user.stats.losses}</p>
         </div>
         <div className="rounded-md border border-line bg-white p-4">
           <p className="text-sm text-ink/55">Accuracy</p>
@@ -54,6 +60,10 @@ export function ProfilePage() {
         <div className="rounded-md border border-line bg-white p-4">
           <p className="text-sm text-ink/55">Best upset</p>
           <p className="mt-1 text-2xl font-black">{user.stats.bestUpsetWin}%</p>
+        </div>
+        <div className="rounded-md border border-line bg-white p-4">
+          <p className="text-sm text-ink/55">Bets</p>
+          <p className="mt-1 text-2xl font-black">{user.stats.totalBets}</p>
         </div>
       </div>
       <div className="mt-4 rounded-md border border-line bg-white p-4">

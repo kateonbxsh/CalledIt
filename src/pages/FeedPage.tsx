@@ -57,6 +57,7 @@ export function FeedPage() {
   }, [profile]);
 
   const predictionByBet = new Map(predictions.map((prediction) => [prediction.betId, prediction]));
+  const groupNameById = new Map(groups.map((group) => [group.id, group.name]));
 
   const tabFilteredBets = bets.filter((bet) => {
     if (activeTab === 'all') return true;
@@ -125,7 +126,7 @@ export function FeedPage() {
       ) : (
         <div className="grid gap-3">
           {visibleBets.map((bet) => (
-            <BetCard key={bet.id} bet={bet} prediction={predictionByBet.get(bet.id)} />
+            <BetCard key={bet.id} bet={bet} prediction={predictionByBet.get(bet.id)} groupName={bet.groupId ? groupNameById.get(bet.groupId) : undefined} />
           ))}
         </div>
       )}

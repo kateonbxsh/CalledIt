@@ -4,19 +4,26 @@ import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../contexts/AuthContext';
 import { listMyBets } from '../services/betService';
-import type { Bet } from '../types';
+import { listMyFriendGroups } from '../services/friendGroupService';
+import type { Bet, FriendGroup } from '../types';
 
 export function MyBetsPage() {
   const { profile } = useAuth();
   const [bets, setBets] = useState<Bet[]>([]);
+  const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!profile) return;
-    listMyBets(profile.uid)
-      .then(setBets)
+    Promise.all([listMyBets(profile.uid), listMyFriendGroups(profile)])
+      .then(([nextBets, nextGroups]) => {
+        setBets(nextBets);
+        setGroups(nextGroups);
+      })
       .finally(() => setLoading(false));
   }, [profile]);
+
+  const groupNameById = new Map(groups.map((group) => [group.id, group.name]));
 
   return (
     <>
@@ -28,7 +35,7 @@ export function MyBetsPage() {
       ) : (
         <div className="grid gap-3">
           {bets.map((bet) => (
-            <BetCard key={bet.id} bet={bet} />
+            <BetCard key={bet.id} bet={bet} groupName={bet.groupId ? groupNameById.get(bet.groupId) : undefined} />
           ))}
         </div>
       )}

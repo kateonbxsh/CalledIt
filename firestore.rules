@@ -23,7 +23,7 @@ service cloud.firestore {
     function canReadBet() {
       return signedIn() && (
         !resource.data.keys().hasAny(['visibility']) ||
-        resource.data.visibility == 'public' ||
+        (resource.data.visibility == 'public' && notMasked()) ||
         resource.data.creatorId == request.auth.uid ||
         (username() in resource.data.invitedUsernames && notMasked()) ||
         canReadGroupLinkedResource() ||
@@ -35,7 +35,13 @@ service cloud.firestore {
       return signedIn()
         && exists(/databases/$(database)/documents/bets/$(betId))
         && (
-          get(/databases/$(database)/documents/bets/$(betId)).data.visibility == 'public' ||
+          (
+            get(/databases/$(database)/documents/bets/$(betId)).data.visibility == 'public' &&
+            (
+              !get(/databases/$(database)/documents/bets/$(betId)).data.keys().hasAny(['maskedUsernames']) ||
+              !(username() in get(/databases/$(database)/documents/bets/$(betId)).data.maskedUsernames)
+            )
+          ) ||
           get(/databases/$(database)/documents/bets/$(betId)).data.creatorId == request.auth.uid ||
           (
             username() in get(/databases/$(database)/documents/bets/$(betId)).data.invitedUsernames &&
@@ -121,7 +127,7 @@ service cloud.firestore {
       return signedIn()
         && resource.data.creatorId == request.auth.uid
         && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['title', 'description', 'category', 'deadline', 'imageUrl', 'status', 'invitedUsernames', 'maskedUsernames', 'updatedAt'])
+          .hasOnly(['title', 'description', 'category', 'deadline', 'imageUrl', 'visibility', 'groupId', 'status', 'invitedUsernames', 'maskedUsernames', 'allowMultipleChoices', 'allowMultipleOutcomes', 'updatedAt'])
         && (
           !request.resource.data.diff(resource.data).changedKeys().hasAny(['status']) ||
           request.resource.data.status in ['open', 'locked']

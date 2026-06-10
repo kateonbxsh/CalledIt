@@ -89,10 +89,8 @@ function CoinDelta({ value }: { value?: number }) {
   const isPositive = value >= 0;
   return (
     <span className="inline-flex items-center gap-1">
-      <span className={`text-sm font-black ${isPositive ? 'text-mint' : 'text-coral'}`}>
-        {isPositive ? '+' : '-'}
-      </span>
-      <CoinAmount amount={Math.abs(value)} className="text-sm" />
+      {isPositive ? null : <span className="text-sm font-black text-coral">-</span>}
+      <CoinAmount amount={Math.abs(value)} className={`text-sm ${isPositive ? '' : 'text-coral'}`} />
     </span>
   );
 }

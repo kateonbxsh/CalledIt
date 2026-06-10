@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chest Icon Options</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://game-icons.net" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <style>
+      :root {
+        color: #121417;
+        background: #edf0e8;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-width: 320px;
+        margin: 0;
+        background: #edf0e8;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 32px 0 56px;
+      }
+
+      header {
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(30px, 6vw, 56px);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      .sub {
+        max-width: 660px;
+        margin: 12px 0 0;
+        color: rgba(18, 20, 23, 0.62);
+        font-weight: 650;
+        line-height: 1.55;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        position: relative;
+        overflow: hidden;
+        min-height: 360px;
+        border: 1px solid #d9ded8;
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 8px 28px rgba(18, 20, 23, 0.08), 0 1px 4px rgba(18, 20, 23, 0.06);
+      }
+
+      .stage {
+        display: grid;
+        min-height: 230px;
+        place-items: center;
+        padding: 26px;
+        background:
+          radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.2) 32%, transparent 58%),
+          linear-gradient(135deg, var(--from), var(--to));
+      }
+
+      .copy {
+        padding: 16px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        margin-bottom: 8px;
+        border-radius: 999px;
+        background: #f7f8f4;
+        padding: 5px 9px;
+        color: rgba(18, 20, 23, 0.55);
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.1;
+      }
+
+      p {
+        margin: 8px 0 0;
+        color: rgba(18, 20, 23, 0.62);
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+
+      .chest-wrap {
+        position: relative;
+        display: grid;
+        width: 154px;
+        height: 154px;
+        place-items: center;
+        filter: drop-shadow(0 18px 22px rgba(18, 20, 23, 0.24));
+      }
+
+      .halo {
+        position: absolute;
+        width: 170px;
+        height: 86px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.35);
+        filter: blur(18px);
+        transform: translateY(34px);
+      }
+
+      .coin {
+        position: absolute;
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        border-radius: 50%;
+        background: #d49a25;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 950;
+        opacity: 0;
+      }
+
+      .spark {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        border-radius: 99px;
+        background: #fff;
+        opacity: 0;
+      }
+
+      .icon {
+        position: relative;
+        z-index: 2;
+      }
+
+      .lucide-chest {
+        display: grid;
+        width: 142px;
+        height: 142px;
+        place-items: center;
+        border-radius: 28px;
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.2));
+        color: white;
+      }
+
+      .lucide-chest svg {
+        width: 100px;
+        height: 100px;
+        stroke-width: 1.8;
+        filter: drop-shadow(0 10px 12px rgba(18, 20, 23, 0.24));
+      }
+
+      .game-icon {
+        width: 132px;
+        height: 132px;
+        padding: 18px;
+        border-radius: 30px;
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.18));
+      }
+
+      .game-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        filter: drop-shadow(0 10px 12px rgba(18, 20, 23, 0.22));
+      }
+
+      .css-chest {
+        position: relative;
+        width: 132px;
+        height: 104px;
+      }
+
+      .css-chest .lid,
+      .css-chest .base {
+        position: absolute;
+        left: 0;
+        width: 132px;
+        border: 4px solid rgba(18, 20, 23, 0.28);
+        background: linear-gradient(135deg, var(--lid1), var(--lid2));
+      }
+
+      .css-chest .lid {
+        top: 0;
+        height: 42px;
+        border-radius: 24px 24px 9px 9px;
+        transform-origin: bottom left;
+      }
+
+      .css-chest .base {
+        bottom: 0;
+        height: 72px;
+        border-radius: 10px 10px 22px 22px;
+      }
+
+      .css-chest .lock {
+        position: absolute;
+        left: 50%;
+        bottom: 32px;
+        width: 28px;
+        height: 34px;
+        border: 4px solid rgba(255, 255, 255, 0.78);
+        border-radius: 10px;
+        background: #d49a25;
+        transform: translateX(-50%);
+      }
+
+      .card:hover .chest-wrap,
+      .card:focus-within .chest-wrap {
+        animation: bounce 900ms ease both;
+      }
+
+      .card:hover .css-chest .lid,
+      .card:focus-within .css-chest .lid {
+        animation: lid 900ms ease both;
+      }
+
+      .card:hover .coin,
+      .card:focus-within .coin {
+        animation: coin-pop 1050ms ease both;
+      }
+
+      .card:hover .coin:nth-of-type(2),
+      .card:focus-within .coin:nth-of-type(2) {
+        animation-delay: 80ms;
+      }
+
+      .card:hover .coin:nth-of-type(3),
+      .card:focus-within .coin:nth-of-type(3) {
+        animation-delay: 150ms;
+      }
+
+      .card:hover .spark,
+      .card:focus-within .spark {
+        animation: sparkle 900ms ease both;
+      }
+
+      .a { --from: #315f79; --to: #d49a25; --lid1: #f5c451; --lid2: #8a5632; }
+      .b { --from: #2c9c94; --to: #7b5aa6; --lid1: #7edbd3; --lid2: #7b5aa6; }
+      .c { --from: #2f7d63; --to: #121417; --lid1: #62b895; --lid2: #1f5545; }
+      .d { --from: #d95f46; --to: #d49a25; --lid1: #ff966c; --lid2: #c05a34; }
+      .e { --from: #3b75af; --to: #2c9c94; --lid1: #75b7f0; --lid2: #2c9c94; }
+      .f { --from: #7b5aa6; --to: #121417; --lid1: #aa8ed1; --lid2: #57407a; }
+
+      .c1 { left: 18px; top: 72px; }
+      .c2 { right: 18px; top: 64px; }
+      .c3 { left: 63px; top: 34px; }
+      .s1 { left: 20px; top: 42px; }
+      .s2 { right: 28px; top: 28px; }
+      .s3 { left: 70px; top: 10px; }
+
+      @keyframes bounce {
+        0% { transform: translateY(0) scale(1); }
+        38% { transform: translateY(-10px) scale(1.03); }
+        100% { transform: translateY(0) scale(1); }
+      }
+
+      @keyframes lid {
+        0% { transform: rotate(0deg) translateY(0); }
+        45% { transform: rotate(-13deg) translate(-4px, -10px); }
+        100% { transform: rotate(-8deg) translate(-2px, -6px); }
+      }
+
+      @keyframes coin-pop {
+        0% { opacity: 0; transform: translateY(24px) scale(0.72); }
+        42% { opacity: 1; transform: translateY(-22px) scale(1.08); }
+        100% { opacity: 0; transform: translateY(-48px) scale(0.92); }
+      }
+
+      @keyframes sparkle {
+        0% { opacity: 0; transform: scale(0.4); }
+        45% { opacity: 1; transform: scale(1.2); }
+        100% { opacity: 0; transform: scale(0.6); }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Chest options</h1>
+        <p class="sub">Hover or tap each card. These are preview directions for the in-app chest reward moment, mixing the existing Game-icons asset, online SVG assets, and Lucide icons.</p>
+      </header>
+
+      <section class="grid" aria-label="Chest icon options">
+        <article class="card a" tabindex="0">
+          <div class="stage">
+            <div class="chest-wrap">
+              <span class="halo"></span>
+              <span class="coin c1">$</span><span class="coin c2">$</span><span class="coin c3">$</span>
+              <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>
+              <div class="game-icon icon">
+                <img src="./chest-locked-game-icons.svg" alt="" />
+              </div>
+            </div>
+          </div>
+          <div class="copy">
+            <span class="eyebrow">Option 1 - current asset upgraded</span>
+            <h2>Arcade Vault</h2>
+            <p>Best if we want to keep the existing chest drawing but make the reward popup feel richer and more game-like.</p>
+          </div>
+        </article>
+
+        <article class="card b" tabindex="0">
+          <div class="stage">
+            <div class="chest-wrap">
+              <span class="halo"></span>
+              <span class="coin c1">$</span><span class="coin c2">$</span><span class="coin c3">$</span>
+              <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>
+              <div class="lucide-chest icon"><i data-lucide="package-open"></i></div>
+            </div>
+          </div>
+          <div class="copy">
+            <span class="eyebrow">Option 2 - Lucide library</span>
+            <h2>Crystal Cache</h2>
+            <p>Clean, modern, readable at tiny sizes. It looks less fantasy and more polished app reward.</p>
+          </div>
+        </article>
+
+        <article class="card c" tabindex="0">
+          <div class="stage">
+            <div class="chest-wrap">
+              <span class="halo"></span>
+              <span class="coin c1">$</span><span class="coin c2">$</span><span class="coin c3">$</span>
+              <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>
+              <div class="css-chest icon" aria-hidden="true">
+                <span class="lid"></span>
+                <span class="base"></span>
+                <span class="lock"></span>
+              </div>
+            </div>
+          </div>
+          <div class="copy">
+            <span class="eyebrow">Option 3 - CSS motion shell</span>
+            <h2>Pop Chest</h2>
+            <p>Most controllable animation. Good if the opening motion matters more than a detailed illustration.</p>
+          </div>
+        </article>
+
+        <article class="card d" tabindex="0">
+          <div class="stage">
+            <div class="chest-wrap">
+              <span class="halo"></span>
+              <span class="coin c1">$</span><span class="coin c2">$</span><span class="coin c3">$</span>
+              <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>
+              <div class="game-icon icon">
+                <img src="https://game-icons.net/icons/ffffff/transparent/1x1/lorc/locked-chest.svg" alt="" />
+              </div>
+            </div>
+          </div>
+          <div class="copy">
+            <span class="eyebrow">Option 4 - Game-icons online</span>
+            <h2>Treasure Lock</h2>
+            <p>Bold and classic. Strongest "reward chest" signal, especially inside small minigame cards.</p>
+          </div>
+        </article>
+
+        <article class="card e" tabindex="0">
+          <div class="stage">
+            <div class="chest-wrap">
+              <span class="halo"></span>
+              <span class="coin c1">$</span><span class="coin c2">$</span><span class="coin c3">$</span>
+              <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>
+              <div class="lucide-chest icon"><i data-lucide="gift"></i></div>
+            </div>
+          </div>
+          <div class="copy">
+            <span class="eyebrow">Option 5 - Lucide library</span>
+            <h2>Prize Box</h2>
+            <p>Friendly, simple, and very mobile-safe. It reads as a gift more than a loot chest.</p>
+          </div>
+        </article>
+
+        <article class="card f" tabindex="0">
+          <div class="stage">
+            <div class="chest-wrap">
+              <span class="halo"></span>
+              <span class="coin c1">$</span><span class="coin c2">$</span><span class="coin c3">$</span>
+              <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>
+              <div class="lucide-chest icon"><i data-lucide="gem"></i></div>
+            </div>
+          </div>
+          <div class="copy">
+            <span class="eyebrow">Option 6 - Lucide library</span>
+            <h2>Gem Drop</h2>
+            <p>More premium and less literal. Nice if chests eventually give rare effects, streak boosts, or cosmetics.</p>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script>
+      lucide.createIcons();
+    </script>
+  </body>
+</html>

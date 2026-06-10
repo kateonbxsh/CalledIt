@@ -8,8 +8,8 @@ export function CoinAmount({
   className?: string;
 }) {
   return (
-    <span className={`inline-flex items-center gap-1 font-bold text-citrus ${className}`}>
-      <CircleDollarSign size={16} className="fill-citrus/15" />
+    <span className={`inline-flex align-middle items-center gap-1 font-bold text-citrus ${className}`}>
+      <CircleDollarSign size={16} className="shrink-0 fill-citrus/15" />
       {amount}
     </span>
   );

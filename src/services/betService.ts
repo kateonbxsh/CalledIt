@@ -70,6 +70,11 @@ function winningOptionIds(resolution: BetResolution) {
     .filter((id): id is string => Boolean(id));
 }
 
+function allowsMultipleChoices(bet: Bet) {
+  return (bet.type === 'multi' || bet.type === 'openChoice') &&
+    (bet.allowMultipleChoices ?? bet.type === 'multi');
+}
+
 function predictionOptionIds(prediction: Prediction) {
   return prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
 }
@@ -97,6 +102,8 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     invitedUsernames: normalizeUsernames(input.invitedUsernames),
     maskedUsernames: normalizeUsernames(input.maskedUsernames ?? []),
     options: input.options,
+    allowMultipleChoices: input.allowMultipleChoices ?? false,
+    allowMultipleOutcomes: input.allowMultipleOutcomes ?? false,
     allowDraw: input.allowDraw ?? false,
     allowExactScore: input.allowExactScore ?? false,
     homeTeam: input.homeTeam?.trim() || null,
@@ -147,6 +154,10 @@ export async function updateBetMetadata(betId: string, input: UpdateBetMetadataI
     description: input.description?.trim() || null,
     deadline: input.deadline ? Timestamp.fromDate(input.deadline) : null,
     imageUrl: input.imageUrl || null,
+    ...(input.visibility ? { visibility: input.visibility } : {}),
+    ...(input.groupId !== undefined ? { groupId: input.groupId } : {}),
+    ...(input.allowMultipleChoices !== undefined ? { allowMultipleChoices: input.allowMultipleChoices } : {}),
+    ...(input.allowMultipleOutcomes !== undefined ? { allowMultipleOutcomes: input.allowMultipleOutcomes } : {}),
     ...(input.invitedUsernames ? { invitedUsernames: normalizeUsernames(input.invitedUsernames) } : {}),
     ...(input.maskedUsernames ? { maskedUsernames: normalizeUsernames(input.maskedUsernames) } : {}),
     ...(nextStatus ? { status: nextStatus } : {}),
@@ -308,10 +319,11 @@ export async function placePrediction(input: PredictionInput) {
 
     let nextOptions = bet.options;
     let effectiveOptionId = closest ? 'guess' : input.optionId;
-    let effectiveOptionIds = closest ? ['guess'] : (input.optionIds?.length ? input.optionIds : [input.optionId]);
+    let effectiveOptionIds = closest
+      ? ['guess']
+      : (allowsMultipleChoices(bet) && input.optionIds?.length ? input.optionIds : [input.optionId]).filter(Boolean);
     const customOptionLabel = input.customOptionLabel?.trim();
     if (openChoice) {
-      const selectedExistingOption = bet.options.find((option) => option.id === input.optionId);
       if (customOptionLabel) {
         const normalizedCustomOptionLabel = normalizeOptionLabel(customOptionLabel);
         const existingOption = bet.options.find(
@@ -327,11 +339,30 @@ export async function placePrediction(input: PredictionInput) {
         effectiveOptionId = customOption.id;
         effectiveOptionIds = [customOption.id];
         nextOptions = existingOption ? bet.options : [...bet.options, customOption];
-      } else if (selectedExistingOption) {
-        effectiveOptionId = selectedExistingOption.id;
-        effectiveOptionIds = [selectedExistingOption.id];
       } else {
-        throw new Error('Pick or add an answer.');
+        const selectedExistingOptions = effectiveOptionIds
+          .map((id) => bet.options.find((option) => option.id === id))
+          .filter((option): option is NonNullable<typeof option> => Boolean(option));
+        if (selectedExistingOptions.length) {
+          effectiveOptionId = selectedExistingOptions[0].id;
+          effectiveOptionIds = allowsMultipleChoices(bet)
+            ? selectedExistingOptions.map((option) => option.id)
+            : [selectedExistingOptions[0].id];
+        } else {
+          throw new Error('Pick or add an answer.');
+        }
+      }
+    } else if (!closest) {
+      const selectedExistingOptions = effectiveOptionIds
+        .map((id) => bet.options.find((option) => option.id === id))
+        .filter((option): option is NonNullable<typeof option> => Boolean(option));
+      if (selectedExistingOptions.length) {
+        effectiveOptionId = selectedExistingOptions[0].id;
+        effectiveOptionIds = allowsMultipleChoices(bet)
+          ? selectedExistingOptions.map((option) => option.id)
+          : [selectedExistingOptions[0].id];
+      } else {
+        throw new Error('Pick an option.');
       }
     }
     if (bet.type === 'sports' && input.scorePrediction) {
@@ -585,7 +616,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       }
       const primaryWinnerId = winnerIds[0] ?? '';
       const losingStakeTotal = predictions
-        .filter((p) => !winnerIds.includes(p.optionId))
+        .filter((p) => !predictionOptionIds(p).some((id) => winnerIds.includes(id)))
         .reduce((sum, p) => sum + p.stake, 0);
 
       scoreBonusResult = freshBet.type === 'sports'

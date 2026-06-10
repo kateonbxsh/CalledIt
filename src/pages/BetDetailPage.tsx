@@ -1,12 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { Check, ChevronLeft, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, Pencil, RotateCcw, Trash2, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { ChanceChart } from '../components/ChanceChart';
 import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
+import { StakeInput } from '../components/StakeInput';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
@@ -24,7 +25,7 @@ import {
   updateBetMetadata,
 } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
-import type { Bet, BetComment, BetResolution, ChanceSnapshot, FriendGroup, Prediction } from '../types';
+import type { Bet, BetComment, BetResolution, BetVisibility, ChanceSnapshot, FriendGroup, Prediction } from '../types';
 import { isClosestType } from '../utils/betTypes';
 import {
   closestDateDistance,
@@ -43,7 +44,13 @@ function datetimeLocalValue(date?: Date | null) {
 }
 
 function supportsMultipleWinners(bet: Bet) {
-  return bet.type === 'multi' || bet.type === 'openChoice';
+  return (bet.type === 'multi' || bet.type === 'openChoice') &&
+    (bet.allowMultipleOutcomes ?? true);
+}
+
+function supportsMultipleChoices(bet: Bet) {
+  return (bet.type === 'multi' || bet.type === 'openChoice') &&
+    (bet.allowMultipleChoices ?? bet.type === 'multi');
 }
 
 function resolvedWinnerIds(bet: Bet) {
@@ -141,8 +148,12 @@ export function BetDetailPage() {
   const [editCategory, setEditCategory] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
+  const [editVisibility, setEditVisibility] = useState<BetVisibility>('public');
+  const [editGroupId, setEditGroupId] = useState('');
   const [editInvited, setEditInvited] = useState<string[]>([]);
   const [editMasked, setEditMasked] = useState<string[]>([]);
+  const [editAllowMultipleChoices, setEditAllowMultipleChoices] = useState(false);
+  const [editAllowMultipleOutcomes, setEditAllowMultipleOutcomes] = useState(false);
   const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [editImageBusy, setEditImageBusy] = useState(false);
 
@@ -188,8 +199,12 @@ export function BetDetailPage() {
     setEditCategory(nextBet.category ?? '');
     setEditDeadline(datetimeLocalValue(nextBet.deadline?.toDate() ?? null));
     setEditImageUrl(nextBet.imageUrl ?? '');
+    setEditVisibility(nextBet.visibility ?? 'public');
+    setEditGroupId(nextBet.groupId ?? '');
     setEditInvited(nextBet.invitedUsernames ?? []);
     setEditMasked(nextBet.maskedUsernames ?? []);
+    setEditAllowMultipleChoices(supportsMultipleChoices(nextBet));
+    setEditAllowMultipleOutcomes(supportsMultipleWinners(nextBet));
     setLoading(false);
   }, [betId]);
 
@@ -224,7 +239,7 @@ export function BetDetailPage() {
 
   const closest = bet ? isClosestType(bet.type) : false;
   const multiWinner = bet ? supportsMultipleWinners(bet) : false;
-  const multiPrediction = bet?.type === 'multi';
+  const multiPrediction = bet ? supportsMultipleChoices(bet) : false;
   const canPredict = bet?.status === 'open';
   const projectedChanceSummary = bet
     ? projectChanceSummaryOverTime({
@@ -249,12 +264,12 @@ export function BetDetailPage() {
   const winningOptions = bet?.options.filter((o) => (multiWinner ? winningOptionIds : [winningOptionId]).includes(o.id)) ?? [];
   const canEditBet = !!profile && !!bet && profile.uid === bet.creatorId;
   const editGroupUsernames = useMemo(() => {
-    const group = bet?.groupId ? groups.find((item) => item.id === bet.groupId) : null;
+    const group = editGroupId ? groups.find((item) => item.id === editGroupId) : null;
     if (!group || !profile) return [];
     return [group.creatorUsername, ...group.memberUsernames]
       .map((username) => username.trim().toLowerCase())
       .filter((username) => username && username !== profile.username);
-  }, [bet?.groupId, groups, profile]);
+  }, [editGroupId, groups, profile]);
   const openChoiceQuery = normalizeOptionLabel(customOptionLabel);
   const openChoiceMatches =
     bet?.type === 'openChoice' && openChoiceQuery
@@ -296,7 +311,7 @@ export function BetDetailPage() {
         return;
       }
     }
-    if (bet.type === 'multi' && selectedOptionIds.length === 0) {
+    if (!closest && !customOptionLabel.trim() && (multiPrediction ? selectedOptionIds.length === 0 : !selected)) {
       setError('Select at least one option.');
       return;
     }
@@ -306,8 +321,8 @@ export function BetDetailPage() {
       await placePrediction({
         bet,
         user: profile,
-        optionId: closest ? 'guess' : (bet.type === 'multi' ? selectedOptionIds[0] : selected),
-        optionIds: bet.type === 'multi' ? selectedOptionIds : undefined,
+        optionId: closest ? 'guess' : (multiPrediction ? selectedOptionIds[0] : selected),
+        optionIds: multiPrediction ? selectedOptionIds : undefined,
         stake,
         scorePrediction:
           bet.type === 'sports' && bet.allowExactScore && homeScore !== '' && awayScore !== ''
@@ -405,14 +420,36 @@ export function BetDetailPage() {
     setBusy(true);
     setError('');
     try {
+      const audienceGroup = editVisibility === 'private' && editGroupId
+        ? groups.find((group) => group.id === editGroupId)
+        : null;
+      const groupUsernames = audienceGroup
+        ? [audienceGroup.creatorUsername, ...audienceGroup.memberUsernames]
+            .map((username) => username.trim().toLowerCase())
+            .filter((username) => username && username !== profile?.username)
+        : [];
+      const nextMasked = editGroupId || editVisibility === 'public'
+        ? editMasked.map((username) => username.trim().toLowerCase()).filter(Boolean)
+        : [];
+      const nextInvited = editVisibility === 'public'
+        ? []
+        : editGroupId
+          ? groupUsernames.filter((username) => !nextMasked.includes(username))
+          : editInvited
+              .map((username) => username.trim().toLowerCase())
+              .filter((username) => username && !nextMasked.includes(username));
       await updateBetMetadata(bet.id, {
         title: editTitle,
         description: editDescription || undefined,
         category: editCategory,
         deadline: editDeadline ? new Date(editDeadline) : null,
         imageUrl: editImageUrl || undefined,
-        invitedUsernames: editInvited.filter((username) => !editMasked.includes(username)),
-        maskedUsernames: bet.groupId ? editMasked : [],
+        visibility: editVisibility,
+        groupId: editVisibility === 'private' && editGroupId ? editGroupId : null,
+        invitedUsernames: nextInvited,
+        maskedUsernames: nextMasked,
+        allowMultipleChoices: editAllowMultipleChoices,
+        allowMultipleOutcomes: editAllowMultipleOutcomes,
       });
       setEditingBet(false);
       await load();
@@ -498,12 +535,12 @@ export function BetDetailPage() {
 
   return (
     <>
-      <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="mb-5 flex max-w-full flex-col gap-3 overflow-x-hidden sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 max-w-full items-center gap-3">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
+            className="-ml-1 grid h-8 w-8 shrink-0 place-items-center bg-transparent text-ink/65 transition hover:text-ink active:scale-95"
             aria-label="Go back"
           >
             <ChevronLeft size={21} />
@@ -518,21 +555,22 @@ export function BetDetailPage() {
                 @{bet.creatorUsername}
               </Link>
               <span className="rounded-full bg-field px-2.5 py-1 text-xs font-black text-ink/65">{bet.category || 'General'}</span>
-              {bet.groupId ? (
-                <span className="rounded-full bg-sky/10 px-2.5 py-1 text-xs font-black text-sky">
-                  {linkedGroup ? `Group: ${linkedGroup.name}` : 'Group bet'}
-                </span>
-              ) : null}
               <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
                 bet.status === 'open' ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-coral/12 text-coral'
               }`}>
                 {betStatusLabel(bet)}
               </span>
+              {bet.groupId ? (
+                <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/45">
+                  <Users size={11} />
+                  {linkedGroup?.name ?? 'Group'}
+                </span>
+              ) : null}
               <span className="text-sm font-semibold text-ink/45">{bet.deadline ? `deadline ${relativeTime(bet.deadline)}` : 'no deadline'}</span>
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex min-w-0 flex-wrap gap-2">
           {canEditBet ? (
             <button onClick={() => setEditingBet(true)} disabled={busy} className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold">
               <Pencil size={17} /> Edit
@@ -552,14 +590,10 @@ export function BetDetailPage() {
       </header>
 
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
-      {bet.visibility === 'private' ? (
+      {bet.visibility === 'private' && (!bet.groupId || (bet.maskedUsernames ?? []).length > 0) ? (
         <section className="mb-4 rounded-md border border-line bg-white p-4">
-          {bet.groupId ? (
-            <div className="mb-3 rounded-md bg-sky/10 px-3 py-2 text-sm font-bold text-sky">
-              Linked to {linkedGroup?.name ?? 'a friend group'}
-            </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className={`grid gap-3 ${(bet.maskedUsernames ?? []).length > 0 && !bet.groupId ? 'sm:grid-cols-2' : ''}`}>
+            {!bet.groupId ? (
             <div>
               <p className="text-xs font-black uppercase text-ink/35">Invited</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -572,23 +606,24 @@ export function BetDetailPage() {
                 )}
               </div>
             </div>
+            ) : null}
+            {(bet.maskedUsernames ?? []).length > 0 ? (
             <div>
               <p className="text-xs font-black uppercase text-ink/35">Masked</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {(bet.maskedUsernames ?? []).length > 0 ? (bet.maskedUsernames ?? []).map((username) => (
+                {(bet.maskedUsernames ?? []).map((username) => (
                   <span key={username} className="rounded-full bg-coral/10 px-2.5 py-1 text-xs font-black text-coral">
                     @{username}
                   </span>
-                )) : (
-                  <span className="text-sm font-semibold text-ink/45">No one masked</span>
-                )}
+                ))}
               </div>
             </div>
+            ) : null}
           </div>
         </section>
       ) : null}
-      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        <section className="space-y-4">
+      <div className="grid min-w-0 max-w-full gap-4 overflow-x-hidden lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="min-w-0 space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-white p-3">
             <span className="text-sm font-black text-ink/65">{bet.predictionCount} predictions</span>
             <CoinAmount amount={bet.totalCoinsStaked} className="text-sm" />
@@ -711,7 +746,7 @@ export function BetDetailPage() {
           </div>
         </section>
 
-        <aside className="space-y-4">
+        <aside className="min-w-0 space-y-4">
           {/* Prediction panel */}
           <section className="rounded-md border border-line bg-white p-4">
             <h2 className="mb-3 font-bold">Prediction</h2>
@@ -849,8 +884,9 @@ export function BetDetailPage() {
                                   return next;
                                 });
                               } else {
-                                setSelected(option.id);
-                                setSelectedOptionIds([option.id]);
+                                const nextSelected = selected === option.id ? '' : option.id;
+                                setSelected(nextSelected);
+                                setSelectedOptionIds(nextSelected ? [nextSelected] : []);
                               }
                               if (bet.type === 'openChoice') setCustomOptionLabel('');
                             }}
@@ -885,7 +921,13 @@ export function BetDetailPage() {
                     <input
                       className="mt-1 w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
                       value={customOptionLabel}
-                      onChange={(e) => setCustomOptionLabel(e.target.value)}
+                      onChange={(e) => {
+                        setCustomOptionLabel(e.target.value);
+                        if (e.target.value.trim()) {
+                          setSelected('');
+                          setSelectedOptionIds([]);
+                        }
+                      }}
                       placeholder={bet.options.length ? 'Or type a new answer' : 'Type your answer'}
                       required={bet.options.length === 0}
                     />
@@ -946,7 +988,7 @@ export function BetDetailPage() {
                   </label>
                 ) : null}
 
-                <div>
+                <div className="hidden">
                   <p className="mb-1.5 text-xs font-semibold text-ink/50">Stake</p>
                   <div className="flex items-center gap-2">
                     <button
@@ -968,6 +1010,8 @@ export function BetDetailPage() {
                     >+</button>
                   </div>
                 </div>
+
+                <StakeInput value={stake} onChange={setStake} />
 
                 {!closest && selectedChance > 0 ? (
                   <div className="rounded-xl bg-field px-3 py-2.5 text-xs text-ink/60">
@@ -1235,45 +1279,106 @@ export function BetDetailPage() {
                   />
                 </label>
               </div>
-              {bet.visibility === 'private' ? (
-                <div className="space-y-3 rounded-md border border-line bg-field/70 p-3">
-                  <p className="text-sm font-black">Audience</p>
-                  {bet.groupId ? (
-                    <div className="block text-sm font-medium">
-                      Masked group members
-                      <div className="mt-1">
-                        <UsernamePicker
-                          value={editMasked}
-                          onChange={(next) => {
-                            const filtered = next.filter((username) => editGroupUsernames.includes(username));
-                            setEditMasked(filtered);
-                            setEditInvited(editGroupUsernames.filter((username) => !filtered.includes(username)));
-                          }}
-                          allowed={editGroupUsernames}
-                          exclude={profile?.username ? [profile.username] : []}
-                          placeholder="Search group members"
-                        />
-                      </div>
-                      <span className="mt-1 block text-xs text-ink/50">
-                        Masked members stay in the friend group, but cannot see this bet.
-                      </span>
-                    </div>
-                  ) : null}
+              <div className="space-y-3 rounded-md border border-line bg-field/70 p-3">
+                <p className="text-sm font-black">Audience</p>
+                <label className="block text-sm font-medium">
+                  Who can see it
+                  <select
+                    className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2"
+                    value={editVisibility === 'public' ? 'public' : editGroupId || 'manual'}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setEditMasked([]);
+                      if (value === 'public') {
+                        setEditVisibility('public');
+                        setEditGroupId('');
+                        setEditInvited([]);
+                      } else if (value === 'manual') {
+                        setEditVisibility('private');
+                        setEditGroupId('');
+                      } else {
+                        const group = groups.find((item) => item.id === value);
+                        const nextGroupUsernames = group && profile
+                          ? [group.creatorUsername, ...group.memberUsernames]
+                              .map((username) => username.trim().toLowerCase())
+                              .filter((username) => username && username !== profile.username)
+                          : [];
+                        setEditVisibility('private');
+                        setEditGroupId(value);
+                        setEditInvited(nextGroupUsernames);
+                      }
+                    }}
+                  >
+                    <option value="public">Public</option>
+                    <option value="manual">Private users</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {editVisibility === 'private' && !editGroupId ? (
                   <div className="block text-sm font-medium">
                     Invited users
                     <div className="mt-1">
                       <UsernamePicker
                         value={editInvited}
-                        onChange={(next) => setEditInvited(next.filter((username) => !editMasked.includes(username)))}
-                        allowed={bet.groupId ? editGroupUsernames : undefined}
-                        exclude={[profile?.username ?? '', ...editMasked].filter(Boolean)}
+                        onChange={setEditInvited}
+                        exclude={profile?.username ? [profile.username] : []}
                         placeholder="Search usernames"
                       />
                     </div>
                     <span className="mt-1 block text-xs text-ink/50">
-                      {bet.groupId ? 'Group bets invite every unmasked group member.' : 'Private bets only show for invited usernames.'}
+                      Only these users can see and predict on this bet.
                     </span>
                   </div>
+                ) : null}
+                {editVisibility === 'public' || editGroupId ? (
+                  <div className="block text-sm font-medium">
+                    Masked users
+                    <div className="mt-1">
+                      <UsernamePicker
+                        value={editMasked}
+                        onChange={(next) => {
+                          const filtered = editGroupId
+                            ? next.filter((username) => editGroupUsernames.includes(username))
+                            : next;
+                          setEditMasked(filtered);
+                          if (editGroupId) {
+                            setEditInvited(editGroupUsernames.filter((username) => !filtered.includes(username)));
+                          }
+                        }}
+                        allowed={editGroupId ? editGroupUsernames : undefined}
+                        exclude={profile?.username ? [profile.username] : []}
+                        placeholder={editGroupId ? 'Search group members to hide it from' : 'Search users to hide it from'}
+                      />
+                    </div>
+                    <span className="mt-1 block text-xs text-ink/50">
+                      {editGroupId ? 'The bet stays linked to the group, except masked members cannot see it.' : 'Public bet, except masked users cannot see it.'}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              {bet.type === 'multi' || bet.type === 'openChoice' ? (
+                <div className="space-y-2 rounded-md border border-line bg-field/70 p-3 text-sm">
+                  <p className="font-black">Choice rules</p>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={editAllowMultipleChoices}
+                      onChange={(event) => setEditAllowMultipleChoices(event.target.checked)}
+                    />
+                    Allow multiple choices
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={editAllowMultipleOutcomes}
+                      onChange={(event) => setEditAllowMultipleOutcomes(event.target.checked)}
+                    />
+                    Allow multiple outcomes
+                  </label>
                 </div>
               ) : null}
               <label className="block text-sm font-medium">

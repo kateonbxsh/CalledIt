@@ -34,6 +34,8 @@ export function CreateBetPage() {
   const [targetDate, setTargetDate] = useState('');
   const [allowDraw, setAllowDraw] = useState(false);
   const [allowExactScore, setAllowExactScore] = useState(false);
+  const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
+  const [allowMultipleOutcomes, setAllowMultipleOutcomes] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -120,6 +122,8 @@ export function CreateBetPage() {
           invitedUsernames: invited.filter((username) => !maskedSet.has(username)),
           maskedUsernames: selectedGroupId ? [...maskedSet] : [],
           options,
+          allowMultipleChoices: (type === 'multi' || type === 'openChoice') && allowMultipleChoices,
+          allowMultipleOutcomes: (type === 'multi' || type === 'openChoice') && allowMultipleOutcomes,
           allowDraw,
           allowExactScore,
           homeTeam,
@@ -211,11 +215,23 @@ export function CreateBetPage() {
 
           {/* Type-specific fields */}
           {type === 'multi' ? (
-            <label className="block text-sm font-medium">
-              Options
-              <textarea className="mt-1 min-h-32 w-full rounded-md border border-line bg-field px-3 py-2" value={multiOptions} onChange={(e) => setMultiOptions(e.target.value)} />
-              <span className="mt-1 block text-xs text-ink/50">One option per line</span>
-            </label>
+            <div className="space-y-3">
+              <label className="block text-sm font-medium">
+                Options
+                <textarea className="mt-1 min-h-32 w-full rounded-md border border-line bg-field px-3 py-2" value={multiOptions} onChange={(e) => setMultiOptions(e.target.value)} />
+                <span className="mt-1 block text-xs text-ink/50">One option per line</span>
+              </label>
+              <div className="grid gap-2 rounded-md bg-field p-3 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={allowMultipleChoices} onChange={(e) => setAllowMultipleChoices(e.target.checked)} />
+                  Allow multiple choices
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={allowMultipleOutcomes} onChange={(e) => setAllowMultipleOutcomes(e.target.checked)} />
+                  Allow multiple outcomes
+                </label>
+              </div>
+            </div>
           ) : null}
           {type === 'overUnder' ? (
             <label className="block text-sm font-medium">
@@ -266,24 +282,66 @@ export function CreateBetPage() {
             </div>
           ) : null}
           {type === 'openChoice' ? (
-            <div className="rounded-md bg-field p-3 text-sm text-ink/70">
-              <p className="font-semibold text-ink">Open Choice</p>
-              <p className="mt-1">Players write their own answer when predicting. When resolving, you can mark one or more submitted answers as correct.</p>
+            <div className="space-y-3">
+              <div className="rounded-md bg-field p-3 text-sm text-ink/70">
+                <p className="font-semibold text-ink">Open Choice</p>
+                <p className="mt-1">Players write their own answer when predicting. You decide whether people can pick several answers and whether several answers can resolve as correct.</p>
+              </div>
+              <div className="grid gap-2 rounded-md bg-field p-3 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={allowMultipleChoices} onChange={(e) => setAllowMultipleChoices(e.target.checked)} />
+                  Allow multiple choices
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={allowMultipleOutcomes} onChange={(e) => setAllowMultipleOutcomes(e.target.checked)} />
+                  Allow multiple outcomes
+                </label>
+              </div>
             </div>
           ) : null}
         </section>
 
         <aside className="space-y-4">
           <section className="rounded-md border border-line bg-white p-4">
-            <p className="mb-2 text-sm font-semibold">Visibility</p>
-            <select className="w-full rounded-md border border-line bg-field px-3 py-2" value={visibility} onChange={(e) => setVisibility(e.target.value as BetVisibility)}>
+            <p className="mb-2 text-sm font-semibold">Audience</p>
+            <select
+              className="w-full rounded-md border border-line bg-field px-3 py-2"
+              value={visibility === 'public' ? 'public' : selectedGroupId || 'manual'}
+              onChange={(e) => {
+                const value = e.target.value;
+                setMasked([]);
+                if (value === 'public') {
+                  setVisibility('public');
+                  setSelectedGroupId('');
+                  setInvited([]);
+                } else if (value === 'manual') {
+                  setVisibility('private');
+                  setSelectedGroupId('');
+                } else {
+                  const group = groups.find((item) => item.id === value);
+                  const nextGroupUsernames = group && profile
+                    ? [group.creatorUsername, ...group.memberUsernames]
+                        .map((username) => username.trim().toLowerCase())
+                        .filter((username) => username && username !== profile.username)
+                    : [];
+                  setVisibility('private');
+                  setSelectedGroupId(value);
+                  setInvited(nextGroupUsernames);
+                }
+              }}
+            >
               <option value="public">Public</option>
-              <option value="private">Private</option>
+              <option value="manual">Private users</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
             </select>
-            <p className="mt-1 text-xs text-ink/50">Private bets only show for invited usernames</p>
-            {visibility === 'private' ? (
+            <p className="mt-1 text-xs text-ink/50">Choose public, manual invitees, or a friend group.</p>
+            {visibility === 'private' || visibility === 'public' ? (
               <div className="mt-3 space-y-3">
-                {groups.length > 0 ? (
+                {false ? (
                   <label className="block text-sm font-medium">
                     Friend group
                     <select
@@ -303,38 +361,43 @@ export function CreateBetPage() {
                     </span>
                   </label>
                 ) : null}
-                {selectedGroupId ? (
+                {selectedGroupId || visibility === 'public' ? (
                   <div className="block text-sm font-medium">
-                    Masked group members
+                    Masked users
                     <div className="mt-1">
                       <UsernamePicker
                         value={masked}
-                        onChange={(next) => setMasked(next.filter((username) => groupUsernames.includes(username)))}
-                        allowed={groupUsernames}
+                        onChange={(next) => {
+                          const filtered = selectedGroupId ? next.filter((username) => groupUsernames.includes(username)) : next;
+                          setMasked(filtered);
+                          if (selectedGroupId) {
+                            setInvited(groupUsernames.filter((username) => !filtered.includes(username)));
+                          }
+                        }}
+                        allowed={selectedGroupId ? groupUsernames : undefined}
                         exclude={profile?.username ? [profile.username] : []}
-                        placeholder="Search group members to hide this bet from"
+                        placeholder={selectedGroupId ? 'Search group members to hide it from' : 'Search users to hide it from'}
                       />
                     </div>
                     <span className="mt-1 block text-xs text-ink/50">
-                      Masked members stay in the group, but this bet will not appear for them.
+                      {selectedGroupId ? 'The bet stays linked to the group, except masked members cannot see it.' : 'Public bet, except masked users cannot see it.'}
                     </span>
                   </div>
                 ) : null}
+                {visibility === 'private' && !selectedGroupId ? (
                 <div className="block text-sm font-medium">
                   Invited users
                   <div className="mt-1">
                     <UsernamePicker
                       value={invited}
-                      onChange={(next) => {
-                        setSelectedGroupId('');
-                        setInvited(next);
-                      }}
+                      onChange={setInvited}
                       exclude={profile?.username ? [profile.username] : []}
                       placeholder="Search usernames"
                     />
                   </div>
-                  <span className="mt-1 block text-xs text-ink/50">Search and click users to add them</span>
+                  <span className="mt-1 block text-xs text-ink/50">Only these users can see and predict on this bet.</span>
                 </div>
+                ) : null}
               </div>
             ) : null}
           </section>
