@@ -232,7 +232,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="max-w-full overflow-x-hidden pb-32 lg:ml-64 lg:pb-6">
+      <main className="max-w-full overflow-x-hidden pb-40 lg:ml-64 lg:pb-6">
         <div className="mx-auto max-w-5xl overflow-x-hidden px-4 pb-6 pt-6 sm:px-6 lg:px-8">
           <Outlet />
         </div>
