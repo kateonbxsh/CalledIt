@@ -167,6 +167,10 @@ button {
   animation: shake 400ms ease-in-out both;
 }
 
+.btn-special {
+  @apply bg-gradient-to-br from-mint to-mint/80 text-white shadow-soft hover:shadow-lift transition-all active:scale-95;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

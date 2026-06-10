@@ -21,7 +21,6 @@ import { isMobileBrowser, isStandaloneApp } from '../utils/device';
 
 const navItems = [
   { to: '/', label: 'Feed', icon: Home },
-  { to: '/create', label: 'Create', icon: CirclePlus },
   { to: '/challenges', label: 'Challenges', icon: Trophy },
   { to: '/minigames', label: 'Minigames', icon: Gamepad2 },
   { to: '/groups', label: 'Groups', icon: Users },
@@ -178,9 +177,9 @@ export function Layout() {
           <div className="relative pt-2">
             <button
               onClick={() => setActionMenuOpen((open) => !open)}
-              className="group w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-150 bg-ink text-white shadow-sm hover:shadow-soft"
+              className="btn-special group w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold"
             >
-              <CirclePlus size={17} className="text-white" />
+              <CirclePlus size={17} />
               <span>Create</span>
             </button>
             {actionMenuOpen && (
@@ -313,12 +312,12 @@ export function Layout() {
             setActionMenuOpen((open) => !open);
             setBottomNavVisible(true);
           }}
-          className={`mx-auto -mt-8 h-16 w-16 rounded-full border-[6px] border-[#edf0e8] shadow-lift transition active:scale-95 ${
-            actionMenuOpen ? 'bg-ink text-white' : 'bg-white text-ink'
-          } grid place-items-center`}
+          className={`btn-special mx-auto -mt-8 h-16 w-16 rounded-full border-[6px] border-[#edf0e8] grid place-items-center ${
+            actionMenuOpen ? '' : ''
+          }`}
           aria-label="Create"
         >
-          <CirclePlus size={30} className="drop-shadow-sm" />
+          <CirclePlus size={30} />
         </button>
         <BottomNavLink to="/minigames" label="Games" icon={Gamepad2} />
         <BottomNavLink to="/leaderboard" label="Ranks" icon={Medal} />

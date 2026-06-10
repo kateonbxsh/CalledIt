@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLayoutEffect } from 'react';
 import { Target } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { StakeInput } from '../components/StakeInput';
@@ -80,7 +81,7 @@ export function CreateWagerPage() {
         description="Challenge a friend or the community to complete a task"
       />
 
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-4 sm:space-y-4" style={{ minHeight: 'auto' }}>
         <section className="rounded-2xl border border-line bg-white p-5">
           <div className="mb-4 flex items-center gap-2">
             <Target size={20} className="text-citrus" />
@@ -128,9 +129,11 @@ export function CreateWagerPage() {
         <section className="rounded-2xl border border-line bg-white p-5">
           <h2 className="mb-4 font-black">Terms</h2>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <StakeInput value={stake} onChange={setStake} />
-            <label className="block text-sm font-medium">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 w-full">
+            <div className="min-w-0">
+              <StakeInput value={stake} onChange={setStake} />
+            </div>
+            <label className="block text-sm font-medium min-w-0">
               Deadline
               <input
                 className="mt-1 w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
