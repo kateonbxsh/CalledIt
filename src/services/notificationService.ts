@@ -44,8 +44,18 @@ function normalizeNotificationUrl(url: string) {
   return url;
 }
 
-function tokenDocId(token: string) {
-  return btoa(token).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+function getDeviceId() {
+  const key = '__called_it_device_id__';
+  let deviceId = localStorage.getItem(key);
+  if (!deviceId) {
+    deviceId = `device_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, deviceId);
+  }
+  return deviceId;
+}
+
+function tokenDocId(deviceId: string) {
+  return deviceId;
 }
 
 export function supportsPushNotifications() {
@@ -79,20 +89,28 @@ export async function enablePushNotifications(user: UserProfile) {
   });
   if (!token) throw new Error('Could not create a push token for this device.');
 
+  const deviceId = getDeviceId();
   const tokensRef = collection(db, 'users', user.uid, 'notificationTokens');
   const existingTokens = await getDocs(tokensRef);
+
+  // Disable all OTHER devices' tokens
   await Promise.all(existingTokens.docs
-    .filter((item) => item.id !== tokenDocId(token) && item.data().enabled !== false)
+    .filter((item) => item.id !== deviceId && item.data().enabled === true)
     .map((item) => setDoc(item.ref, {
       enabled: false,
+      disabledAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }, { merge: true })));
 
-  await setDoc(doc(db, 'users', user.uid, 'notificationTokens', tokenDocId(token)), {
+  // Register/update THIS device's token
+  const thisDeviceDoc = doc(db, 'users', user.uid, 'notificationTokens', deviceId);
+  const existingDoc = await getDoc(thisDeviceDoc);
+
+  await setDoc(thisDeviceDoc, {
     token,
     enabled: true,
     userAgent: navigator.userAgent,
-    createdAt: serverTimestamp(),
+    ...(existingDoc.exists() ? {} : { createdAt: serverTimestamp() }),
     updatedAt: serverTimestamp(),
   }, { merge: true });
 
@@ -100,16 +118,10 @@ export async function enablePushNotifications(user: UserProfile) {
 }
 
 export async function disableCurrentPushToken(user: UserProfile) {
-  const messagingInstance = await messaging();
-  if (!messagingInstance) return;
-  const registration = await navigator.serviceWorker.getRegistration(`${import.meta.env.BASE_URL}firebase-messaging-sw.js`);
-  const token = await getToken(messagingInstance, {
-    ...(firebaseVapidKey ? { vapidKey: firebaseVapidKey } : {}),
-    serviceWorkerRegistration: registration ?? undefined,
-  }).catch(() => '');
-  if (!token) return;
-  await setDoc(doc(db, 'users', user.uid, 'notificationTokens', tokenDocId(token)), {
+  const deviceId = getDeviceId();
+  await setDoc(doc(db, 'users', user.uid, 'notificationTokens', deviceId), {
     enabled: false,
+    disabledAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
 }
