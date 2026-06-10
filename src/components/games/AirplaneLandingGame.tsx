@@ -359,7 +359,7 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
   }, [gameState, obstacles, score, particles]);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4 w-full">
+    <div className="flex flex-col items-center justify-center w-full h-full">
       {!gameStarted ? (
         <div className="text-center space-y-4 p-4">
           <div className="text-6xl animate-bounce">✈️</div>
@@ -382,30 +382,30 @@ export function AirplaneLandingGame({ onGameEnd }: { onGameEnd: (won: boolean, s
               setParticles([]);
               setLandingQuality(null);
             }}
-            className="mt-4 rounded-xl bg-sky px-8 py-3 text-sm font-bold text-white shadow-soft hover:shadow-lift transition"
+            className="mt-4 rounded-xl bg-sky px-8 py-3 text-sm font-bold text-white shadow-soft hover:shadow-lift transition active:scale-95"
           >
             Start flying
           </button>
         </div>
       ) : (
-        <div className="relative w-full flex justify-center">
+        <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
           <canvas
             ref={canvasRef}
             width={GAME_WIDTH}
             height={GAME_HEIGHT}
-            className="rounded-3xl border-4 border-white shadow-lift w-full max-w-lg"
-            style={{ aspectRatio: `${GAME_WIDTH}/${GAME_HEIGHT}` }}
+            className="rounded-2xl sm:rounded-3xl border-4 border-white shadow-lift w-full max-w-lg h-auto"
+            style={{ aspectRatio: `${GAME_WIDTH}/${GAME_HEIGHT}`, maxHeight: '95vh' }}
           />
           {gameOver && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 animate-reward-pop pointer-events-none">
               <div className={`text-6xl drop-shadow-lg ${gameState.isLanded ? 'text-mint animate-bounce' : 'text-coral animate-bounce'}`}>
                 {gameState.isLanded ? (landingQuality === 'perfect' ? '🎯' : '✅') : '💥'}
               </div>
-              <div className="text-center drop-shadow-lg">
-                <p className={`font-black text-xl ${gameState.isLanded ? 'text-mint' : 'text-coral'}`}>
+              <div className="text-center drop-shadow-lg bg-white/95 rounded-xl px-4 py-3">
+                <p className={`font-black text-lg sm:text-xl ${gameState.isLanded ? 'text-mint' : 'text-coral'}`}>
                   {gameState.isLanded ? (landingQuality === 'perfect' ? 'Perfect landing!' : landingQuality === 'good' ? 'Great landing!' : 'Safe landing') : 'Crashed!'}
                 </p>
-                <p className="text-sm text-ink/70 font-semibold">
+                <p className="text-xs sm:text-sm text-ink/70 font-semibold">
                   Score: {gameState.isLanded ? score : Math.floor(score * 0.4)}
                 </p>
               </div>

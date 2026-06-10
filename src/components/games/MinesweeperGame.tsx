@@ -105,8 +105,7 @@ export function MinesweeperGame({ onGameEnd }: { onGameEnd: (won: boolean, score
   }
 
   const score = revealedNonBombs * (size === 3 ? 5 : 8);
-  const cellSizeClass = size === 3 ? 'w-20 h-20' : 'w-14 h-14';
-  const cellSize = size === 3 ? 80 : 56;
+  const cellSize = size === 3 ? 'w-16 h-16 sm:w-20 sm:h-20' : 'w-12 h-12 sm:w-14 sm:h-14';
 
   return (
     <div className="w-full max-w-full space-y-4">
@@ -158,14 +157,11 @@ export function MinesweeperGame({ onGameEnd }: { onGameEnd: (won: boolean, score
           </div>
 
           {/* Board */}
-          <div className="flex justify-center overflow-auto py-2">
+          <div className="flex justify-center overflow-auto py-2 px-2">
             <div
-              className="rounded-2xl border-2 border-line bg-white p-4 shadow-soft"
+              className={`rounded-2xl border-2 border-line bg-white p-3 sm:p-4 shadow-soft grid ${size === 3 ? 'gap-2 sm:gap-2.5' : 'gap-1.5 sm:gap-2'}`}
               style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${size}, ${cellSize}px)`,
-                gap: `${size === 3 ? 10 : 8}px`,
-                width: 'fit-content',
+                gridTemplateColumns: `repeat(${size}, auto)`,
               }}
             >
               {board.map((cell, idx) => {
@@ -175,28 +171,26 @@ export function MinesweeperGame({ onGameEnd }: { onGameEnd: (won: boolean, score
                     key={cell.id}
                     onClick={() => handleCellClick(cell.id)}
                     className={`
-                      relative overflow-hidden rounded-xl font-bold transition-all duration-200 select-none
+                      relative overflow-hidden rounded-lg sm:rounded-xl font-bold transition-all duration-200 select-none ${cellSize}
                       ${
                         cell.revealed
                           ? cell.isBomb
                             ? 'bg-coral shadow-soft scale-95 animate-shake cursor-default'
-                            : 'bg-gradient-to-br from-mint to-mint/80 text-white shadow-soft cursor-default'
-                          : 'bg-white border-2 border-line hover:border-ink/40 hover:shadow-soft cursor-pointer active:scale-95 transition-transform'
+                            : 'bg-gradient-to-br from-mint to-mint/80 text-white shadow-soft cursor-default text-2xl sm:text-3xl'
+                          : 'bg-white border-2 border-line hover:border-ink/40 hover:shadow-soft cursor-pointer active:scale-95 transition-transform text-xl sm:text-2xl'
                       }
                     `}
                     style={{
-                      width: `${cellSize}px`,
-                      height: `${cellSize}px`,
                       animation: isRevealing ? 'fadeIn 300ms ease-out' : 'none',
                     }}
                     disabled={gameOver || cell.revealed}
                   >
                     {cell.revealed && (
-                      <span className={`text-4xl ${cell.isBomb ? '' : 'animate-bounce'}`}>
+                      <span className={cell.isBomb ? '' : 'animate-bounce'}>
                         {cell.isBomb ? '💣' : '✓'}
                       </span>
                     )}
-                    {!cell.revealed && cell.flagged && <span className="text-2xl">🚩</span>}
+                    {!cell.revealed && cell.flagged && <span>🚩</span>}
                   </button>
                 );
               })}
