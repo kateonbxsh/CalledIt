@@ -20,13 +20,13 @@ export function RankLegend() {
   const getX = (elo: number) => ((elo - 300) / (maxElo - 300)) * SVG_WIDTH;
 
   return (
-    <div className="px-4 py-2">
+    <div className="px-4 py-2 overflow-x-auto">
       <svg
         width="100%"
         height={SVG_HEIGHT}
         viewBox={`-30 0 ${SVG_WIDTH + 60} ${SVG_HEIGHT}`}
-        preserveAspectRatio="none"
-        className="w-full"
+        preserveAspectRatio="xMidYMid meet"
+        className="min-w-max"
       >
         {/* Colored segments for each rank */}
         {rankRanges.map((rank, idx) => {
@@ -76,18 +76,22 @@ export function RankLegend() {
           );
         })}
 
-        {/* Points and values at boundaries */}
-        {ranges.map((r) => {
+        {/* Points and values at boundaries - colored points */}
+        {ranges.map((r, idx) => {
           const x = getX(r.elo);
+          // Find which rank segment this point belongs to
+          const rankIndex = idx < 6 ? idx : 6;
+          const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
+          const pointColor = colorMatch ? colorMatch[0] : '#121417';
 
           return (
             <g key={`marker-${r.elo}`}>
-              {/* Point on line */}
+              {/* Point on line - colored */}
               <circle
                 cx={x}
                 cy={LINE_Y}
                 r="3"
-                fill="#121417"
+                fill={pointColor}
                 filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
               />
               {/* Value below */}

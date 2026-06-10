@@ -269,7 +269,7 @@ export function MinigamesPage() {
               onClick={() => setWheelOpen(true)}
               className="grid h-40 w-40 place-items-center overflow-hidden rounded-full border-8 border-white bg-[conic-gradient(from_22.5deg,#2f7d63,#d95f46,#d49a25,#8c98a5,#3b75af,#d95f46,#6f5ca8,#121417,#2f7d63)] text-white shadow-lift"
             >
-              <span className="rounded-full bg-ink px-4 py-2 text-sm font-black">{wheelAvailable ? 'Open wheel' : 'View wheel'}</span>
+              <span className="btn-special rounded-full px-4 py-2 text-sm font-black">{wheelAvailable ? 'Open wheel' : 'View wheel'}</span>
             </button>
           </div>
         </section>
@@ -355,7 +355,7 @@ export function MinigamesPage() {
             <button
               onClick={wheel}
               disabled={!!busy || !wheelAvailable}
-              className="mt-5 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+              className="btn-special mt-5 w-full rounded-md px-4 py-3 text-sm font-bold disabled:opacity-50"
             >
               {busy === 'wheel' ? 'Spinning slowly...' : wheelAvailable ? 'Spin today' : 'Already spun today'}
             </button>
@@ -383,7 +383,7 @@ export function MinigamesPage() {
             </div>
             <button
               onClick={() => setRewardPopup(null)}
-              className="mt-5 w-full rounded-md bg-ink px-4 py-3 text-sm font-bold text-white"
+              className="mt-5 w-full rounded-md border border-line bg-white px-4 py-3 text-sm font-bold text-ink hover:bg-field transition"
             >
               Nice
             </button>

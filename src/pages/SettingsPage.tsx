@@ -179,7 +179,7 @@ export function SettingsPage() {
             <textarea className="mt-1 min-h-28 w-full rounded-md border border-line bg-field px-3 py-2" value={bio} onChange={(event) => setBio(event.target.value)} />
           </label>
           {message ? <p className="rounded-md bg-mint/10 p-3 text-sm text-mint">{message}</p> : null}
-          <button className="w-full rounded-md bg-ink px-4 py-3 font-semibold text-white sm:w-auto">Save profile</button>
+          <button className="btn-special w-full rounded-md px-4 py-3 font-semibold sm:w-auto">Save profile</button>
         </form>
         <aside className="grid gap-3 sm:grid-cols-2 lg:block lg:space-y-4">
           <section className="rounded-2xl border border-line bg-white p-4 shadow-soft">
@@ -214,7 +214,7 @@ export function SettingsPage() {
                 type="button"
                 onClick={enablePush}
                 disabled={pushBusy || !supportsPushNotifications()}
-                className="rounded-md bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-45"
+                className="btn-special rounded-md px-4 py-2.5 text-sm font-bold disabled:opacity-45"
               >
                 {pushBusy ? 'Working...' : 'Enable on this device'}
               </button>

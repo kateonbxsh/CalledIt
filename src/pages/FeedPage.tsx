@@ -89,7 +89,7 @@ export function FeedPage() {
             to="/create"
             className="btn-special inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold"
           >
-            <Plus size={17} /> Create
+            <Plus size={17} /> Create Bet
           </Link>
         }
       />

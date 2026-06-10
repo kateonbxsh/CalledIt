@@ -80,10 +80,9 @@ export function LeaderboardPage() {
                     <p className="truncate text-xs text-ink/40">@{user.username}</p>
                   </div>
 
-                  {/* Right side: ELO rating + coins */}
-                  <div className="shrink-0 space-y-2">
-                    <ELORating rating={user.rating} />
-                    <CoinAmount amount={user.coinBalance} className="justify-end text-xs" />
+                  {/* Right side: ELO rating + progress + coins */}
+                  <div className="shrink-0">
+                    <ELORating rating={user.rating} coins={user.coinBalance} />
                   </div>
                 </div>
               );

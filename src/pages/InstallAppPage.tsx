@@ -126,7 +126,7 @@ export function InstallAppPage() {
           </ol>
           <a
             href="https://kateonbxsh.github.io/CalledIt/"
-            className="mt-5 inline-flex items-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-bold text-white"
+            className="btn-special mt-5 inline-flex items-center gap-2 rounded-md px-4 py-3 text-sm font-bold"
           >
             <ExternalLink size={16} /> Open live app
           </a>
