@@ -4,6 +4,7 @@ import { CoinAmount } from './CoinAmount';
 import type { Bet, Prediction } from '../types';
 import { betTypeMeta, betTypeLabel } from '../utils/betTypes';
 import { percent, relativeTime } from '../utils/format';
+import { projectChanceSummaryOverTime } from '../utils/probability';
 
 const optionColors = [
   { text: 'text-mint',   tile: 'bg-mint/10'   },
@@ -28,8 +29,14 @@ export function BetCard({ bet, prediction }: { bet: Bet; prediction?: Prediction
   const isOpen = bet.status === 'open';
   const meta = betTypeMeta[bet.type];
   const TypeIcon = meta.icon;
+  const projectedSummary = projectChanceSummaryOverTime({
+    options: bet.options,
+    summary: bet.chanceSummary,
+    updatedAt: bet.updatedAt,
+    status: bet.status,
+  });
 
-  const sortedChances = [...bet.chanceSummary].sort((a, b) => b.chance - a.chance);
+  const sortedChances = [...projectedSummary].sort((a, b) => b.chance - a.chance);
   const displayOptions = sortedChances.slice(0, 3);
   const remainingCount = sortedChances.length - displayOptions.length;
   const winnerIds = bet.status === 'resolved' ? resolvedWinnerIds(bet) : [];

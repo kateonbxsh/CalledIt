@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle2, ImageIcon, Target, Trophy, XCircle } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
@@ -36,6 +36,8 @@ function statusStyle(status: ChallengeActivity['status']) {
 
 export function ChallengesPage() {
   const { profile } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activities, setActivities] = useState<ChallengeActivity[]>([]);
   const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [activeTab, setActiveTab] = useState('all');
@@ -117,6 +119,13 @@ export function ChallengesPage() {
   useEffect(() => {
     if (!activeWeeklyId && weekly[0]) setActiveWeeklyId(weekly[0].id);
   }, [activeWeeklyId, weekly]);
+
+  useEffect(() => {
+    if ((location.state as { openWager?: boolean } | null)?.openWager) {
+      setWagerModalOpen(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
 
   async function processImage(file: File, setter: (value: string) => void) {
     setBusy('image');

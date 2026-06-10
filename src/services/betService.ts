@@ -35,6 +35,7 @@ import {
   calculateChanceSummary,
   calculateSmoothedChanceSummary,
   chanceForOption,
+  projectChanceSummaryOverTime,
 } from '../utils/probability';
 import { applyRatingDelta, calculateRatingDelta } from '../utils/rating';
 import { rankForRating } from '../utils/ranks';
@@ -343,11 +344,19 @@ export async function placePrediction(input: PredictionInput) {
     }
     const displayedChanceAtBetTime = closest
       ? 1 / (existing.length + 1)
-      : Math.min(
-          0.95,
-          effectiveOptionIds.reduce((sum, id) => sum + chanceForOption(bet.chanceSummary, id), 0)
-            || 1 / Math.max(1, nextOptions.length),
-        );
+      : (() => {
+          const projectedSummary = projectChanceSummaryOverTime({
+            options: nextOptions,
+            summary: bet.chanceSummary,
+            updatedAt: bet.updatedAt,
+            status: bet.status,
+          });
+          return Math.min(
+            0.95,
+            effectiveOptionIds.reduce((sum, id) => sum + chanceForOption(projectedSummary, id), 0)
+              || 1 / Math.max(1, nextOptions.length),
+          );
+        })();
 
     const now = Timestamp.now();
     const previousStake = existingPrediction?.stake ?? 0;
@@ -444,10 +453,16 @@ export async function placePrediction(input: PredictionInput) {
         } as Prediction,
       ];
       const elapsedMs = Timestamp.now().toMillis() - bet.updatedAt.toMillis();
+      const projectedPreviousSummary = projectChanceSummaryOverTime({
+        options: nextOptions,
+        summary: bet.chanceSummary,
+        updatedAt: bet.updatedAt,
+        status: bet.status,
+      });
       const chanceSummary = calculateSmoothedChanceSummary({
         options: nextOptions,
         predictions: nextPredictions,
-        previousSummary: bet.chanceSummary,
+        previousSummary: projectedPreviousSummary,
         elapsedMs,
       });
 

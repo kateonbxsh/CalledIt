@@ -9,6 +9,7 @@ import {
 import type { Bet, ChanceSnapshot } from '../types';
 import { isClosestType } from '../utils/betTypes';
 import { asDate } from '../utils/format';
+import { projectChanceSummaryOverTime } from '../utils/probability';
 
 const colors = ['#2f7d63', '#d95f46', '#3b75af', '#d49a25', '#6f5ca8'];
 
@@ -41,6 +42,8 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
   let snapshotIndex = 0;
   let latestSummary = bet.options.map((option) => ({
     optionId: option.id,
+    users: 0,
+    coins: 0,
     chance: 1 / Math.max(1, bet.options.length),
   }));
 
@@ -57,8 +60,15 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
     const point: Record<string, string | number> = {
       time: compactDate(dayMs),
     };
+    const projectedSummary = projectChanceSummaryOverTime({
+      options: bet.options,
+      summary: latestSummary,
+      updatedAt: snapshotIndex > 0 ? sortedSnapshots[snapshotIndex - 1].createdAt : bet.createdAt,
+      now: dayMs,
+      status: bet.status === 'resolved' && bet.resolvedAt && asDate(bet.resolvedAt).getTime() <= dayMs ? 'resolved' : 'open',
+    });
     bet.options.forEach((option) => {
-      const summary = latestSummary.find((item) => item.optionId === option.id);
+      const summary = projectedSummary.find((item) => item.optionId === option.id);
       point[option.id] = Math.round((summary?.chance ?? 0) * 100);
     });
     data.push(point);

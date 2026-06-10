@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Pencil, X } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
@@ -25,6 +26,7 @@ export function SettingsPage() {
   const [pushMessage, setPushMessage] = useState('');
   const [pushBusy, setPushBusy] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
   const progress = useMemo(() => rankProgress(profile?.rating ?? 1000), [profile?.rating]);
 
   useEffect(() => {
@@ -32,13 +34,15 @@ export function SettingsPage() {
     setDisplayName(profile?.displayName ?? '');
     setBio(profile?.bio ?? '');
     setPhotoURL(profile?.photoURL ?? '');
+    setEditingUsername(false);
   }, [profile]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!profile) return;
-    if (username.trim().toLowerCase() !== profile.username) {
+    if (editingUsername && username.trim().toLowerCase() !== profile.username) {
       await updateUsername(profile, username);
+      setEditingUsername(false);
     }
     await updateProfile(profile.uid, { displayName, bio, photoURL });
     setMessage('Profile saved.');
@@ -106,9 +110,15 @@ export function SettingsPage() {
       <PageHeader title="Profile" />
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <form onSubmit={save} className="space-y-4 rounded-md border border-line bg-white p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Avatar name={displayName || profile?.username || 'FF'} src={photoURL} size="lg" />
-            <div className="flex-1">
+          <div className="rounded-2xl bg-field p-3">
+            <div className="flex items-center gap-3">
+              <Avatar name={displayName || profile?.username || 'FF'} src={photoURL} size="lg" />
+              <div className="min-w-0">
+                <p className="truncate text-xl font-black">{displayName || profile?.username}</p>
+                <p className="truncate text-sm font-semibold text-ink/45">@{profile?.username}</p>
+              </div>
+            </div>
+            <div className="mt-3">
               <label className="block text-sm font-medium">
                 Profile picture
                 <input
@@ -131,17 +141,35 @@ export function SettingsPage() {
               {imageBusy ? <p className="mt-2 text-xs text-ink/55">Resizing image...</p> : null}
             </div>
           </div>
-          <label className="block text-sm font-medium">
+          <div className="block text-sm font-medium">
             Username
-            <input
-              className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              pattern="[a-zA-Z0-9_]{3,20}"
-              autoComplete="username"
-            />
-            <span className="mt-1 block text-xs text-ink/50">Letters, numbers, underscore. 3-20 characters.</span>
-          </label>
+            <div className="mt-1 flex gap-2">
+              <input
+                className={`w-full rounded-md border border-line px-3 py-2 ${
+                  editingUsername ? 'bg-field outline-none focus:border-mint' : 'bg-white text-ink/55'
+                }`}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                pattern="[a-zA-Z0-9_]{3,20}"
+                autoComplete="username"
+                readOnly={!editingUsername}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingUsername) setUsername(profile?.username ?? '');
+                  setEditingUsername((value) => !value);
+                }}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-white text-ink/60"
+                aria-label={editingUsername ? 'Cancel username edit' : 'Edit username'}
+              >
+                {editingUsername ? <X size={16} /> : <Pencil size={16} />}
+              </button>
+            </div>
+            <span className="mt-1 block text-xs text-ink/50">
+              {editingUsername ? 'Letters, numbers, underscore. 3-20 characters.' : 'Tap the pencil to change your username.'}
+            </span>
+          </div>
           <label className="block text-sm font-medium">
             Display name
             <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />

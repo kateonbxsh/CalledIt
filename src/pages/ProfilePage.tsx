@@ -20,18 +20,25 @@ export function ProfilePage() {
     });
   }, [uid]);
 
-  if (!user) return <PageHeader title="Profile" description="Loading profile..." />;
+  if (!user) return <PageHeader title="Profile" description="Loading profile..." back />;
 
   return (
     <>
-      <div className="mb-5 flex items-center gap-4">
-        <Avatar name={user.displayName} src={user.photoURL} size="lg" />
-        <div>
-          <PageHeader title={user.displayName} description={`@${user.username}`} />
-          <RankBadge rank={rankForRating(user.rating)} />
+      <PageHeader title="Profile" back />
+      <section className="mb-4 overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
+        <div className="h-20 bg-gradient-to-r from-mint/20 via-sky/15 to-citrus/20" />
+        <div className="-mt-9 px-4 pb-4">
+          <Avatar name={user.displayName} src={user.photoURL} size="lg" />
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="break-words text-2xl font-black">{user.displayName}</h1>
+              <p className="text-sm font-semibold text-ink/45">@{user.username}</p>
+            </div>
+            <RankBadge rank={rankForRating(user.rating)} />
+          </div>
         </div>
-      </div>
-      <div className="grid gap-4 md:grid-cols-4">
+      </section>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded-md border border-line bg-white p-4">
           <p className="text-sm text-ink/55">Rating/ELO</p>
           <p className="mt-1 text-2xl font-black">{user.rating}</p>

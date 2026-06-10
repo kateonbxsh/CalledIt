@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { Check, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { ChanceChart } from '../components/ChanceChart';
 import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
@@ -34,7 +34,7 @@ import {
 } from '../utils/closestGuess';
 import { percent, relativeTime } from '../utils/format';
 import { downscaleBetImage } from '../utils/image';
-import { chanceForOption } from '../utils/probability';
+import { chanceForOption, projectChanceSummaryOverTime } from '../utils/probability';
 
 function datetimeLocalValue(date?: Date | null) {
   if (!date) return '';
@@ -226,11 +226,19 @@ export function BetDetailPage() {
   const multiWinner = bet ? supportsMultipleWinners(bet) : false;
   const multiPrediction = bet?.type === 'multi';
   const canPredict = bet?.status === 'open';
+  const projectedChanceSummary = bet
+    ? projectChanceSummaryOverTime({
+        options: bet.options,
+        summary: bet.chanceSummary,
+        updatedAt: bet.updatedAt,
+        status: bet.status,
+      })
+    : [];
   const canResolve = !!profile && !!bet;
   const selectedChance = bet && !closest
     ? (multiPrediction
-      ? Math.min(0.95, selectedOptionIds.reduce((sum, optionId) => sum + chanceForOption(bet.chanceSummary, optionId), 0))
-      : chanceForOption(bet.chanceSummary, selected))
+      ? Math.min(0.95, selectedOptionIds.reduce((sum, optionId) => sum + chanceForOption(projectedChanceSummary, optionId), 0))
+      : chanceForOption(projectedChanceSummary, selected))
     : 0;
   const pendingEstimate = estimatedCoinOutcome(stake, selectedChance);
   const myPredictionEstimate = myPrediction && !closest
@@ -492,6 +500,14 @@ export function BetDetailPage() {
     <>
       <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
+            aria-label="Go back"
+          >
+            <ChevronLeft size={21} />
+          </button>
           {bet.imageUrl ? (
             <img src={bet.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-md border border-line object-cover shadow-soft sm:h-20 sm:w-20" />
           ) : null}
@@ -635,7 +651,7 @@ export function BetDetailPage() {
               <div className="rounded-md border border-line bg-white p-4">
                 <h2 className="mb-3 font-bold">Option Breakdown</h2>
                 <div className="space-y-3">
-                  {bet.chanceSummary.map((summary, index) => {
+                  {projectedChanceSummary.map((summary, index) => {
                     const option = bet.options.find((item) => item.id === summary.optionId);
                     return (
                       <div key={`${summary.optionId}-${index}`}>
@@ -817,7 +833,7 @@ export function BetDetailPage() {
                     </p>
                     <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(bet.options.length, 2)}, 1fr)` }}>
                       {bet.options.map((option, index) => {
-                        const chance = chanceForOption(bet.chanceSummary, option.id);
+                        const chance = chanceForOption(projectedChanceSummary, option.id);
                         const isSelected = multiPrediction ? selectedOptionIds.includes(option.id) : selected === option.id;
                         return (
                           <button

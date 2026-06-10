@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   BarChart3,
   CirclePlus,
   Download,
@@ -9,14 +8,12 @@ import {
   Home,
   LogOut,
   Medal,
-  Menu,
   Trophy,
   User,
   Users,
-  X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
 import { useAuth } from '../contexts/AuthContext';
@@ -57,33 +54,21 @@ function NavItem({ to, label, icon: Icon }: (typeof navItems)[number]) {
   );
 }
 
-function MobileNavItem({
-  to,
-  label,
-  icon: Icon,
-  expanded,
-  onNavigate,
-}: (typeof navItems)[number] & { expanded: boolean; onNavigate: () => void }) {
+function BottomNavLink({ to, label, icon: Icon }: (typeof navItems)[number]) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
-      onClick={onNavigate}
       className={({ isActive }) =>
-        `group flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all duration-150 ${
-          isActive
-            ? 'bg-ink text-white shadow-sm'
-            : 'text-ink/60 hover:bg-white hover:text-ink hover:shadow-sm'
+        `grid min-w-0 place-items-center gap-0.5 text-[10px] font-black transition ${
+          isActive ? 'text-ink' : 'text-ink/42'
         }`
       }
-      title={label}
     >
       {({ isActive }) => (
         <>
-          <Icon size={18} className={`shrink-0 ${isActive ? 'text-white' : 'text-ink/50 group-hover:text-ink'}`} />
-          <span className={`truncate transition-opacity ${expanded ? 'opacity-100' : 'w-0 opacity-0'}`}>
-            {label}
-          </span>
+          <Icon size={19} strokeWidth={isActive ? 2.8 : 2.2} />
+          <span className="max-w-full truncate">{label}</span>
         </>
       )}
     </NavLink>
@@ -94,72 +79,55 @@ export function Layout() {
   const { profile, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showInstallNav, setShowInstallNav] = useState(false);
-  const touchStartRef = useRef<{ x: number; y: number; valid: boolean } | null>(null);
-  const mobileNavItems = [
-    ...(showInstallNav ? [{ to: '/install', label: 'Install App', icon: Download }] : []),
-    ...navItems,
-    { to: '/me', label: 'Profile', icon: User },
-  ];
-  const canGoBack = /^\/bets\/[^/]+/.test(location.pathname) || /^\/profile\/[^/]+/.test(location.pathname);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [bottomNavVisible, setBottomNavVisible] = useState(true);
 
   useEffect(() => {
     setShowInstallNav(isMobileBrowser() && !isStandaloneApp());
   }, [location.pathname]);
 
   useEffect(() => {
-    const interactiveSelector = 'a, button, input, textarea, select, label, summary, [role="button"], [data-swipe-ignore="true"]';
-    const onTouchStart = (event: TouchEvent) => {
-      if (window.matchMedia('(min-width: 1024px)').matches || mobileNavOpen) return;
-      const target = event.target instanceof Element ? event.target : null;
-      const touch = event.touches[0];
-      if (!touch || target?.closest(interactiveSelector)) {
-        touchStartRef.current = null;
-        return;
-      }
-      touchStartRef.current = { x: touch.clientX, y: touch.clientY, valid: true };
+    setActionMenuOpen(false);
+    setProfileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      if (window.matchMedia('(min-width: 1024px)').matches) return;
+      const nextY = window.scrollY;
+      const delta = nextY - lastY;
+      if (Math.abs(delta) <= 8) return;
+      setBottomNavVisible(delta < 0 || nextY < 24);
+      lastY = nextY;
     };
-    const onTouchEnd = (event: TouchEvent) => {
-      const start = touchStartRef.current;
-      touchStartRef.current = null;
-      if (!start?.valid) return;
-      const touch = event.changedTouches[0];
-      if (!touch) return;
-      const dx = touch.clientX - start.x;
-      const dy = Math.abs(touch.clientY - start.y);
-      if (dx > 70 && dx > dy * 1.4) setMobileNavOpen(true);
-    };
-    document.addEventListener('touchstart', onTouchStart, { passive: true });
-    document.addEventListener('touchend', onTouchEnd, { passive: true });
-    return () => {
-      document.removeEventListener('touchstart', onTouchStart);
-      document.removeEventListener('touchend', onTouchEnd);
-    };
-  }, [mobileNavOpen]);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  function createWager() {
+    setActionMenuOpen(false);
+    navigate('/challenges', { state: { openWager: true } });
+  }
 
   return (
     <div className="min-h-screen bg-[#edf0e8] text-ink">
-      {/* Sidebar */}
       <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col border-r border-line/70 bg-[#f8faf4] p-4 lg:flex">
-        {/* Brand */}
-        <div className="mb-7 flex items-baseline justify-between gap-3 px-1 [&>p:last-child]:hidden">
+        <div className="mb-7 flex items-baseline justify-between gap-3 px-1">
           <div className="flex items-baseline gap-2">
-            <span className="h-2 w-2 rounded-full bg-mint mb-0.5 shrink-0" />
+            <span className="mb-0.5 h-2 w-2 shrink-0 rounded-full bg-mint" />
             <p className="text-xl font-black tracking-tight">Called it</p>
           </div>
-          <p className="font-arabic text-sm font-black text-ink/40" dir="rtl">كنت عارف</p>
-          <p className="font-arabic text-sm font-black text-ink/40" dir="rtl">كنت عارف</p>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 space-y-0.5">
           {navItems.map((item) => (
             <NavItem key={item.to} {...item} />
           ))}
         </nav>
 
-        {/* User card */}
         <div className="mt-4 rounded-2xl border border-line/70 bg-white p-3 shadow-soft">
           <div className="flex items-center gap-3">
             <Avatar name={profile?.displayName ?? 'FF'} src={profile?.photoURL} round />
@@ -191,105 +159,106 @@ export function Layout() {
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="pb-6 lg:ml-64">
-        <div className="mx-auto max-w-5xl px-4 pb-6 pt-16 sm:px-6 lg:px-8 lg:pt-6">
+      <main className="pb-24 lg:ml-64 lg:pb-6">
+        <div className="mx-auto max-w-5xl px-4 pb-6 pt-6 sm:px-6 lg:px-8">
           <Outlet />
         </div>
       </main>
 
-      {mobileNavOpen ? (
+      {actionMenuOpen || profileMenuOpen ? (
         <button
           type="button"
-          className="fixed inset-0 z-20 bg-ink/10 backdrop-blur-[1px] lg:hidden"
-          onClick={() => setMobileNavOpen(false)}
-          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-ink/25 backdrop-blur-sm lg:hidden"
+          onClick={() => {
+            setActionMenuOpen(false);
+            setProfileMenuOpen(false);
+          }}
+          aria-label="Close menu"
         />
       ) : null}
 
-      {/* Mobile app controls */}
-      <div className={`pointer-events-none fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between px-3 transition lg:hidden ${
-        mobileNavOpen ? 'pointer-events-none opacity-0' : 'opacity-100'
-      }`}>
-        {canGoBack ? (
+      {actionMenuOpen ? (
+        <div className="fixed bottom-24 left-4 right-4 z-40 grid gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift lg:hidden">
+          <Link
+            to="/create"
+            className="rounded-xl bg-ink px-4 py-3 text-center text-sm font-black text-white"
+            onClick={() => setActionMenuOpen(false)}
+          >
+            Create bet
+          </Link>
           <button
             type="button"
-            onClick={() => navigate(-1)}
-            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
-            aria-label="Go back"
-            title="Back"
+            onClick={createWager}
+            className="rounded-xl border border-line bg-field px-4 py-3 text-center text-sm font-black text-ink"
           >
-            <ArrowLeft size={20} />
+            Create wager
           </button>
-        ) : <span className="h-10 w-10" />}
-        <button
-          type="button"
-          onClick={() => setMobileNavOpen(true)}
-          className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-ink/70 shadow-soft transition active:scale-95"
-          aria-label="Open navigation"
-          title="Menu"
-        >
-          <Menu size={19} />
-        </button>
-      </div>
+        </div>
+      ) : null}
 
-      <aside
-        className={`fixed bottom-0 left-0 top-0 z-30 flex w-64 flex-col border-r border-line/70 bg-[#f8faf4]/95 p-2 shadow-soft backdrop-blur-md transition-transform duration-200 lg:hidden ${
-          mobileNavOpen ? 'translate-x-0' : '-translate-x-full'
+      {profileMenuOpen ? (
+        <div className="fixed bottom-24 right-4 z-40 w-56 rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden">
+          <Link to="/me" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
+            Profile
+          </Link>
+          <Link to="/history" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
+            History
+          </Link>
+          <Link to="/mine" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
+            My bets
+          </Link>
+          <Link to="/how-to-play" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
+            How to Play
+          </Link>
+          {showInstallNav ? (
+            <Link to="/install" className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
+              <Download size={15} /> Install App
+            </Link>
+          ) : null}
+          <button onClick={logout} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-coral">
+            <LogOut size={15} /> Sign out
+          </button>
+        </div>
+      ) : null}
+
+      <nav
+        className={`fixed bottom-0 left-0 right-0 z-40 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4]/96 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
+          bottomNavVisible || actionMenuOpen || profileMenuOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
+        <BottomNavLink to="/" label="Bets" icon={Home} />
+        <BottomNavLink to="/challenges" label="Challenges" icon={Trophy} />
+        <BottomNavLink to="/groups" label="Groups" icon={Users} />
         <button
           type="button"
-          onClick={() => setMobileNavOpen(false)}
-          className="mb-3 grid h-10 w-10 place-items-center rounded-xl border border-line bg-white text-ink/70 transition hover:bg-field hover:text-ink"
-          aria-label="Close navigation"
+          onClick={() => {
+            setProfileMenuOpen(false);
+            setActionMenuOpen((open) => !open);
+            setBottomNavVisible(true);
+          }}
+          className="mx-auto -mt-8 grid h-16 w-16 place-items-center rounded-full border-[6px] border-[#edf0e8] bg-ink text-white shadow-lift transition active:scale-95"
+          aria-label="Create"
         >
-          <X size={18} />
+          <CirclePlus size={30} />
         </button>
-
-        <div className="mb-3 min-h-8 overflow-hidden px-1">
-          <div className="flex items-baseline gap-2 whitespace-nowrap [&>p:last-child]:hidden">
-            <span className="mb-0.5 h-2 w-2 shrink-0 rounded-full bg-mint" />
-            <p className="text-lg font-black tracking-tight">Called it</p>
-            <p className="ml-auto shrink-0 font-arabic text-xs font-black leading-none text-ink/40" dir="rtl">كنت عارف</p>
-            <p className="ml-auto font-arabic text-xs font-black text-ink/40" dir="rtl">ÙƒÙ†Øª Ø¹Ø§Ø±Ù</p>
-          </div>
-        </div>
-
-        <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden">
-          {mobileNavItems.map((item) => (
-            <MobileNavItem
-              key={item.to}
-              {...item}
-              expanded
-              onNavigate={() => setMobileNavOpen(false)}
-            />
-          ))}
-        </nav>
-
-        <div className="mt-3 overflow-hidden">
-          <div className="rounded-2xl border border-line/70 bg-white p-3 shadow-soft">
-            <div className="flex items-center gap-3">
-              <Avatar name={profile?.displayName ?? 'FF'} src={profile?.photoURL} round />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{profile?.displayName}</p>
-                <p className="truncate text-xs text-ink/45">@{profile?.username}</p>
-              </div>
-            </div>
-            <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-field px-3 py-2">
-              <CoinAmount amount={profile?.coinBalance ?? 0} className="text-xs" />
-              <span className="ml-auto text-xs font-semibold text-ink/45">{profile?.rating ?? 1000} ELO</span>
-            </div>
-            <button
-              onClick={logout}
-              className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-line bg-white text-sm font-semibold text-ink/55 transition hover:bg-field hover:text-ink"
-            >
-              <LogOut size={16} />
-              Sign out
-            </button>
-          </div>
-        </div>
-      </aside>
+        <BottomNavLink to="/minigames" label="Games" icon={Gamepad2} />
+        <BottomNavLink to="/leaderboard" label="Ranks" icon={Medal} />
+        <button
+          type="button"
+          onClick={() => {
+            setActionMenuOpen(false);
+            setProfileMenuOpen((open) => !open);
+            setBottomNavVisible(true);
+          }}
+          className={`grid min-w-0 place-items-center gap-0.5 text-[10px] font-black transition ${
+            location.pathname === '/me' || location.pathname.startsWith('/profile/') ? 'text-ink' : 'text-ink/42'
+          }`}
+          aria-label="Profile menu"
+        >
+          <Avatar name={profile?.displayName ?? 'Me'} src={profile?.photoURL} round />
+          <span className="max-w-full truncate">Profile</span>
+        </button>
+      </nav>
     </div>
   );
 }

@@ -3,12 +3,16 @@ import type { BetOption, ChanceOptionSummary, Prediction } from '../types';
 const MIN_SMOOTHING_WEIGHT = 0.18;
 const SMOOTHING_TIME_CONSTANT_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_RATING = 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const DAILY_SIGNAL_LIFT_MAX = 0.35;
+const DAILY_SIGNAL_TAU_DAYS = 4;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
 type PredictionSlice = Pick<Prediction, 'optionId' | 'optionIds' | 'stake' | 'userRating'>;
+type TimeLike = { toMillis?: () => number } | Date | number | null | undefined;
 
 function predictionOptionIds(prediction: PredictionSlice) {
   return prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
@@ -83,6 +87,56 @@ export function calculateSmoothedChanceSummary(params: {
       chance: previousChance + (raw.chance - previousChance) * smoothingWeight,
     };
   });
+}
+
+function timeMs(value: TimeLike) {
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  return value?.toMillis?.() ?? Date.now();
+}
+
+function normalizeSummary(summary: ChanceOptionSummary[], optionCount: number) {
+  const minChance = optionCount > 1 ? 0.02 : 1;
+  const clamped = summary.map((item) => ({
+    ...item,
+    chance: clamp(item.chance, minChance, 1),
+  }));
+  const total = clamped.reduce((sum, item) => sum + item.chance, 0) || 1;
+  return clamped.map((item) => ({ ...item, chance: item.chance / total }));
+}
+
+export function projectChanceSummaryOverTime(params: {
+  options: BetOption[];
+  summary: ChanceOptionSummary[];
+  updatedAt?: TimeLike;
+  now?: TimeLike;
+  status?: string;
+}): ChanceOptionSummary[] {
+  const optionCount = params.options.length;
+  if (optionCount === 0) return [];
+  if (params.status === 'resolved') return params.summary;
+
+  const neutral = 1 / optionCount;
+  const updatedAtMs = timeMs(params.updatedAt);
+  const nowMs = timeMs(params.now);
+  const daysElapsed = Math.max(0, Math.floor((nowMs - updatedAtMs) / ONE_DAY_MS));
+  if (daysElapsed === 0) return normalizeSummary(params.summary, optionCount);
+
+  const lift = DAILY_SIGNAL_LIFT_MAX * (1 - Math.exp(-daysElapsed / DAILY_SIGNAL_TAU_DAYS));
+  const projected = params.options.map((option) => {
+    const stored = params.summary.find((item) => item.optionId === option.id) ?? {
+      optionId: option.id,
+      users: 0,
+      coins: 0,
+      chance: neutral,
+    };
+    return {
+      ...stored,
+      chance: neutral + (stored.chance - neutral) * (1 + lift),
+    };
+  });
+
+  return normalizeSummary(projected, optionCount);
 }
 
 export function chanceForOption(summary: ChanceOptionSummary[], optionId: string) {
