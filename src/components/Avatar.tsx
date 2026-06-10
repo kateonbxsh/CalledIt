@@ -19,7 +19,8 @@ export function Avatar({
       <img
         src={src}
         alt=""
-        className={`${dim} ${shape} object-cover`}
+        className={`${dim} ${shape} object-cover shrink-0`}
+        style={{ imageRendering: 'crisp-edges', WebkitFontSmoothing: 'antialiased' } as React.CSSProperties}
         referrerPolicy="no-referrer"
       />
     );

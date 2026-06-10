@@ -41,6 +41,24 @@ select {
   font: inherit;
 }
 
+img {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  image-rendering: crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+svg {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  backface-visibility: hidden;
+}
+
+button {
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
 .font-arabic {
   font-family:
     "Noto Kufi Arabic Variable", "Noto Kufi Arabic", "Inter Variable", sans-serif;

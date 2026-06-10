@@ -60,15 +60,16 @@ function BottomNavLink({ to, label, icon: Icon }: (typeof navItems)[number]) {
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `flex min-w-0 items-center justify-center rounded-2xl py-2 px-1 transition will-change-transform ${
+        `flex items-center justify-center rounded-2xl py-2 px-1 transition-colors ${
           isActive ? 'bg-ink text-white shadow-soft' : 'text-ink/50 active:bg-field'
         }`
       }
       aria-label={label}
       title={label}
+      style={{ backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' } as React.CSSProperties}
     >
-      {({ isActive }) => (
-        <Icon size={21} strokeWidth={isActive ? 2.8 : 2.2} className="drop-shadow-sm" />
+      {() => (
+        <Icon size={21} strokeWidth={2.4} style={{ WebkitFontSmoothing: 'antialiased', transform: 'translateZ(0)' } as React.CSSProperties} />
       )}
     </NavLink>
   );
@@ -296,14 +297,16 @@ export function Layout() {
             setProfileMenuOpen((open) => !open);
             setBottomNavVisible(true);
           }}
-          className="rounded-2xl transition active:bg-field lg:hidden grid h-12 min-w-0 place-items-center"
+          className="rounded-2xl transition-colors active:bg-field lg:hidden grid h-12 place-items-center"
           aria-label="Profile menu"
+          style={{ backfaceVisibility: 'hidden' } as React.CSSProperties}
         >
-          <span className={`rounded-full transition ${
+          <span className={`rounded-full transition-all ${
             location.pathname === '/me' || location.pathname.startsWith('/profile/')
               ? 'bg-ink shadow-soft ring-2 ring-ink'
               : 'bg-transparent'
           } grid h-10 w-10 place-items-center shrink-0`}
+            style={{ backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' } as React.CSSProperties}
           >
             <Avatar name={profile?.displayName ?? 'Me'} src={profile?.photoURL} round />
           </span>
