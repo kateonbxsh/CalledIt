@@ -67,7 +67,7 @@ export function RankLegend() {
                             transform: 'translateY(-50%)',
                           }}
                         >
-                          <span className="text-xs font-black text-ink/70 whitespace-nowrap">
+                          <span className="text-xs font-black text-ink/70 whitespace-nowrap mr-1">
                             {profile.rating}
                           </span>
                           <Avatar
@@ -112,7 +112,7 @@ export function RankLegend() {
                   {/* Boundary points */}
                   {boundaries.map((b, idx) => {
                     const posPercent = ((b.elo - minElo) / totalRange) * 100;
-                    const rankIndex = Math.min(idx, 6);
+                    const rankIndex = idx;
                     const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
                     const pointColor = colorMatch ? colorMatch[0] : '#121417';
 
