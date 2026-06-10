@@ -23,7 +23,7 @@ export function ELORating({ rating, coins }: { rating: number; coins?: number })
       </div>
 
       {/* Scale line showing progress */}
-      <div className="w-full h-2 bg-field rounded-full overflow-hidden">
+      <div className="h-2 bg-field rounded-full overflow-hidden w-24 sm:w-40 lg:w-56">
         <div
           className="h-full transition-all duration-300 rounded-full"
           style={{
