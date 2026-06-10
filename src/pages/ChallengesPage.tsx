@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Target, Trophy, XCircle } from 'lucide-react';
+import { CheckCircle2, Target, Trophy, Users, XCircle } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
@@ -275,7 +275,7 @@ export function ChallengesPage() {
                   <article key={activity.id} className="rounded-md border border-line bg-white p-4 shadow-soft">
                     <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
                       <div className="min-w-0">
-                      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="mb-2 flex flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <Link to={`/profile/${actorId}`} className="text-xs font-semibold text-ink/45 hover:text-ink hover:underline">
                             @{actorUsername}
@@ -285,11 +285,6 @@ export function ChallengesPage() {
                           ) : (
                             <span className="rounded-full bg-mint/10 px-2 py-0.5 text-xs font-black text-mint">weekly</span>
                           )}
-                          {activity.groupId && groups.find(g => g.id === activity.groupId) && (
-                            <span className="rounded-full bg-field px-2 py-0.5 text-xs font-semibold text-ink/60">
-                              {groups.find(g => g.id === activity.groupId)?.name}
-                            </span>
-                          )}
                           <span className="text-xs font-semibold text-ink/35">
                             {activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}
                           </span>
@@ -297,11 +292,20 @@ export function ChallengesPage() {
                             {activity.status}
                           </span>
                         </div>
-                        {activity.type === 'completion' && activity.reward ? (
-                          <div className="inline-flex shrink-0 self-start rounded-md bg-citrus/10 px-2.5 py-1">
-                            <CoinAmount amount={activity.reward} className="text-sm" />
-                          </div>
-                        ) : null}
+                        {/* Group badge and reward on same row, aligned right */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 sm:mt-2">
+                          {activity.groupId && groups.find(g => g.id === activity.groupId) ? (
+                            <div className="flex items-center gap-1.5 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/60">
+                              <Users size={12} />
+                              {groups.find(g => g.id === activity.groupId)?.name}
+                            </div>
+                          ) : null}
+                          {activity.type === 'completion' && activity.reward ? (
+                            <div className="inline-flex shrink-0 rounded-md bg-citrus/10 px-2.5 py-1">
+                              <CoinAmount amount={activity.reward} className="text-sm" />
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                       {activity.type === 'completion' ? (
                         <h2 className="text-base leading-snug">

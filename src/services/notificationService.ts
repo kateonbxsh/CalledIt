@@ -93,9 +93,13 @@ export async function enablePushNotifications(user: UserProfile) {
   const tokensRef = collection(db, 'users', user.uid, 'notificationTokens');
   const existingTokens = await getDocs(tokensRef);
 
-  // Disable all OTHER devices' tokens
+  // Disable all OTHER devices' tokens AND migrate old token-based IDs
   await Promise.all(existingTokens.docs
-    .filter((item) => item.id !== deviceId && item.data().enabled === true)
+    .filter((item) => {
+      const isCurrentDevice = item.id === deviceId;
+      const isOldFormat = !item.id.startsWith('device_');
+      return (item.data().enabled === true && !isCurrentDevice) || isOldFormat;
+    })
     .map((item) => setDoc(item.ref, {
       enabled: false,
       disabledAt: serverTimestamp(),
