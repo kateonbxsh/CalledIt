@@ -232,7 +232,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="max-w-full overflow-x-hidden pb-40 lg:ml-64 lg:pb-6">
+      <main className="max-w-full overflow-x-hidden pb-24 lg:ml-64 lg:pb-6">
         <div className="mx-auto max-w-5xl overflow-x-hidden px-4 pb-6 pt-6 sm:px-6 lg:px-8">
           <Outlet />
         </div>
@@ -298,7 +298,7 @@ export function Layout() {
         className={`fixed bottom-0 left-0 right-0 z-50 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4] px-2 pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
           bottomNavVisible || actionMenuOpen || profileMenuOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
-        style={{ paddingBottom: `max(0.5rem, calc(env(safe-area-inset-bottom) + 0.5rem))` }}
+        style={{ paddingBottom: `max(1.5rem, calc(env(safe-area-inset-bottom) + 1.5rem))` }}
       >
         <BottomNavLink to="/" label="Bets" icon={Home} />
         <BottomNavLink to="/challenges" label="Challenges" icon={Trophy} />
