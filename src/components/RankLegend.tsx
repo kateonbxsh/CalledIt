@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Avatar } from './Avatar';
+import { useAuth } from '../contexts/AuthContext';
 import { rankRanges } from '../utils/ranks';
 
 export function RankLegend() {
   const [showPopup, setShowPopup] = useState(false);
+  const { profile } = useAuth();
 
   // ELO boundaries
   const boundaries = [
@@ -45,13 +48,45 @@ export function RankLegend() {
 
               {/* Vertical scale with segments */}
               <div className="flex gap-6">
-                {/* Vertical scale bar */}
-                <div className="relative rounded-full overflow-visible" style={{ width: '6px' }}>
-                  {/* Top padding space */}
-                  <div style={{ height: '20px' }} />
+                {/* Left side: user avatar and scale bar */}
+                <div className="relative" style={{ width: '60px' }}>
+                  {/* User position indicator */}
+                  {profile && (
+                    <>
+                      {/* Calculate user's position */}
+                      {(() => {
+                        const userPosPercent = Math.max(0, Math.min(100, ((profile.rating - minElo) / totalRange) * 100));
+                        const topOffset = 20 + (userPosPercent / 100) * 300; // 20px padding + percentage of 300px scale
 
-                  {/* Scale bar container */}
-                  <div className="relative rounded-full overflow-hidden" style={{ width: '6px', minHeight: '300px' }}>
+                        return (
+                          <div
+                            className="absolute flex items-center gap-1"
+                            style={{
+                              top: `${topOffset}px`,
+                              transform: 'translateY(-50%)',
+                              left: 0,
+                            }}
+                          >
+                            <Avatar
+                              name={profile.displayName}
+                              src={profile.photoURL}
+                              size="md"
+                              round
+                            />
+                            <ChevronRight size={16} className="text-ink/60 shrink-0" />
+                            <span className="text-xs font-black text-ink/70 whitespace-nowrap">
+                              {profile.rating}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+
+                  {/* Vertical scale bar */}
+                  <div className="absolute right-0 top-5 rounded-full overflow-visible" style={{ width: '6px', height: '360px' }}>
+                    {/* Scale bar container */}
+                    <div className="relative rounded-full overflow-hidden" style={{ width: '6px', height: '100%' }}>
                     {/* Colored segments */}
                     {rankRanges.map((rank, idx) => {
                       const colorMatch = rank.className.match(/#[0-9a-f]+/i);
@@ -74,29 +109,28 @@ export function RankLegend() {
                       );
                     })}
 
-                    {/* Boundary points */}
-                    {boundaries.map((b, idx) => {
-                      const posPercent = ((b.elo - minElo) / totalRange) * 100;
-                      const rankIndex = Math.min(idx, 6);
-                      const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
-                      const pointColor = colorMatch ? colorMatch[0] : '#121417';
+                      {/* Boundary points */}
+                      {boundaries.map((b, idx) => {
+                        const posPercent = ((b.elo - minElo) / totalRange) * 100;
+                        const rankIndex = Math.min(idx, 6);
+                        const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
+                        const pointColor = colorMatch ? colorMatch[0] : '#121417';
 
-                      return (
-                        <div
-                          key={`point-${b.elo}`}
-                          className="absolute left-1/2 w-4 h-4 rounded-full border-2 border-white shadow-soft"
-                          style={{
-                            top: `${posPercent}%`,
-                            transform: 'translate(-50%, -50%)',
-                            backgroundColor: pointColor,
-                          }}
-                        />
-                      );
-                    })}
+                        return (
+                          <div
+                            key={`point-${b.elo}`}
+                            className="absolute left-1/2 w-4 h-4 rounded-full border-2 border-white shadow-soft"
+                            style={{
+                              top: `${posPercent}%`,
+                              transform: 'translate(-50%, -50%)',
+                              backgroundColor: pointColor,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
-
-                  {/* Bottom padding space */}
-                  <div style={{ height: '20px' }} />
+                </div>
 
                 {/* Rank items */}
                 <div className="space-y-6 flex-1">
