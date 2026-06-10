@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BadgeDollarSign, Dice5, Flame, Gift, Plane, ShieldCheck, Sparkles, Target, Zap } from 'lucide-react';
+import { BadgeDollarSign, Dice5, Flame, Gift, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
 import { RewardChest } from '../components/RewardChest';
-import { AirplaneLandingGame } from '../components/games/AirplaneLandingGame';
-import { MinesweeperGame } from '../components/games/MinesweeperGame';
 import { useAuth } from '../contexts/AuthContext';
 import {
   claimChest,
@@ -111,15 +109,8 @@ export function MinigamesPage() {
   const [forecastMode, setForecastMode] = useState<DailyForecastMode | null>(null);
   const [wheelOpen, setWheelOpen] = useState(false);
   const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
-  const [airplaneGameOpen, setAirplaneGameOpen] = useState(false);
-  const [minesweeperGameOpen, setMinesweeperGameOpen] = useState(false);
-  const [airplaneGamesPlayedToday, setAirplaneGamesPlayedToday] = useState(0);
-  const [minesweeperGamesPlayedToday, setMinesweeperGamesPlayedToday] = useState(0);
   const forecastAvailable = profile ? canClaimDailyReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
   const wheelAvailable = profile ? canClaimDailyReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
-  const MAX_DAILY_PLAYS = 5;
-  const airplanePlaysRemaining = MAX_DAILY_PLAYS - airplaneGamesPlayedToday;
-  const minesweeperPlaysRemaining = MAX_DAILY_PLAYS - minesweeperGamesPlayedToday;
 
   useEffect(() => {
     if (!profile) return;
@@ -212,30 +203,6 @@ export function MinigamesPage() {
     } finally {
       setBusy('');
     }
-  }
-
-  function handleAirplaneGameEnd(won: boolean, score: number) {
-    setAirplaneGamesPlayedToday((prev) => prev + 1);
-    const reward = won ? score * 2 : Math.floor(score * 0.5);
-    setRewardPopup({
-      title: 'Airplane Game',
-      amount: reward,
-      detail: won ? `Great landing! You earned ${reward} coins.` : `Crashed, but earned ${reward} coins for trying.`,
-      variant: 'forecast',
-    });
-    setMessage(`Airplane game: ${won ? 'Success' : 'Crashed'} - Earned ${reward} coins`);
-  }
-
-  function handleMinesweeperGameEnd(won: boolean, score: number) {
-    setMinesweeperGamesPlayedToday((prev) => prev + 1);
-    const reward = won ? score * 3 : Math.floor(score * 0.5);
-    setRewardPopup({
-      title: 'Minesweeper Game',
-      amount: reward,
-      detail: won ? `All bombs avoided! You earned ${reward} coins.` : `Hit a bomb, but earned ${reward} coins for trying.`,
-      variant: 'forecast',
-    });
-    setMessage(`Minesweeper: ${won ? 'Success' : 'Game over'} - Earned ${reward} coins`);
   }
 
   return (
@@ -344,75 +311,6 @@ export function MinigamesPage() {
           </div>
         </section>
 
-        {airplaneGameOpen ? (
-          <div className="fixed inset-0 z-40 flex flex-col bg-gradient-to-b from-sky/10 to-white p-4 lg:inset-auto lg:bottom-4 lg:right-4 lg:top-4 lg:left-auto lg:max-w-2xl lg:rounded-3xl lg:border-2 lg:border-line lg:shadow-lift">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-xl font-black flex items-center gap-2"><Plane size={22} className="text-sky" />Airplane</h2>
-              <button onClick={() => setAirplaneGameOpen(false)} className="text-ink/40 hover:text-ink transition p-1 rounded-lg hover:bg-white">✕</button>
-            </div>
-            <div className="flex-1 overflow-auto flex items-center justify-center">
-              <AirplaneLandingGame onGameEnd={(won, score) => {
-                handleAirplaneGameEnd(won, score);
-                setTimeout(() => setAirplaneGameOpen(false), 2500);
-              }} />
-            </div>
-          </div>
-        ) : (
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="text-4xl">✈️</div>
-              <div className="flex-1">
-                <h2 className="font-black text-lg">Airplane Landing</h2>
-                <p className="text-xs text-ink/50">Guide safely through the sky</p>
-              </div>
-            </div>
-            <p className="mb-4 rounded-xl bg-field px-3 py-2 text-xs font-bold text-ink/55">
-              {airplanePlaysRemaining > 0 ? `${airplanePlaysRemaining} plays left today` : 'No plays left today'}
-            </p>
-            <button
-              onClick={() => setAirplaneGameOpen(true)}
-              disabled={airplanePlaysRemaining <= 0}
-              className="w-full rounded-xl bg-sky/12 px-4 py-3 text-sm font-bold text-sky hover:bg-sky/20 transition disabled:opacity-50 active:scale-95 shadow-soft"
-            >
-              Launch
-            </button>
-          </section>
-        )}
-
-        {minesweeperGameOpen ? (
-          <div className="fixed inset-0 z-40 flex flex-col bg-gradient-to-b from-coral/5 to-white p-4 lg:inset-auto lg:bottom-4 lg:right-4 lg:top-4 lg:left-auto lg:max-w-2xl lg:rounded-3xl lg:border-2 lg:border-line lg:shadow-lift">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-xl font-black flex items-center gap-2"><Target size={22} className="text-coral" />Minesweeper</h2>
-              <button onClick={() => setMinesweeperGameOpen(false)} className="text-ink/40 hover:text-ink transition p-1 rounded-lg hover:bg-white">✕</button>
-            </div>
-            <div className="flex-1 overflow-auto flex items-center justify-center">
-              <MinesweeperGame onGameEnd={(won, score) => {
-                handleMinesweeperGameEnd(won, score);
-                setTimeout(() => setMinesweeperGameOpen(false), 2500);
-              }} />
-            </div>
-          </div>
-        ) : (
-          <section className="rounded-2xl border border-line bg-white p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="text-4xl">💣</div>
-              <div className="flex-1">
-                <h2 className="font-black text-lg">Minesweeper</h2>
-                <p className="text-xs text-ink/50">Find all safe cards</p>
-              </div>
-            </div>
-            <p className="mb-4 rounded-xl bg-field px-3 py-2 text-xs font-bold text-ink/55">
-              {minesweeperPlaysRemaining > 0 ? `${minesweeperPlaysRemaining} plays left today` : 'No plays left today'}
-            </p>
-            <button
-              onClick={() => setMinesweeperGameOpen(true)}
-              disabled={minesweeperPlaysRemaining <= 0}
-              className="w-full rounded-xl bg-coral/12 px-4 py-3 text-sm font-bold text-coral hover:bg-coral/20 transition disabled:opacity-50 active:scale-95 shadow-soft"
-            >
-              Play
-            </button>
-          </section>
-        )}
       </div>
 
       {wheelOpen ? (
