@@ -182,3 +182,37 @@ export async function usersWhoPredictedBet(betId: string) {
   const snap = await getDocs(query(collection(db, 'predictions'), where('betId', '==', betId)));
   return [...new Set(snap.docs.map((item) => String(item.data().userId)).filter(Boolean))];
 }
+
+export async function usersWhoCanSeeBet(betId: string) {
+  const betSnap = await getDoc(doc(db, 'bets', betId));
+  if (!betSnap.exists()) return [];
+  const bet = betSnap.data() as any;
+
+  const visibleUids = new Set<string>();
+
+  // Add creator
+  if (bet.creatorId) visibleUids.add(bet.creatorId);
+
+  // Add all predictors
+  const predictors = await usersWhoPredictedBet(betId);
+  predictors.forEach(uid => visibleUids.add(uid));
+
+  // Add invited users
+  if (bet.invitedUsernames && Array.isArray(bet.invitedUsernames)) {
+    const invitedUids = await uidsForUsernames(bet.invitedUsernames);
+    invitedUids.forEach(uid => visibleUids.add(uid));
+  }
+
+  // Add group members if bet has a group
+  if (bet.groupId) {
+    const groupSnap = await getDoc(doc(db, 'groups', bet.groupId));
+    if (groupSnap.exists()) {
+      const groupData = groupSnap.data() as any;
+      if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
+        groupData.memberUids.forEach((uid: string) => visibleUids.add(uid));
+      }
+    }
+  }
+
+  return [...visibleUids].filter(Boolean);
+}

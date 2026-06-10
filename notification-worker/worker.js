@@ -328,13 +328,111 @@ async function scanWagerDeadlines() {
   return created;
 }
 
+async function scanBetResolutions() {
+  const snap = await db
+    .collection('bets')
+    .where('status', '==', 'resolved')
+    .limit(100)
+    .get();
+  let created = 0;
+
+  for (const doc of snap.docs) {
+    const bet = { id: doc.id, ...doc.data() };
+    const notificationId = `bet_${bet.id}_resolved`;
+    const existingNotif = await db.collection('notifications').doc(notificationId).get();
+    if (existingNotif.exists()) continue;
+
+    const targetUids = unique([
+      bet.creatorId,
+      ...(await predictionUserIdsForBet(bet.id)),
+      ...(await uidsForUsernames(bet.invitedUsernames || [])),
+    ]);
+
+    if (bet.groupId) {
+      const group = await db.collection('groups').doc(bet.groupId).get();
+      if (group.exists()) {
+        const groupUids = group.data().memberUids || [];
+        targetUids.push(...groupUids);
+      }
+    }
+
+    const title = String(bet.title || 'A bet');
+    const didCreate = await createSystemNotification(notificationId, {
+      type: 'bet_resolved',
+      targetUids,
+      title: `🎯 "${title}" just got resolved!`,
+      body: `Check the results and see if you won.`,
+      url: appUrl(`bets/${bet.id}`),
+    });
+    if (didCreate) created += 1;
+  }
+
+  return created;
+}
+
+async function scanRewardAvailability() {
+  const snap = await db
+    .collection('users')
+    .limit(100)
+    .get();
+  let created = 0;
+  const now = Date.now();
+
+  for (const doc of snap.docs) {
+    const user = { id: doc.id, ...doc.data() };
+    const lastDaily = user.lastDailyForecastAt?.toMillis?.() ?? 0;
+    const lastWheel = user.lastWheelSpinAt?.toMillis?.() ?? 0;
+
+    // Daily reward available (24h passed)
+    if (lastDaily && now - lastDaily > 24 * 60 * 60 * 1000) {
+      const dailyNotifId = `user_${user.id}_daily_available_${Math.floor(lastDaily / (24 * 60 * 60 * 1000))}`;
+      const existingDaily = await db.collection('notifications').doc(dailyNotifId).get();
+      if (!existingDaily.exists()) {
+        const didCreate = await createSystemNotification(dailyNotifId, {
+          type: 'reward_available',
+          targetUids: [user.id],
+          title: '💰 **Daily reward ready!**',
+          body: 'Make your daily forecast and claim coins.',
+          url: appUrl('forecast'),
+        });
+        if (didCreate) created += 1;
+      }
+    }
+
+    // Wheel spin available (24h passed)
+    if (lastWheel && now - lastWheel > 24 * 60 * 60 * 1000) {
+      const wheelNotifId = `user_${user.id}_wheel_available_${Math.floor(lastWheel / (24 * 60 * 60 * 1000))}`;
+      const existingWheel = await db.collection('notifications').doc(wheelNotifId).get();
+      if (!existingWheel.exists()) {
+        const didCreate = await createSystemNotification(wheelNotifId, {
+          type: 'reward_available',
+          targetUids: [user.id],
+          title: '🎡 **Spin the wheel!**',
+          body: 'Your daily spin is ready. Tap to claim a reward.',
+          url: appUrl('minigames'),
+        });
+        if (didCreate) created += 1;
+      }
+    }
+  }
+
+  return created;
+}
+
 async function scanDeadlineReminders() {
-  const [betCount, wagerCount] = await Promise.all([
+  const [betCount, wagerCount, resolutionCount, rewardCount] = await Promise.all([
     scanBetDeadlines(),
     scanWagerDeadlines(),
+    scanBetResolutions(),
+    scanRewardAvailability(),
   ]);
-  if (betCount || wagerCount) {
-    log('Created deadline notifications', { bets: betCount, wagers: wagerCount });
+  if (betCount || wagerCount || resolutionCount || rewardCount) {
+    log('Created notifications', {
+      deadlineBets: betCount,
+      deadlineWagers: wagerCount,
+      resolvedBets: resolutionCount,
+      rewards: rewardCount,
+    });
   }
 }
 

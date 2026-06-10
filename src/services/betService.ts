@@ -124,12 +124,26 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
   });
   const masked = new Set(normalizeUsernames(input.maskedUsernames ?? []));
   const targetUids = await uidsForUsernames(normalizeUsernames(input.invitedUsernames).filter((name) => !masked.has(name)));
+
+  // Also notify group members if applicable
+  if (input.groupId) {
+    const groupSnap = await getDoc(doc(db, 'groups', input.groupId));
+    if (groupSnap.exists()) {
+      const groupData = groupSnap.data() as any;
+      if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
+        targetUids.push(...groupData.memberUids.filter(uid => uid !== creator.uid));
+      }
+    }
+  }
+
+  const uniqueTargetUids = [...new Set(targetUids)].filter(Boolean);
+
   await createNotification({
     type: 'bet_created',
     actor: creator,
-    targetUids,
-    title: 'New bet invitation',
-    body: `${creator.displayName || creator.username} posted: ${input.title.trim()}`,
+    targetUids: uniqueTargetUids,
+    title: `🎯 **${input.title.trim()}** - New bet posted!`,
+    body: `${creator.displayName || creator.username} created a new bet. Check it out and make your prediction!`,
     url: `/#/bets/${ref.id}`,
   });
   return ref.id;
@@ -267,12 +281,14 @@ export async function addBetComment(betId: string, user: UserProfile, body: stri
   const betSnap = await getDoc(doc(db, 'bets', betId));
   const bet = betSnap.exists() ? ({ id: betSnap.id, ...betSnap.data() } as Bet) : null;
   const predictionUserIds = await usersWhoPredictedBet(betId);
+  const targetUids = [...new Set([...predictionUserIds, bet?.creatorId ?? ''])].filter(Boolean);
+
   await createNotification({
     type: 'bet_commented',
     actor: user,
-    targetUids: [...predictionUserIds, bet?.creatorId ?? ''],
-    title: 'New bet comment',
-    body: `${user.displayName || user.username} commented on ${bet?.title ?? 'a bet'}.`,
+    targetUids,
+    title: `💬 **${bet?.title ?? 'A bet'}** - New comment`,
+    body: `${user.displayName || user.username} commented: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`,
     url: `/#/bets/${betId}`,
   });
 }
@@ -537,7 +553,9 @@ export async function placePrediction(input: PredictionInput) {
       type: notificationPayload.type,
       actor: input.user,
       targetUids: notificationPayload.targetUids,
-      title: notificationPayload.type === 'bet_joined' ? 'Someone joined your bet' : 'Prediction updated',
+      title: notificationPayload.type === 'bet_joined'
+        ? `👥 **${input.bet.title}** - Someone joined!`
+        : `📊 **${input.bet.title}** - Prediction updated`,
       body: notificationPayload.body,
       url: `/#/bets/${input.bet.id}`,
     });

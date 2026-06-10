@@ -526,8 +526,8 @@ export async function postCompletedChallenge(params: {
       ...(await uidsForUsernames(audience.invitedUsernames)),
     ],
     includeActor: true,
-    title: 'Challenge completed',
-    body: `${params.user.displayName || params.user.username} completed ${params.challenge.title}.`,
+    title: `✅ **${params.challenge.title}** - Completed!`,
+    body: `${params.user.displayName || params.user.username} completed the challenge and earned ${params.reward} coins!`,
     url: '/#/challenges',
   });
 }
@@ -615,16 +615,36 @@ export async function createWagerChallenge(params: {
       updatedAt: serverTimestamp(),
     });
   });
-  const targetUids = await uidsForUsernames([
-    ...(normalizedTarget ? [normalizedTarget] : []),
-    ...audience.invitedUsernames,
-  ]);
+  const targetUids = [
+    ...await uidsForUsernames([
+      ...(normalizedTarget ? [normalizedTarget] : []),
+      ...audience.invitedUsernames,
+    ]),
+  ];
+
+  // Add group members if applicable
+  if (audience.groupId) {
+    const groupId = audience.groupId;
+    const groupSnap = await getDoc(doc(db, 'groups', groupId));
+    if (groupSnap.exists()) {
+      const groupData = groupSnap.data() as any;
+      if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
+        targetUids.push(...groupData.memberUids);
+      }
+    }
+  }
+
+  // Remove duplicates
+  const uniqueTargetUids = [...new Set(targetUids)].filter(Boolean);
+
   await createNotification({
     type: 'wager_created',
     actor: params.user,
-    targetUids,
-    title: 'New wager',
-    body: `${params.user.displayName || params.user.username} posted a wager: ${params.title.trim()}.`,
+    targetUids: uniqueTargetUids,
+    title: normalizedTarget
+      ? `🎯 **${params.title.trim()}** - You've been challenged!`
+      : `🎮 **${params.title.trim()}** - New wager posted!`,
+    body: `${params.user.displayName || params.user.username} posted a wager for ${params.stake} coins.${normalizedTarget ? ' You were targeted!' : ''}`,
     url: '/#/challenges',
   });
 }
@@ -656,8 +676,8 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
     type: 'wager_completed',
     actor: user,
     targetUids: [challenge.creatorId],
-    title: 'Wager completed',
-    body: `${user.displayName || user.username} completed ${challenge.title}.`,
+    title: `🏆 **${challenge.title}** - Completed!`,
+    body: `${user.displayName || user.username} completed your wager and earned ${reward} coins!`,
     url: '/#/challenges',
   });
 }
@@ -685,8 +705,8 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
       ...(challenge.targetUsername ? [challenge.targetUsername] : []),
       ...(challenge.invitedUsernames ?? []),
     ]),
-    title: 'Wager closed',
-    body: `${challenge.title} was closed by ${user.displayName || user.username}.`,
+    title: `⏳ **${challenge.title}** - Wager ended`,
+    body: `The wager was closed by ${user.displayName || user.username}. Better luck next time!`,
     url: '/#/challenges',
   });
 }
