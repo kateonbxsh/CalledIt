@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BadgeDollarSign, Dice5, Flame, Gift, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { BadgeDollarSign, Dice5, Flame, Gift, Plane, ShieldCheck, Sparkles, Target, Zap } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
 import { RewardChest } from '../components/RewardChest';
+import { AirplaneLandingGame } from '../components/games/AirplaneLandingGame';
+import { MinesweeperGame } from '../components/games/MinesweeperGame';
 import { useAuth } from '../contexts/AuthContext';
 import {
   claimChest,
@@ -109,8 +111,15 @@ export function MinigamesPage() {
   const [forecastMode, setForecastMode] = useState<DailyForecastMode | null>(null);
   const [wheelOpen, setWheelOpen] = useState(false);
   const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
+  const [airplaneGameOpen, setAirplaneGameOpen] = useState(false);
+  const [minesweeperGameOpen, setMinesweeperGameOpen] = useState(false);
+  const [airplaneGamesPlayedToday, setAirplaneGamesPlayedToday] = useState(0);
+  const [minesweeperGamesPlayedToday, setMinesweeperGamesPlayedToday] = useState(0);
   const forecastAvailable = profile ? canClaimDailyReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
   const wheelAvailable = profile ? canClaimDailyReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
+  const MAX_DAILY_PLAYS = 5;
+  const airplanePlaysRemaining = MAX_DAILY_PLAYS - airplaneGamesPlayedToday;
+  const minesweeperPlaysRemaining = MAX_DAILY_PLAYS - minesweeperGamesPlayedToday;
 
   useEffect(() => {
     if (!profile) return;
@@ -205,12 +214,36 @@ export function MinigamesPage() {
     }
   }
 
+  function handleAirplaneGameEnd(won: boolean, score: number) {
+    setAirplaneGamesPlayedToday((prev) => prev + 1);
+    const reward = won ? score * 2 : Math.floor(score * 0.5);
+    setRewardPopup({
+      title: 'Airplane Game',
+      amount: reward,
+      detail: won ? `Great landing! You earned ${reward} coins.` : `Crashed, but earned ${reward} coins for trying.`,
+      variant: 'forecast',
+    });
+    setMessage(`Airplane game: ${won ? 'Success' : 'Crashed'} - Earned ${reward} coins`);
+  }
+
+  function handleMinesweeperGameEnd(won: boolean, score: number) {
+    setMinesweeperGamesPlayedToday((prev) => prev + 1);
+    const reward = won ? score * 3 : Math.floor(score * 0.5);
+    setRewardPopup({
+      title: 'Minesweeper Game',
+      amount: reward,
+      detail: won ? `All bombs avoided! You earned ${reward} coins.` : `Hit a bomb, but earned ${reward} coins for trying.`,
+      variant: 'forecast',
+    });
+    setMessage(`Minesweeper: ${won ? 'Success' : 'Game over'} - Earned ${reward} coins`);
+  }
+
   return (
     <>
       <PageHeader title="Minigames" description="Daily coin games, milestone chests, and little bits of chaos." />
-      {message ? <p className="mb-4 rounded-md bg-mint/10 p-3 text-sm font-semibold text-mint">{message}</p> : null}
+      {message ? <p className="mb-4 rounded-2xl bg-mint/10 p-3 text-sm font-semibold text-mint">{message}</p> : null}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <section className="rounded-md border border-line bg-white p-4">
           <div className="mb-3 flex items-center gap-2">
             <BadgeDollarSign size={18} className="text-citrus" />
@@ -309,6 +342,58 @@ export function MinigamesPage() {
               );
             })}
           </div>
+        </section>
+
+        <section className="rounded-md border border-line bg-white p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Plane size={18} className="text-sky" />
+            <h2 className="font-black">Airplane landing</h2>
+          </div>
+          <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
+            {airplanePlaysRemaining > 0 ? `${airplanePlaysRemaining} plays left today` : 'No plays left today'}
+          </p>
+          {airplaneGameOpen ? (
+            <div className="rounded-md bg-field p-3">
+              <AirplaneLandingGame onGameEnd={(won, score) => {
+                handleAirplaneGameEnd(won, score);
+                setTimeout(() => setAirplaneGameOpen(false), 2000);
+              }} />
+            </div>
+          ) : (
+            <button
+              onClick={() => setAirplaneGameOpen(true)}
+              disabled={airplanePlaysRemaining <= 0}
+              className="w-full rounded-md border border-line bg-sky/10 px-3 py-2 text-sm font-bold text-sky disabled:opacity-50"
+            >
+              Play airplane game
+            </button>
+          )}
+        </section>
+
+        <section className="rounded-md border border-line bg-white p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Target size={18} className="text-coral" />
+            <h2 className="font-black">Minesweeper</h2>
+          </div>
+          <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
+            {minesweeperPlaysRemaining > 0 ? `${minesweeperPlaysRemaining} plays left today` : 'No plays left today'}
+          </p>
+          {minesweeperGameOpen ? (
+            <div className="rounded-md bg-field p-3">
+              <MinesweeperGame onGameEnd={(won, score) => {
+                handleMinesweeperGameEnd(won, score);
+                setTimeout(() => setMinesweeperGameOpen(false), 2000);
+              }} />
+            </div>
+          ) : (
+            <button
+              onClick={() => setMinesweeperGameOpen(true)}
+              disabled={minesweeperPlaysRemaining <= 0}
+              className="w-full rounded-md border border-line bg-coral/10 px-3 py-2 text-sm font-bold text-coral disabled:opacity-50"
+            >
+              Play minesweeper
+            </button>
+          )}
         </section>
       </div>
 
