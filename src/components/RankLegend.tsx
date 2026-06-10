@@ -25,7 +25,7 @@ export function RankLegend() {
   return (
     <div className="px-4 py-2 space-y-3">
       {/* Rank names row */}
-      <div className="flex gap-0 h-5">
+      <div className="flex gap-0 h-4">
         {rankRanges.map((rank, idx) => {
           const colorMatch = rank.className.match(/#[0-9a-f]+/i);
           const rankColor = colorMatch ? colorMatch[0] : '#121417';
@@ -38,11 +38,12 @@ export function RankLegend() {
             <div
               key={rank.rank}
               style={{ width: `${widthPercent}%` }}
-              className="flex items-center justify-start px-1"
+              className="flex items-center justify-center px-0.5 min-w-0"
             >
               <span
-                className="text-xs font-black whitespace-nowrap text-left"
+                className="text-[10px] font-black whitespace-nowrap text-center truncate"
                 style={{ color: rankColor }}
+                title={rank.rank}
               >
                 {rank.rank}
               </span>
