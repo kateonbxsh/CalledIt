@@ -3,10 +3,10 @@ import { Avatar } from '../components/Avatar';
 import { CoinAmount } from '../components/CoinAmount';
 import { ELORating } from '../components/ELORating';
 import { PageHeader } from '../components/PageHeader';
-import { RankBadge } from '../components/RankBadge';
+import { RankLegend } from '../components/RankLegend';
 import { getLeaderboard } from '../services/userService';
 import type { UserProfile } from '../types';
-import { rankForRating, rankRanges } from '../utils/ranks';
+import { rankForRating } from '../utils/ranks';
 
 const podiumGradients = [
   'from-[#d49a25]/20 via-[#f5c842]/10 to-transparent border-[#d49a25]/30',  // 1st — gold
@@ -34,14 +34,9 @@ export function LeaderboardPage() {
     <>
       <PageHeader title="Leaderboard" />
 
-      {/* Rank legend — compact horizontal strip */}
-      <div className="mb-5 flex flex-wrap gap-1.5">
-        {rankRanges.map((r) => (
-          <div key={r.rank} className="flex items-center gap-1.5 rounded-xl border border-line bg-white px-2.5 py-1.5 shadow-soft">
-            <RankBadge rank={r.rank} />
-            <span className="text-xs text-ink/45 whitespace-nowrap">{r.range.replace(' ELO', '')}</span>
-          </div>
-        ))}
+      {/* Rank legend */}
+      <div className="mb-6">
+        <RankLegend />
       </div>
 
       {/* Player list */}
