@@ -15,14 +15,13 @@ export function RankLegend() {
 
   return (
     <div className="space-y-6">
-      {/* Scale line with rank names on top */}
-      <div className="relative pt-8">
-        {/* Rank names positioned absolutely above the line */}
+      {/* Rank names positioned above the scale */}
+      <div className="relative h-5">
         {rankRanges.map((r, idx) => {
           const colorMatch = r.className.match(/#[0-9a-f]+/i);
           const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-          // Position based on range
+          // Position based on range start
           const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
           const startPos = ((startElos[idx] - 300) / (maxElo - 300)) * 100;
 
@@ -41,13 +40,33 @@ export function RankLegend() {
             </div>
           );
         })}
-
-        {/* Thin line */}
-        <div className="h-0.5 bg-line rounded-full" />
       </div>
 
-      {/* Range markers with values */}
-      <div className="relative h-6">
+      {/* Colored scale bar with sections */}
+      <div className="relative h-1 rounded-full overflow-hidden flex">
+        {rankRanges.map((r, idx) => {
+          const colorMatch = r.className.match(/#[0-9a-f]+/i);
+          const rankColor = colorMatch ? colorMatch[0] : '#121417';
+
+          // Calculate segment widths based on ELO ranges
+          const widths = [949, 250, 250, 300, 350, 400, 400]; // Legend gets fixed width
+          const totalWidth = widths.slice(0, 6).reduce((a, b) => a + b, 0);
+          const widthPercent = idx < 6 ? (widths[idx] / totalWidth) * 100 : 8;
+
+          return (
+            <div
+              key={r.rank}
+              style={{
+                backgroundColor: rankColor,
+                width: idx < 6 ? `${widthPercent}%` : '8%',
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* Range markers with values - positioned on the line */}
+      <div className="relative h-5 flex items-center">
         {ranges.map((r) => {
           const pos = ((r.elo - 300) / (maxElo - 300)) * 100;
 
@@ -60,10 +79,10 @@ export function RankLegend() {
                 transform: 'translateX(-50%)',
               }}
             >
-              {/* Point/dot */}
-              <div className="w-2 h-2 rounded-full bg-ink/30 mb-1" />
-              {/* Value below */}
-              <span className="text-xs text-ink/40">{r.label}</span>
+              {/* Value above dot */}
+              <span className="text-xs text-ink/40 mb-1">{r.label}</span>
+              {/* Point on line */}
+              <div className="w-2 h-2 rounded-full bg-ink shadow-soft" />
             </div>
           );
         })}
