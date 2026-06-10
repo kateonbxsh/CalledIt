@@ -22,7 +22,7 @@ export function RankLegend() {
   const minElo = 300;
   const maxElo = 2800;
   const totalRange = maxElo - minElo;
-  const scaleHeight = 320; // Fixed scale height for precise calculations
+  const scaleHeight = 480; // Fixed scale height for precise calculations
 
   return (
     <>
