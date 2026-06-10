@@ -12,6 +12,7 @@ export type BetType =
 export type BetVisibility = 'public' | 'private';
 export type BetStatus = 'open' | 'locked' | 'resolved';
 export type Rank =
+  | 'Iron'
   | 'Bronze'
   | 'Silver'
   | 'Gold'

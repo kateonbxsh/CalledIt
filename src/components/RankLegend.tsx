@@ -10,17 +10,18 @@ export function RankLegend() {
 
   // ELO boundaries
   const boundaries = [
-    { elo: 300, label: '300' },
-    { elo: 1250, label: '1250' },
-    { elo: 1500, label: '1500' },
+    { elo: 0, label: '0' },
+    { elo: 250, label: '250' },
+    { elo: 700, label: '700' },
+    { elo: 1100, label: '1100' },
+    { elo: 1450, label: '1450' },
     { elo: 1750, label: '1750' },
-    { elo: 2050, label: '2050' },
-    { elo: 2400, label: '2400' },
-    { elo: 2800, label: '2800+' },
+    { elo: 2000, label: '2000' },
+    { elo: 2250, label: '2250+' },
   ];
 
-  const minElo = 300;
-  const maxElo = 2800;
+  const minElo = 0;
+  const maxElo = 2250;
   const totalRange = maxElo - minElo;
   const scaleHeight = 480; // Fixed scale height for precise calculations
 
@@ -49,7 +50,7 @@ export function RankLegend() {
               <h2 className="mb-8 text-lg font-black">Rank Ranges</h2>
 
               {/* Main flex container */}
-              <div className="flex gap-8 items-stretch">
+              <div className="flex gap-4 items-stretch">
                 {/* Left: User indicator */}
                 {profile && (
                   <div className="relative" style={{ width: '100px' }}>
@@ -60,7 +61,7 @@ export function RankLegend() {
 
                       return (
                         <div
-                          className="absolute flex items-center gap-1.5 right-0"
+                          className="absolute flex items-center gap-0.5 right-0"
                           style={{
                             top: `${topOffset}px`,
                             transform: 'translateY(-50%)',
@@ -89,8 +90,8 @@ export function RankLegend() {
                     const colorMatch = rank.className.match(/#[0-9a-f]+/i);
                     const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-                    const startElos = [300, 1250, 1500, 1750, 2050, 2400, 2800];
-                    const endElos = [1249, 1499, 1749, 2049, 2399, 2799, 2800];
+                    const startElos = [0, 250, 700, 1100, 1450, 1750, 2000, 2250];
+                    const endElos = [249, 699, 1099, 1449, 1749, 1999, 2249, 2250];
 
                     const rangeSize = endElos[idx] - startElos[idx] + 1;
                     const heightPercent = (rangeSize / totalRange) * 100;
