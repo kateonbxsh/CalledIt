@@ -340,7 +340,7 @@ async function scanBetResolutions() {
     const bet = { id: doc.id, ...doc.data() };
     const notificationId = `bet_${bet.id}_resolved`;
     const existingNotif = await db.collection('notifications').doc(notificationId).get();
-    if (existingNotif.exists()) continue;
+    if (existingNotif.exists) continue;
 
     const targetUids = unique([
       bet.creatorId,
@@ -349,10 +349,14 @@ async function scanBetResolutions() {
     ]);
 
     if (bet.groupId) {
-      const group = await db.collection('groups').doc(bet.groupId).get();
-      if (group.exists()) {
-        const groupUids = group.data().memberUids || [];
-        targetUids.push(...groupUids);
+      try {
+        const group = await db.collection('groups').doc(bet.groupId).get();
+        if (group.exists) {
+          const groupUids = (group.data() || {}).memberUids || [];
+          targetUids.push(...groupUids);
+        }
+      } catch (err) {
+        // Ignore group fetch errors
       }
     }
 
@@ -387,7 +391,7 @@ async function scanRewardAvailability() {
     if (lastDaily && now - lastDaily > 24 * 60 * 60 * 1000) {
       const dailyNotifId = `user_${user.id}_daily_available_${Math.floor(lastDaily / (24 * 60 * 60 * 1000))}`;
       const existingDaily = await db.collection('notifications').doc(dailyNotifId).get();
-      if (!existingDaily.exists()) {
+      if (!existingDaily.exists) {
         const didCreate = await createSystemNotification(dailyNotifId, {
           type: 'reward_available',
           targetUids: [user.id],
@@ -403,7 +407,7 @@ async function scanRewardAvailability() {
     if (lastWheel && now - lastWheel > 24 * 60 * 60 * 1000) {
       const wheelNotifId = `user_${user.id}_wheel_available_${Math.floor(lastWheel / (24 * 60 * 60 * 1000))}`;
       const existingWheel = await db.collection('notifications').doc(wheelNotifId).get();
-      if (!existingWheel.exists()) {
+      if (!existingWheel.exists) {
         const didCreate = await createSystemNotification(wheelNotifId, {
           type: 'reward_available',
           targetUids: [user.id],
