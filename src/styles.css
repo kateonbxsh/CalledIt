@@ -114,6 +114,12 @@ select {
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
 .animate-soft-enter {
   animation: soft-enter 240ms ease-out both;
 }
@@ -137,6 +143,10 @@ select {
 
 .animate-reward-pop {
   animation: reward-pop 420ms ease-out both;
+}
+
+.animate-shake {
+  animation: shake 400ms ease-in-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
