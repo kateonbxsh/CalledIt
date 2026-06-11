@@ -521,6 +521,7 @@ export async function postCompletedChallenge(params: {
       updatedAt: serverTimestamp(),
     });
   });
+  const totalReward = params.challenge.reward + params.challenge.chestReward;
   await createNotification({
     type: 'challenge_posted',
     actor: params.user,
@@ -530,7 +531,7 @@ export async function postCompletedChallenge(params: {
     ],
     includeActor: true,
     title: `✅ **${params.challenge.title}** - Completed!`,
-    body: `${params.user.displayName || params.user.username} completed the challenge and earned ${params.reward} coins!`,
+    body: `${params.user.displayName || params.user.username} completed the challenge and earned ${totalReward} coins!`,
     url: '/#/challenges',
   });
 }

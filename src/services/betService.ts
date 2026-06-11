@@ -131,7 +131,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     if (groupSnap.exists()) {
       const groupData = groupSnap.data() as any;
       if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
-        targetUids.push(...groupData.memberUids.filter(uid => uid !== creator.uid));
+        targetUids.push(...groupData.memberUids.filter((uid: string) => uid !== creator.uid));
       }
     }
   }
