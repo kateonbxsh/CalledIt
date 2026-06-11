@@ -521,7 +521,6 @@ export async function postCompletedChallenge(params: {
       updatedAt: serverTimestamp(),
     });
   });
-  const totalReward = params.challenge.reward + params.challenge.chestReward;
   await createNotification({
     type: 'challenge_posted',
     actor: params.user,
