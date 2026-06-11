@@ -707,7 +707,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
         coinBalance: increment(coinDelta),
         rating: nextRating,
         rank: rankForRating(nextRating),
-        ...(correct && pendingBonuses.length > 0 ? { pendingSpicyForecasts: [] } : {}),
+        ...(pendingBonuses.length > 0 ? { pendingSpicyForecasts: [] } : {}),
         stats: buildStatsAfterResolution({
           stats: user.stats,
           correct,
