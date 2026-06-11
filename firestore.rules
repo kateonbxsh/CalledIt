@@ -234,7 +234,7 @@ service cloud.firestore {
       allow read: if signedIn() && request.auth.uid == userId;
       allow create, update: if signedIn()
         && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['token', 'enabled', 'userAgent', 'createdAt', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['token', 'enabled', 'userAgent', 'createdAt', 'updatedAt', 'disabledAt']);
       allow delete: if signedIn() && request.auth.uid == userId;
     }
 
