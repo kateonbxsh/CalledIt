@@ -11,7 +11,9 @@ import {
   createTestPushNotification,
   disableCurrentPushToken,
   enablePushNotifications,
+  getCurrentDevicePushState,
   supportsPushNotifications,
+  type DevicePushState,
 } from '../services/notificationService';
 import { downscaleProfileImage } from '../utils/image';
 import { rankForRating, rankProgress } from '../utils/ranks';
@@ -25,6 +27,7 @@ export function SettingsPage() {
   const [message, setMessage] = useState('');
   const [pushMessage, setPushMessage] = useState('');
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushState, setPushState] = useState<DevicePushState | null>(null);
   const [imageBusy, setImageBusy] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const progress = useMemo(() => rankProgress(profile?.rating ?? 1000), [profile?.rating]);
@@ -35,6 +38,11 @@ export function SettingsPage() {
     setBio(profile?.bio ?? '');
     setPhotoURL(profile?.photoURL ?? '');
     setEditingUsername(false);
+  }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    getCurrentDevicePushState(profile).then(setPushState).catch(() => setPushState(null));
   }, [profile]);
 
   async function save(event: FormEvent) {
@@ -70,6 +78,7 @@ export function SettingsPage() {
     try {
       await enablePushNotifications(profile);
       setPushMessage('Push notifications are enabled on this device.');
+      setPushState(await getCurrentDevicePushState(profile));
     } catch (err) {
       setPushMessage(err instanceof Error ? err.message : 'Could not enable push notifications.');
     } finally {
@@ -84,6 +93,7 @@ export function SettingsPage() {
     try {
       await disableCurrentPushToken(profile);
       setPushMessage('Push notifications are disabled for this device.');
+      setPushState(await getCurrentDevicePushState(profile));
     } catch (err) {
       setPushMessage(err instanceof Error ? err.message : 'Could not disable push notifications.');
     } finally {
@@ -205,7 +215,26 @@ export function SettingsPage() {
             <CoinAmount amount={profile?.coinBalance ?? 0} className="mt-1 text-2xl" />
           </section>
           <section className="rounded-2xl border border-line bg-white p-4 shadow-soft sm:col-span-2 lg:col-span-1">
-            <p className="text-sm font-black">Push notifications</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-black">Push notifications</p>
+              {pushState ? (
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-2xs font-black ${
+                    pushState === 'enabled'
+                      ? 'bg-mint/15 text-mint'
+                      : pushState === 'unsupported'
+                        ? 'bg-coral/10 text-coral'
+                        : 'bg-field text-ink/55'
+                  }`}
+                >
+                  {pushState === 'enabled'
+                    ? '● Enabled on this device'
+                    : pushState === 'unsupported'
+                      ? 'Unsupported'
+                      : '○ Not enabled here'}
+                </span>
+              ) : null}
+            </div>
             <p className="mt-1 text-xs leading-5 text-ink/55">
               Get bet, challenge, wager, and reward updates on this device.
             </p>

@@ -54,10 +54,6 @@ function getDeviceId() {
   return deviceId;
 }
 
-function tokenDocId(deviceId: string) {
-  return deviceId;
-}
-
 export function supportsPushNotifications() {
   return typeof window !== 'undefined'
     && 'Notification' in window
@@ -130,6 +126,53 @@ export async function disableCurrentPushToken(user: UserProfile) {
   }, { merge: true });
 }
 
+export type DevicePushState = 'enabled' | 'disabled' | 'unsupported' | 'none';
+
+// Reports whether THIS device (by persistent deviceId) currently has an enabled
+// token, so the UI can show real state instead of static buttons.
+export async function getCurrentDevicePushState(user: UserProfile): Promise<DevicePushState> {
+  if (!supportsPushNotifications()) return 'unsupported';
+  const deviceId = getDeviceId();
+  const snap = await getDoc(doc(db, 'users', user.uid, 'notificationTokens', deviceId));
+  if (!snap.exists()) return 'none';
+  return snap.data().enabled === true ? 'enabled' : 'disabled';
+}
+
+// Silently refreshes this device's FCM token on app load. FCM tokens rotate, and
+// a stale token fails delivery without any error surfaced to the user. We only
+// touch devices that previously opted in (token doc exists + enabled), so this
+// never auto-subscribes a new device, and only writes when the token changed.
+export async function refreshPushTokenIfEnabled(user: UserProfile) {
+  if (!supportsPushNotifications()) return;
+  if (Notification.permission !== 'granted') return;
+
+  const deviceId = getDeviceId();
+  const thisDeviceDoc = doc(db, 'users', user.uid, 'notificationTokens', deviceId);
+  const existing = await getDoc(thisDeviceDoc);
+  if (!existing.exists() || existing.data().enabled !== true) return;
+
+  const registration = await registerAppServiceWorker();
+  const messagingInstance = await messaging();
+  if (!registration || !messagingInstance) return;
+
+  try {
+    const token = await getToken(messagingInstance, {
+      ...(firebaseVapidKey ? { vapidKey: firebaseVapidKey } : {}),
+      serviceWorkerRegistration: registration,
+    });
+    if (token && token !== existing.data().token) {
+      await setDoc(thisDeviceDoc, {
+        token,
+        enabled: true,
+        userAgent: navigator.userAgent,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+  } catch {
+    // Best-effort; a failed refresh must not break app startup.
+  }
+}
+
 export async function listenForForegroundNotifications(onNotify: (payload: { title: string; body: string; url: string }) => void) {
   const messagingInstance = await messaging();
   if (!messagingInstance) return () => {};
@@ -180,6 +223,49 @@ export async function createTestPushNotification(user: UserProfile) {
     body: 'If this arrived, the app, Firestore queue, VPS worker, FCM, and this device are connected.',
     url: '/#/me',
   });
+}
+
+export async function sendTestPushToAllUsers(actor: UserProfile) {
+  // Get all users with enabled notification tokens
+  const usersSnap = await getDocs(
+    query(
+      collection(db, 'users'),
+      where('coinBalance', '>=', 0) // Just get all users
+    )
+  );
+
+  const targetUids: string[] = [];
+  for (const userDoc of usersSnap.docs) {
+    const tokensSnap = await getDocs(
+      query(
+        collection(db, 'users', userDoc.id, 'notificationTokens'),
+        where('enabled', '==', true)
+      )
+    );
+    if (tokensSnap.size > 0) {
+      targetUids.push(userDoc.id);
+    }
+  }
+
+  if (targetUids.length === 0) {
+    throw new Error('No users with enabled notifications found');
+  }
+
+  await addDoc(collection(db, 'notifications'), {
+    type: 'test_push',
+    actorUid: actor.uid,
+    actorUsername: actor.username,
+    actorDisplayName: actor.displayName,
+    targetUids,
+    title: '🧪 Test notification from admin',
+    body: `Test sent at ${new Date().toLocaleTimeString()}. If you received this, push notifications are working!`,
+    url: '/#/minigames',
+    readBy: [],
+    sentAt: null,
+    createdAt: serverTimestamp(),
+  });
+
+  return { sent: true, count: targetUids.length };
 }
 
 export async function usersWhoPredictedBet(betId: string) {

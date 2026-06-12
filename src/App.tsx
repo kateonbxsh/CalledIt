@@ -19,7 +19,7 @@ import { MyBetsPage } from './pages/MyBetsPage';
 import { PredictionHistoryPage } from './pages/PredictionHistoryPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
-import { listenForForegroundNotifications, registerAppServiceWorker } from './services/notificationService';
+import { listenForForegroundNotifications, refreshPushTokenIfEnabled, registerAppServiceWorker } from './services/notificationService';
 
 function LoadingScreen() {
   return (
@@ -63,6 +63,8 @@ export function App() {
     }).then((nextUnsubscribe) => {
       unsubscribe = nextUnsubscribe;
     });
+    // Keep this device's FCM token fresh (tokens rotate); no-op unless already opted in.
+    refreshPushTokenIfEnabled(profile).catch(() => {});
     return () => unsubscribe?.();
   }, [profile]);
 

@@ -50,6 +50,18 @@ export function canClaimDailyReward(lastClaimAt?: Date | null) {
   return Date.now() - lastClaimAt.getTime() >= oneDay;
 }
 
+export function canClaimSixHourReward(lastClaimAt?: Date | null) {
+  if (!lastClaimAt) return true;
+  const sixHours = 6 * 60 * 60 * 1000;
+  return Date.now() - lastClaimAt.getTime() >= sixHours;
+}
+
+export function getNextSixHourClaimTime(lastClaimAt?: Date | null): Date {
+  if (!lastClaimAt) return new Date();
+  const sixHours = 6 * 60 * 60 * 1000;
+  return new Date(lastClaimAt.getTime() + sixHours);
+}
+
 export function calculatePredictionChangeFee(params: {
   previousStake: number;
   nextStake: number;

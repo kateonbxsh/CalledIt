@@ -25,6 +25,8 @@ const publicAppUrl = (process.env.PUBLIC_APP_URL || 'https://kateonbxsh.github.i
 const deadlineLookaheadMs = Number(process.env.DEADLINE_LOOKAHEAD_MS || 24 * 60 * 60 * 1000);
 const deadlineScanIntervalMs = Number(process.env.DEADLINE_SCAN_INTERVAL_MS || 10 * 60 * 1000);
 const quotaBackoffMs = Number(process.env.QUOTA_BACKOFF_MS || 15 * 60 * 1000);
+const rewardCycleMs = Number(process.env.REWARD_CYCLE_MS || 6 * 60 * 60 * 1000);
+const betBonusReminder = String(process.env.BET_BONUS_REMINDER || 'true').toLowerCase() === 'true';
 
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
@@ -58,6 +60,10 @@ function appUrl(hashPath = '/') {
 
 function unique(values) {
   return [...new Set(values)].filter(Boolean);
+}
+
+function todayUtcKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
 }
 
 async function uidsForUsernames(usernames = []) {
@@ -381,41 +387,66 @@ async function scanRewardAvailability() {
     .get();
   let created = 0;
   const now = Date.now();
+  const todayKey = todayUtcKey();
 
   for (const doc of snap.docs) {
     const user = { id: doc.id, ...doc.data() };
     const lastDaily = user.lastDailyForecastAt?.toMillis?.() ?? 0;
     const lastWheel = user.lastWheelSpinAt?.toMillis?.() ?? 0;
 
-    // Daily reward available (24h passed)
-    if (lastDaily && now - lastDaily > 24 * 60 * 60 * 1000) {
-      const dailyNotifId = `user_${user.id}_daily_available_${Math.floor(lastDaily / (24 * 60 * 60 * 1000))}`;
-      const existingDaily = await db.collection('notifications').doc(dailyNotifId).get();
-      if (!existingDaily.exists) {
-        const didCreate = await createSystemNotification(dailyNotifId, {
-          type: 'reward_available',
-          targetUids: [user.id],
-          title: '💰 **Daily reward ready!**',
-          body: 'Make your daily forecast and claim coins.',
-          url: appUrl('forecast'),
-        });
-        if (didCreate) created += 1;
-      }
+    // Forecast available again (6h cycle passed since last claim).
+    // Keyed off the last-claim cycle so each claim earns exactly one reminder.
+    if (lastDaily && now - lastDaily > rewardCycleMs) {
+      const forecastNotifId = `user_${user.id}_forecast_available_${Math.floor(lastDaily / rewardCycleMs)}`;
+      const didCreate = await createSystemNotification(forecastNotifId, {
+        type: 'reward_available',
+        targetUids: [user.id],
+        title: '💰 Forecast ready!',
+        body: 'Your 6-hour forecast is available. Tap to claim coins.',
+        url: appUrl('minigames'),
+      });
+      if (didCreate) created += 1;
     }
 
-    // Wheel spin available (24h passed)
-    if (lastWheel && now - lastWheel > 24 * 60 * 60 * 1000) {
-      const wheelNotifId = `user_${user.id}_wheel_available_${Math.floor(lastWheel / (24 * 60 * 60 * 1000))}`;
-      const existingWheel = await db.collection('notifications').doc(wheelNotifId).get();
-      if (!existingWheel.exists) {
-        const didCreate = await createSystemNotification(wheelNotifId, {
-          type: 'reward_available',
-          targetUids: [user.id],
-          title: '🎡 **Spin the wheel!**',
-          body: 'Your daily spin is ready. Tap to claim a reward.',
-          url: appUrl('minigames'),
-        });
-        if (didCreate) created += 1;
+    // Wheel spin available again (6h cycle passed since last spin).
+    if (lastWheel && now - lastWheel > rewardCycleMs) {
+      const wheelNotifId = `user_${user.id}_wheel_available_${Math.floor(lastWheel / rewardCycleMs)}`;
+      const didCreate = await createSystemNotification(wheelNotifId, {
+        type: 'reward_available',
+        targetUids: [user.id],
+        title: '🎡 Spin the wheel!',
+        body: 'Your 6-hour spin is ready. Tap to claim a reward.',
+        url: appUrl('minigames'),
+      });
+      if (didCreate) created += 1;
+    }
+
+    // Daily bet-bonus reminder: nudge once per day if they have not yet
+    // earned today's bet bonus. Matches bonusService dateKey (YYYY-MM-DD UTC).
+    if (betBonusReminder) {
+      try {
+        const bonusSnap = await db
+          .collection('users')
+          .doc(user.id)
+          .collection('dailyBonuses')
+          .doc(todayKey)
+          .get();
+        const claimedTypes = bonusSnap.exists
+          ? (bonusSnap.data().bonuses || []).map((entry) => entry.type)
+          : [];
+        if (!claimedTypes.includes('bet')) {
+          const betNotifId = `user_${user.id}_bet_bonus_${todayKey}`;
+          const didCreate = await createSystemNotification(betNotifId, {
+            type: 'reward_available',
+            targetUids: [user.id],
+            title: '🎯 Daily bet bonus waiting',
+            body: 'Post a bet today to grab +50 bonus coins.',
+            url: appUrl('create'),
+          });
+          if (didCreate) created += 1;
+        }
+      } catch (err) {
+        // Ignore per-user bonus read errors so one user cannot stall the scan.
       }
     }
   }
@@ -537,6 +568,8 @@ log('Called It notification worker started', {
   publicAppUrl,
   deadlineScanIntervalMs,
   quotaBackoffMs,
+  rewardCycleMs,
+  betBonusReminder,
 });
 listenForNotifications();
 deadlineTick();

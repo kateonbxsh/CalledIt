@@ -26,7 +26,7 @@ import type {
 } from '../types';
 import { createNotification, uidsForUsernames } from './notificationService';
 import { awardDailyBonus } from './bonusService';
-import { canClaimDailyReward } from '../utils/coins';
+import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
 
 const SAFE_FORECAST_REWARD = 60;
 const SPICY_FORECAST_NOW = 20;
@@ -257,6 +257,13 @@ function dayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
+function sixHourKey(date = new Date()) {
+  const dateStr = date.toISOString().slice(0, 10);
+  const hour = date.getUTCHours();
+  const sixHourBlock = Math.floor(hour / 6);
+  return `${dateStr}_${sixHourBlock * 6}`;
+}
+
 function rewardClaimRef(userId: string, id: string) {
   return doc(db, 'rewardClaims', `${userId}_${id}`);
 }
@@ -298,7 +305,7 @@ function uniqueById(items: ChallengeActivity[]) {
 
 export async function claimDailyForecast(user: UserProfile, mode: DailyForecastMode) {
   const userRef = doc(db, 'users', user.uid);
-  const claimRef = rewardClaimRef(user.uid, `forecast_${dayKey()}`);
+  const claimRef = rewardClaimRef(user.uid, `forecast_${sixHourKey()}`);
   const reward = forecastReward(mode);
   await runTransaction(db, async (transaction) => {
     const [userSnap, claimSnap] = await Promise.all([
@@ -307,8 +314,8 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
     ]);
     const current = userSnap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
-    if (claimSnap.exists() || !canClaimDailyReward(current.lastDailyForecastAt?.toDate?.() ?? null)) {
-      throw new Error('Daily forecast is already claimed.');
+    if (claimSnap.exists() || !canClaimSixHourReward(current.lastDailyForecastAt?.toDate?.() ?? null)) {
+      throw new Error('Forecast is on cooldown. Available again in 6 hours.');
     }
 
     transaction.set(claimRef, {
@@ -412,7 +419,7 @@ export const wheelRewards = [
 export async function spinWheel(user: UserProfile) {
   const reward = wheelRewards[Math.floor(Math.random() * wheelRewards.length)];
   const userRef = doc(db, 'users', user.uid);
-  const claimRef = rewardClaimRef(user.uid, `wheel_${dayKey()}`);
+  const claimRef = rewardClaimRef(user.uid, `wheel_${sixHourKey()}`);
 
   await runTransaction(db, async (transaction) => {
     const [userSnap, claimSnap] = await Promise.all([
@@ -421,8 +428,8 @@ export async function spinWheel(user: UserProfile) {
     ]);
     const current = userSnap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
-    if (claimSnap.exists() || !canClaimDailyReward(current.lastWheelSpinAt?.toDate?.() ?? null)) {
-      throw new Error('The wheel is cooling down.');
+    if (claimSnap.exists() || !canClaimSixHourReward(current.lastWheelSpinAt?.toDate?.() ?? null)) {
+      throw new Error('The wheel is cooling down. Available again in 6 hours.');
     }
     transaction.set(claimRef, {
       userId: user.uid,

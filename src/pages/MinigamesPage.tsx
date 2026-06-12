@@ -12,8 +12,10 @@ import {
   spinWheel,
   wheelRewards,
 } from '../services/rewardService';
+import { getDailyBonusProgress } from '../services/bonusService';
+import { sendTestPushToAllUsers } from '../services/notificationService';
 import type { ChestDefinition, DailyForecastMode } from '../types';
-import { canClaimDailyReward } from '../utils/coins';
+import { canClaimSixHourReward } from '../utils/coins';
 
 const wheelColors = ['#2f7d63', '#d95f46', '#d49a25', '#8c98a5', '#3b75af', '#d95f46', '#6f5ca8', '#121417'];
 const WHEEL_SPIN_MS = 4400;
@@ -109,12 +111,30 @@ export function MinigamesPage() {
   const [forecastMode, setForecastMode] = useState<DailyForecastMode | null>(null);
   const [wheelOpen, setWheelOpen] = useState(false);
   const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
-  const forecastAvailable = profile ? canClaimDailyReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
-  const wheelAvailable = profile ? canClaimDailyReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
+  const [dailyBonusProgress, setDailyBonusProgress] = useState<any>({
+    totalClaimed: 0,
+    bonuses: [],
+    potential: 135,
+    bonusAmounts: { bet: 50, challenge: 50, prediction: 25, comment: 10 },
+    claimedTypes: [],
+  });
+  const [testPushSending, setTestPushSending] = useState(false);
+  const forecastAvailable = profile ? canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
+  const wheelAvailable = profile ? canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
 
   useEffect(() => {
     if (!profile) return;
     getChestDefinitions(profile).then(setChests).catch(() => setChests([]));
+    getDailyBonusProgress(profile.uid).then(setDailyBonusProgress).catch(() => {
+      // On error (likely permissions), show default empty progress
+      setDailyBonusProgress({
+        totalClaimed: 0,
+        bonuses: [],
+        potential: 135,
+        bonusAmounts: { bet: 50, challenge: 50, prediction: 25, comment: 10 },
+        claimedTypes: [],
+      });
+    });
   }, [profile]);
 
   const wheelRotation = useMemo(() => {
@@ -205,19 +225,71 @@ export function MinigamesPage() {
     }
   }
 
+  async function sendTestPush() {
+    if (!profile || !profile.isAdmin) return;
+    setTestPushSending(true);
+    setMessage('');
+    try {
+      const result = await sendTestPushToAllUsers(profile);
+      setMessage(`✓ Test push sent to ${result.count} user(s) with enabled notifications.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Failed to send test push.');
+    } finally {
+      setTestPushSending(false);
+    }
+  }
+
   return (
     <>
       <PageHeader title="Minigames" description="Daily coin games, milestone chests, and little bits of chaos." />
       {message ? <p className="mb-4 rounded-2xl bg-mint/10 p-3 text-sm font-semibold text-mint">{message}</p> : null}
 
+      {/* Daily Bonus Progress */}
+      {dailyBonusProgress && (
+        <div className="mb-4 rounded-md border border-line bg-gradient-to-r from-citrus/5 to-plum/5 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Gift size={18} className="text-citrus" />
+            <h3 className="font-black">Daily bonuses</h3>
+          </div>
+          <div className="grid gap-2 text-sm">
+            <div className="flex items-center justify-between rounded-md bg-white/50 px-3 py-2">
+              <span className="text-ink/70">Earned today</span>
+              <span className="font-black"><CoinAmount amount={dailyBonusProgress.totalClaimed} className="text-sm" /></span>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-white/50 px-3 py-2">
+              <span className="text-ink/70">Potential remaining</span>
+              <span className="font-black"><CoinAmount amount={dailyBonusProgress.potential} className="text-sm" /></span>
+            </div>
+            <div className="text-xs text-ink/50">
+              {(dailyBonusProgress.claimedTypes?.length ?? 0) > 0
+                ? `Claimed: ${dailyBonusProgress.claimedTypes.join(', ')} • Get +${dailyBonusProgress.potential} more!`
+                : 'Claim bonuses by creating bets, challenges, predictions, or comments'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin: Test Push Button */}
+      {profile?.isAdmin && (
+        <div className="mb-4 rounded-md border border-line bg-field p-4">
+          <button
+            onClick={sendTestPush}
+            disabled={testPushSending}
+            className="w-full rounded-md bg-plum px-4 py-2 text-sm font-bold text-white transition-all enabled:hover:bg-plum/90 disabled:opacity-60"
+          >
+            {testPushSending ? 'Sending...' : '🧪 Send Test Push to All Users'}
+          </button>
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <section className="rounded-md border border-line bg-white p-4">
           <div className="mb-3 flex items-center gap-2">
             <BadgeDollarSign size={18} className="text-citrus" />
-            <h2 className="font-black">Daily forecast</h2>
+            <h2 className="font-black">Forecast</h2>
           </div>
           <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
-            One forecast reward per day. {forecastAvailable ? 'Available now.' : 'Already claimed today.'}
+            Claim every 6 hours. {forecastAvailable ? 'Available now.' : 'Cooldown in progress.'}
           </p>
           <div className="grid gap-3">
             {(['safe', 'random', 'chaos', 'spicy'] as DailyForecastMode[]).map((mode) => {
@@ -259,10 +331,10 @@ export function MinigamesPage() {
         <section className="rounded-md border border-line bg-white p-4">
           <div className="mb-3 flex items-center gap-2">
             <Sparkles size={18} className="text-plum" />
-            <h2 className="font-black">Spin the wheel</h2>
+            <h2 className="font-black">Wheel</h2>
           </div>
           <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
-            {wheelAvailable ? 'Wheel spin available today.' : 'Wheel already used today. Come back tomorrow.'}
+            {wheelAvailable ? 'Wheel spin available now.' : 'Wheel on cooldown. Available in up to 6 hours.'}
           </p>
           <div className="grid h-56 place-items-center rounded-md bg-field">
             <button

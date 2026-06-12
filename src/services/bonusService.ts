@@ -127,6 +127,7 @@ export async function getDailyBonusProgress(uid: string) {
         bonuses: [],
         potential: Object.values(BONUS_AMOUNTS).reduce((a, b) => a + b, 0),
         bonusAmounts: BONUS_AMOUNTS,
+        claimedTypes: [],
       };
     }
 
@@ -147,6 +148,7 @@ export async function getDailyBonusProgress(uid: string) {
       bonuses: [],
       potential: Object.values(BONUS_AMOUNTS).reduce((a, b) => a + b, 0),
       bonusAmounts: BONUS_AMOUNTS,
+      claimedTypes: [],
     };
   }
 }
