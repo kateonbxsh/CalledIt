@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import type { DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { awardDailyBonus } from './bonusService';
 import type {
   Bet,
   BetComment,
@@ -146,6 +147,10 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     body: `${creator.displayName || creator.username} created a new bet. Check it out and make your prediction!`,
     url: `/#/bets/${ref.id}`,
   });
+
+  // Award daily bonus for creating a bet
+  await awardDailyBonus(creator, 'bet');
+
   return ref.id;
 }
 
@@ -291,6 +296,9 @@ export async function addBetComment(betId: string, user: UserProfile, body: stri
     body: `${user.displayName || user.username} commented: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`,
     url: `/#/bets/${betId}`,
   });
+
+  // Award daily bonus for commenting
+  await awardDailyBonus(user, 'comment');
 }
 
 export async function deleteBetComment(commentId: string) {
@@ -559,6 +567,11 @@ export async function placePrediction(input: PredictionInput) {
       body: notificationPayload.body,
       url: `/#/bets/${input.bet.id}`,
     });
+
+    // Award daily bonus for making a new prediction
+    if (notificationPayload.type === 'bet_joined') {
+      await awardDailyBonus(input.user, 'prediction');
+    }
   }
 }
 

@@ -25,6 +25,7 @@ import type {
   UserProfile,
 } from '../types';
 import { createNotification, uidsForUsernames } from './notificationService';
+import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward } from '../utils/coins';
 
 const SAFE_FORECAST_REWARD = 60;
@@ -650,6 +651,9 @@ export async function createWagerChallenge(params: {
     body: `${params.user.displayName || params.user.username} posted a wager for ${params.stake} coins.${normalizedTarget ? ' You were targeted!' : ''}`,
     url: '/#/challenges',
   });
+
+  // Award daily bonus for creating a challenge
+  await awardDailyBonus(params.user, 'challenge');
 }
 
 export async function completeWagerChallenge(challenge: ChallengeActivity, user: UserProfile, proofImageUrl: string) {

@@ -336,3 +336,17 @@ export interface AppNotification {
   sentAt?: Timestamp | null;
   createdAt: Timestamp;
 }
+
+export interface DailyBonus {
+  type: 'bet' | 'challenge' | 'prediction' | 'comment';
+  amount: number;
+  claimedAt: Timestamp;
+}
+
+export interface DailyBonusTracker {
+  // /users/{uid}/dailyBonuses/{dateKey}
+  dateKey: string; // YYYY-MM-DD UTC
+  bonuses: DailyBonus[];
+  totalClaimed: number;
+  updatedAt: Timestamp;
+}
