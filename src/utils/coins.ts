@@ -69,6 +69,9 @@ export function calculatePredictionChangeFee(params: {
   betCreatedAtMs?: number;
   deadlineMs?: number | null;
   nowMs?: number;
+  // The current chance of the prediction the user is leaving. The whole point of
+  // the heavy fee: stop people from cheaply bailing out once their pick is losing.
+  currentChanceOfExistingPick?: number;
 }) {
   const nowMs = params.nowMs ?? Date.now();
   const movedStake = Math.abs(params.nextStake - params.previousStake);
@@ -78,7 +81,18 @@ export function calculatePredictionChangeFee(params: {
   const elapsed = params.betCreatedAtMs ? Math.max(0, nowMs - params.betCreatedAtMs) : totalWindow * 0.25;
   const latePressure = clamp(elapsed / totalWindow, 0, 1);
   const revisionPressure = Math.min(3, params.revisionCount) * 2;
-  return Math.max(1, Math.round(3 + movedStake * (0.02 + latePressure * 0.08) + revisionPressure));
+
+  // Bailout penalty: the lower the current pick's chance, the more it costs to
+  // abandon it — and lateness amplifies it. Above ~35% chance there is no penalty.
+  const oldChance = clamp(params.currentChanceOfExistingPick ?? 1, 0.01, 1);
+  const LOW_CHANCE = 0.35;
+  const lowness = clamp((LOW_CHANCE - oldChance) / LOW_CHANCE, 0, 1);
+  const bailoutFee = Math.round(params.previousStake * lowness * (0.5 + 1.5 * latePressure));
+
+  return Math.max(
+    1,
+    Math.round(3 + movedStake * (0.02 + latePressure * 0.08) + revisionPressure + bailoutFee),
+  );
 }
 
 export function calculateTimingMultiplier(params: {
@@ -119,7 +133,9 @@ export function calculatePredictionRewards(input: PredictionRewardInput): CoinPa
 
     const poolProfit = Math.floor((prediction.stake / winningStake) * losingPool);
     const chance = clamp(prediction.displayedChanceAtBetTime || 0.5, 0.05, 0.95);
-    const difficultyMultiplier = clamp(Math.sqrt(1 / chance), 1.05, 4);
+    // High upside: long-shot calls that come in pay big. Cap raised so a correct
+    // ~5% pick can earn ~6x the base mint.
+    const difficultyMultiplier = clamp(Math.sqrt(1 / chance), 1.05, 6);
     const timingMultiplier = calculateTimingMultiplier({
       predictionTimeMs: timestampMs(prediction.lastChangedAt ?? prediction.createdAt),
       betCreatedAtMs: input.betCreatedAtMs,
@@ -128,7 +144,7 @@ export function calculatePredictionRewards(input: PredictionRewardInput): CoinPa
     });
     const revisionMultiplier = Math.max(0.45, 1 - (prediction.revisionCount ?? 0) * 0.15);
     const stakeWeight = Math.sqrt(Math.max(10, prediction.stake) / 50);
-    const mintedReward = Math.round(10 * stakeWeight * difficultyMultiplier * timingMultiplier * revisionMultiplier);
+    const mintedReward = Math.round(35 * stakeWeight * difficultyMultiplier * timingMultiplier * revisionMultiplier);
 
     return {
       userId: prediction.userId,

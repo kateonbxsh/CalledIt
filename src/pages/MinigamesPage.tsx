@@ -23,8 +23,8 @@ const WHEEL_SPIN_MS = 4400;
 const forecastCards = {
   safe: {
     title: 'Safe',
-    reward: <CoinAmount amount={60} className="text-2xs" />,
-    copy: <>Claim <CoinAmount amount={60} className="text-xs" /> now.</>,
+    reward: <CoinAmount amount={120} className="text-2xs" />,
+    copy: <>Claim <CoinAmount amount={120} className="text-xs" /> now.</>,
     Icon: ShieldCheck,
     shell: 'border-mint/25 bg-mint/10 hover:border-mint/40 hover:bg-mint/15',
     icon: 'bg-mint text-white',
@@ -32,8 +32,8 @@ const forecastCards = {
   },
   random: {
     title: 'Random',
-    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={10} className="text-2xs" /><span>to</span><CoinAmount amount={100} className="text-2xs" /></span>,
-    copy: <>Roll once for <CoinAmount amount={10} className="text-xs" /> to <CoinAmount amount={100} className="text-xs" />.</>,
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={20} className="text-2xs" /><span>to</span><CoinAmount amount={200} className="text-2xs" /></span>,
+    copy: <>Roll once for <CoinAmount amount={20} className="text-xs" /> to <CoinAmount amount={200} className="text-xs" />.</>,
     Icon: Dice5,
     shell: 'border-sky/25 bg-sky/10 hover:border-sky/40 hover:bg-sky/15',
     icon: 'bg-sky text-white',
@@ -41,8 +41,8 @@ const forecastCards = {
   },
   chaos: {
     title: 'Chaos',
-    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={-20} className="text-2xs text-coral" /><span>/</span><CoinAmount amount={5} className="text-2xs" /><span>/</span><CoinAmount amount={130} className="text-2xs" /></span>,
-    copy: <>Roll: <CoinAmount amount={-20} className="text-xs text-coral" />, <CoinAmount amount={5} className="text-xs" />, or <CoinAmount amount={130} className="text-xs" />.</>,
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={-40} className="text-2xs text-coral" /><span>/</span><CoinAmount amount={10} className="text-2xs" /><span>/</span><CoinAmount amount={260} className="text-2xs" /></span>,
+    copy: <>Roll: <CoinAmount amount={-40} className="text-xs text-coral" />, <CoinAmount amount={10} className="text-xs" />, or <CoinAmount amount={260} className="text-xs" />.</>,
     Icon: Zap,
     shell: 'border-coral/25 bg-coral/10 hover:border-coral/40 hover:bg-coral/15',
     icon: 'bg-coral text-white',
@@ -50,8 +50,8 @@ const forecastCards = {
   },
   spicy: {
     title: 'Spicy',
-    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={20} className="text-2xs" /><span>then</span><CoinAmount amount={120} className="text-2xs" /></span>,
-    copy: <>Claim <CoinAmount amount={20} className="text-xs" /> now; arm <CoinAmount amount={120} className="text-xs" /> if your next prediction wins.</>,
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={40} className="text-2xs" /><span>then</span><CoinAmount amount={240} className="text-2xs" /></span>,
+    copy: <>Claim <CoinAmount amount={40} className="text-xs" /> now; arm <CoinAmount amount={240} className="text-xs" /> if your next prediction wins.</>,
     Icon: Flame,
     shell: 'border-plum/25 bg-plum/10 hover:border-plum/40 hover:bg-plum/15',
     icon: 'bg-plum text-white',
@@ -114,8 +114,8 @@ export function MinigamesPage() {
   const [dailyBonusProgress, setDailyBonusProgress] = useState<any>({
     totalClaimed: 0,
     bonuses: [],
-    potential: 135,
-    bonusAmounts: { bet: 50, challenge: 50, prediction: 25, comment: 10 },
+    potential: 270,
+    bonusAmounts: { bet: 100, challenge: 100, prediction: 50, comment: 20 },
     claimedTypes: [],
   });
   const [testPushSending, setTestPushSending] = useState(false);
@@ -130,8 +130,8 @@ export function MinigamesPage() {
       setDailyBonusProgress({
         totalClaimed: 0,
         bonuses: [],
-        potential: 135,
-        bonusAmounts: { bet: 50, challenge: 50, prediction: 25, comment: 10 },
+        potential: 270,
+        bonusAmounts: { bet: 100, challenge: 100, prediction: 50, comment: 20 },
         claimedTypes: [],
       });
     });

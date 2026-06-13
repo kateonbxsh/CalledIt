@@ -1,4 +1,4 @@
-import type { BetOption, ChanceOptionSummary, Prediction } from '../types';
+import type { BetOption, BetType, ChanceOptionSummary, Prediction } from '../types';
 
 const MIN_SMOOTHING_WEIGHT = 0.18;
 const SMOOTHING_TIME_CONSTANT_MS = 6 * 60 * 60 * 1000;
@@ -141,4 +141,96 @@ export function projectChanceSummaryOverTime(params: {
 
 export function chanceForOption(summary: ChanceOptionSummary[], optionId: string) {
   return summary.find((option) => option.optionId === optionId)?.chance ?? 0;
+}
+
+// Fraction of the way from the bet's creation to its deadline: 0 at creation,
+// 1 at/after the deadline. null when there is no usable deadline. The
+// convergence/decay ramps linearly with this fraction, so its real-time speed is
+// set by (i.e. spans) the creation->deadline distance — short bets converge
+// fast, long bets slowly, both completing exactly at the deadline.
+function deadlineProgress(createdAtMs: number, deadlineMs: number | null | undefined, nowMs: number) {
+  if (!deadlineMs || deadlineMs <= createdAtMs) return null;
+  return clamp((nowMs - createdAtMs) / (deadlineMs - createdAtMs), 0, 1);
+}
+
+// The chance shown to users and stored as displayedChanceAtBetTime. Layers a
+// date-aware adjustment on top of the crowd chance:
+//  - generic deadline bets: early on, chances barely move (stay near neutral),
+//    and smoothly converge to the crowd chance as the deadline approaches.
+//  - 'date' (Before / After a target date): the "before" side decays toward 0
+//    as the date approaches, and is exactly 0 once the date has passed.
+//  - bets with no deadline: just show the crowd chance.
+export function displayChanceSummary(params: {
+  options: BetOption[];
+  summary: ChanceOptionSummary[];
+  type: BetType;
+  createdAtMs: number;
+  deadlineMs?: number | null;
+  // For 'date' (Before/After) bets, the date the "before" side decays toward.
+  targetDateMs?: number | null;
+  nowMs?: number;
+  status?: string;
+}): ChanceOptionSummary[] {
+  const { options } = params;
+  const optionCount = options.length;
+  if (optionCount === 0) return [];
+
+  const nowMs = params.nowMs ?? Date.now();
+  const neutral = 1 / optionCount;
+  const baseSummary = params.summary.length
+    ? params.summary
+    : options.map((option) => ({ optionId: option.id, users: 0, coins: 0, chance: neutral }));
+  const crowd = normalizeSummary(baseSummary, optionCount);
+  if (params.status === 'resolved') return crowd;
+
+  const progress = deadlineProgress(params.createdAtMs, params.deadlineMs, nowMs);
+
+  // Before / After a target date. Decay is driven by the target date itself
+  // (falling back to the deadline for older bets without a stored target date).
+  if (params.type === 'date') {
+    const dateMs = params.targetDateMs ?? params.deadlineMs ?? null;
+    const dateProgress = deadlineProgress(params.createdAtMs, dateMs, nowMs);
+    const crowdBefore = crowd.find((item) => item.optionId === 'before')?.chance ?? neutral;
+    const past = dateMs ? nowMs >= dateMs : false;
+    const ease = dateProgress ?? 0;
+    const beforeChance = past ? 0 : crowdBefore * (1 - ease);
+    return options.map((option) => {
+      const stored = crowd.find((item) => item.optionId === option.id) ?? { optionId: option.id, users: 0, coins: 0, chance: neutral };
+      const chance = option.id === 'before' ? beforeChance : 1 - beforeChance;
+      return { ...stored, chance };
+    });
+  }
+
+  // Generic deadline bets: blend neutral -> crowd chance as the deadline nears.
+  if (progress !== null) {
+    const blended = crowd.map((item) => ({ ...item, chance: neutral + (item.chance - neutral) * progress }));
+    return normalizeSummary(blended, optionCount);
+  }
+
+  return crowd;
+}
+
+// Per-guess chance for "closest date" bets. A guessed date that is near (or
+// already past) is unlikely and gets less likely as that date approaches; more
+// distant guesses keep more chance. Early in the bet's life the signal is weak
+// (close to the naive baseline), sharpening as time passes.
+export function dateGuessChance(params: {
+  guessMs: number;
+  createdAtMs: number;
+  deadlineMs?: number | null;
+  nowMs?: number;
+  guessCount?: number;
+}): number {
+  const nowMs = params.nowMs ?? Date.now();
+  const baseline = 1 / Math.max(2, (params.guessCount ?? 1) + 1);
+  if (!Number.isFinite(params.guessMs)) return baseline;
+  if (params.guessMs <= nowMs) return 0.02; // already elapsed unresolved -> ~0
+
+  const horizon = params.deadlineMs && params.deadlineMs > params.createdAtMs
+    ? params.deadlineMs - params.createdAtMs
+    : 30 * ONE_DAY_MS;
+  const remaining = clamp((params.guessMs - nowMs) / horizon, 0, 1); // near guess -> small
+  const informed = clamp((nowMs - params.createdAtMs) / horizon, 0, 1);
+  const chance = baseline * (1 - informed) + remaining * informed;
+  return clamp(chance, 0.02, 0.95);
 }

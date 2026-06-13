@@ -42,6 +42,7 @@ export function ChallengesPage() {
   const navigate = useNavigate();
   const [activities, setActivities] = useState<ChallengeActivity[]>([]);
   const [groups, setGroups] = useState<FriendGroup[]>([]);
+  const [topTab, setTopTab] = useState<'wagers' | 'activity'>('wagers');
   const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -76,6 +77,14 @@ export function ChallengesPage() {
     [activities, profile?.uid, weekKey],
   );
   const completedWeeklyCount = weekly.filter((challenge) => completedWeeklyIds.has(challenge.id)).length;
+
+  const visibleActivities = activities.filter((activity) => {
+    const matchesTopTab = topTab === 'wagers' ? activity.type === 'wager' : activity.type !== 'wager';
+    if (!matchesTopTab) return false;
+    if (activeTab === 'all') return true;
+    if (activeTab === 'private') return activity.visibility === 'private';
+    return activity.groupId === activeTab;
+  });
 
   async function load() {
     setLoading(true);
@@ -204,6 +213,47 @@ export function ChallengesPage() {
       />
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
 
+      {/* Weekly challenges — always pinned on top, above the tabs. */}
+      <section className="mb-4 rounded-md border border-line bg-white p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-citrus/10 text-citrus">
+              <Trophy size={19} />
+            </div>
+            <div>
+              <h2 className="font-black">Your weekly challenges</h2>
+              <p className="mt-1 text-sm text-ink/55">
+                {completedWeeklyCount}/{weekly.length} completed this week · {weekKey}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWeeklyModalOpen(true)}
+            className="btn-special rounded-md px-4 py-3 text-sm font-bold"
+          >
+            Open weekly challenges
+          </button>
+        </div>
+      </section>
+
+      <div className="mb-3 flex gap-2">
+        {([
+          { id: 'wagers', label: 'Wagers' },
+          { id: 'activity', label: 'Activity' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setTopTab(tab.id)}
+            className={`flex-1 rounded-md px-4 py-2 text-sm font-black transition ${
+              topTab === tab.id ? 'bg-ink text-white' : 'bg-white text-ink/65 border border-line'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {tabs.map((tab) => (
           <button
@@ -220,45 +270,16 @@ export function ChallengesPage() {
 
       <div className="grid gap-4">
         <section className="space-y-4">
-          <section className="rounded-md border border-line bg-white p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-citrus/10 text-citrus">
-                  <Trophy size={19} />
-                </div>
-                <div>
-                  <h2 className="font-black">Your weekly challenges</h2>
-                  <p className="mt-1 text-sm text-ink/55">
-                    {completedWeeklyCount}/{weekly.length} completed this week · {weekKey}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setWeeklyModalOpen(true)}
-                className="btn-special rounded-md px-4 py-3 text-sm font-bold"
-              >
-                Open weekly challenges
-              </button>
-            </div>
-          </section>
-
           <section className="space-y-3">
-            <h2 className="px-1 text-sm font-black text-ink/55">Activity</h2>
             {loading ? (
               <div className="h-48 animate-pulse rounded-md bg-white" />
-            ) : activities.filter((activity) => {
-              if (activeTab === 'all') return true;
-              if (activeTab === 'private') return activity.visibility === 'private';
-              return activity.groupId === activeTab;
-            }).length === 0 ? (
-              <EmptyState title="No challenge activity yet" body="Complete a weekly challenge or create a wager." />
+            ) : visibleActivities.length === 0 ? (
+              <EmptyState
+                title={topTab === 'wagers' ? 'No wagers yet' : 'No activity yet'}
+                body={topTab === 'wagers' ? 'Create a coin-backed wager to get started.' : 'Complete a weekly challenge to see it here.'}
+              />
             ) : (
-              activities.filter((activity) => {
-                if (activeTab === 'all') return true;
-                if (activeTab === 'private') return activity.visibility === 'private';
-                return activity.groupId === activeTab;
-              }).map((activity) => {
+              visibleActivities.map((activity) => {
                 const canComplete = activity.type === 'wager'
                   && activity.status === 'open'
                   && activity.creatorId !== profile?.uid

@@ -28,14 +28,18 @@ import { createNotification, uidsForUsernames } from './notificationService';
 import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
 
-const SAFE_FORECAST_REWARD = 60;
-const SPICY_FORECAST_NOW = 20;
-const SPICY_FORECAST_BONUS = 120;
+// Global buff applied to coin rewards across forecasts, chests, weekly
+// challenges and wager bonuses so the whole economy pays out more generously.
+export const REWARD_MULTIPLIER = 2;
+
+const SAFE_FORECAST_REWARD = 60 * REWARD_MULTIPLIER;
+const SPICY_FORECAST_NOW = 20 * REWARD_MULTIPLIER;
+const SPICY_FORECAST_BONUS = 120 * REWARD_MULTIPLIER;
 function forecastReward(mode: DailyForecastMode) {
   const rewards: Record<DailyForecastMode, { amount: number; label: string; spicyBonus?: number }> = {
     safe: { amount: SAFE_FORECAST_REWARD, label: 'Safe daily forecast' },
-    random: { amount: 10 + Math.floor(Math.random() * 91), label: 'Random refill' },
-    chaos: { amount: [-20, 5, 130][Math.floor(Math.random() * 3)], label: 'Chaos refill' },
+    random: { amount: (10 + Math.floor(Math.random() * 91)) * REWARD_MULTIPLIER, label: 'Random refill' },
+    chaos: { amount: [-20, 5, 130][Math.floor(Math.random() * 3)] * REWARD_MULTIPLIER, label: 'Chaos refill' },
     spicy: { amount: SPICY_FORECAST_NOW, label: 'Spicy daily forecast', spicyBonus: SPICY_FORECAST_BONUS },
   };
   return rewards[mode];
@@ -212,7 +216,11 @@ export function weeklyChallengesForUser(user: UserProfile, weekKey = currentWeek
     if (filler > 80) break;
   }
 
-  return [...picked.values()].slice(0, 10);
+  return [...picked.values()].slice(0, 10).map((challenge) => ({
+    ...challenge,
+    reward: challenge.reward * REWARD_MULTIPLIER,
+    chestReward: challenge.chestReward * REWARD_MULTIPLIER,
+  }));
 }
 
 export const chestCatalog = [
@@ -354,7 +362,7 @@ export async function getChestDefinitions(user: UserProfile): Promise<ChestDefin
     id: chest.id,
     title: chest.title,
     description: chest.description,
-    reward: chest.reward,
+    reward: chest.reward * REWARD_MULTIPLIER,
     unlocked: chest.unlocked(user),
     claimed: claimed.has(chest.id),
   }));
@@ -365,6 +373,7 @@ export async function claimChest(user: UserProfile, chestId: string) {
   if (!chest) throw new Error('Chest not found.');
   if (!chest.unlocked(user)) throw new Error('Chest is still locked.');
 
+  const amount = chest.reward * REWARD_MULTIPLIER;
   const userRef = doc(db, 'users', user.uid);
   const claimRef = rewardClaimRef(user.uid, `chest_${chest.id}`);
   await runTransaction(db, async (transaction) => {
@@ -375,27 +384,27 @@ export async function claimChest(user: UserProfile, chestId: string) {
       username: user.username,
       type: 'chest',
       label: chest.title,
-      amount: chest.reward,
+      amount,
       createdAt: serverTimestamp(),
     });
     transaction.update(userRef, {
-      coinBalance: increment(chest.reward),
+      coinBalance: increment(amount),
       'stats.chestsOpened': increment(1),
       updatedAt: serverTimestamp(),
     });
   });
-  return { amount: chest.reward, label: chest.title };
+  return { amount, label: chest.title };
 }
 
 export const wheelRewards = [
-  { amount: 150, label: '+150' },
-  { amount: -40, label: '-40' },
-  { amount: 90, label: '+90' },
+  { amount: 300, label: '+300' },
+  { amount: -80, label: '-80' },
+  { amount: 180, label: '+180' },
   { amount: 0, label: '0' },
-  { amount: 60, label: '+60' },
-  { amount: -20, label: '-20' },
-  { amount: 25, label: '+25' },
-  { amount: 200, label: '+200' },
+  { amount: 120, label: '+120' },
+  { amount: -40, label: '-40' },
+  { amount: 50, label: '+50' },
+  { amount: 400, label: '+400' },
 ];
 
 export async function spinWheel(user: UserProfile) {
@@ -569,7 +578,7 @@ export async function createWagerChallenge(params: {
   if (audience.visibility === 'private' && !audience.groupId && audience.invitedUsernames.length === 0) {
     throw new Error('Invite at least one user for a private wager.');
   }
-  const bonus = Math.max(5, Math.round(params.stake * 0.2));
+  const bonus = Math.max(5, Math.round(params.stake * 0.2)) * REWARD_MULTIPLIER;
   await runTransaction(db, async (transaction) => {
     const userRef = doc(db, 'users', params.user.uid);
     const userSnap = await transaction.get(userRef);

@@ -12,10 +12,10 @@ import type { DailyBonus, UserProfile } from '../types';
 
 // Bonus amounts for each action type
 const BONUS_AMOUNTS = {
-  bet: 50,        // Create a bet
-  challenge: 50,  // Create a challenge/wager
-  prediction: 25, // Make a prediction
-  comment: 10,    // Comment on a bet
+  bet: 100,       // Create a bet
+  challenge: 100, // Create a challenge/wager
+  prediction: 50, // Make a prediction
+  comment: 20,    // Comment on a bet
 };
 
 function getTodayUTC(): string {

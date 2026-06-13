@@ -10,6 +10,8 @@ import {
 } from 'recharts';
 import type { Bet, Prediction } from '../types';
 import { closestDateGuessLabel } from '../utils/closestGuess';
+import { asDate } from '../utils/format';
+import { dateGuessChance } from '../utils/probability';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -50,7 +52,7 @@ function normalizeDensity(points: DensityPoint[]) {
   return points.map((point) => ({ ...point, density: point.density / area }));
 }
 
-function buildDensityCurve(values: number[], toLabel: (x: number) => string): DensityCurve {
+function buildDensityCurve(values: number[], weights: number[], toLabel: (x: number) => string): DensityCurve {
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = Math.max(1, max - min);
@@ -65,15 +67,18 @@ function buildDensityCurve(values: number[], toLabel: (x: number) => string): De
     range / 85,
     0.18,
   );
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || values.length;
   const minX = min - bandwidth * 5;
   const maxX = max + bandwidth * 5;
   const steps = 240;
   const rawPoints = Array.from({ length: steps + 1 }, (_, index) => {
     const x = minX + ((maxX - minX) * index) / steps;
-    const density = values.reduce((sum, value) => {
+    // Each guess contributes proportionally to its current win-chance, so peaks
+    // reflect where the *probable* answers are, not just where people clustered.
+    const density = values.reduce((sum, value, i) => {
       const u = (x - value) / bandwidth;
-      return sum + Math.exp(-0.5 * u * u);
-    }, 0) / (values.length * bandwidth * Math.sqrt(2 * Math.PI));
+      return sum + weights[i] * Math.exp(-0.5 * u * u);
+    }, 0) / (totalWeight * bandwidth * Math.sqrt(2 * Math.PI));
 
     return {
       x,
@@ -92,13 +97,27 @@ function buildDensityCurve(values: number[], toLabel: (x: number) => string): De
 }
 
 export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predictions: Prediction[] }) {
-  const rawValues = bet.type === 'closestNumber'
+  const createdAtMs = bet.createdAt ? asDate(bet.createdAt).getTime() : Date.now();
+  const deadlineMs = bet.deadline ? asDate(bet.deadline).getTime() : null;
+  const nowMs = Date.now();
+
+  // Each guess carries a weight = its current win-chance. Closest-number guesses
+  // have no time model, so they weight equally; closest-date guesses use the
+  // same date-aware chance that drives rewards.
+  const entries = bet.type === 'closestNumber'
     ? predictions
       .map((prediction) => prediction.numericGuess)
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+      .map((value) => ({ value, weight: 1 }))
     : predictions
       .map((prediction) => asTime(prediction.dateGuess))
-      .filter((value): value is number => value !== null);
+      .filter((value): value is number => value !== null)
+      .map((value) => ({
+        value,
+        weight: dateGuessChance({ guessMs: value, createdAtMs, deadlineMs, nowMs, guessCount: predictions.length }),
+      }));
+  const rawValues = entries.map((entry) => entry.value);
+  const rawWeights = entries.map((entry) => entry.weight);
 
   if (rawValues.length < 2) {
     return (
@@ -121,6 +140,7 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
   const numberDecimals = numberRange < 10 ? 1 : 0;
   const curve = buildDensityCurve(
     values,
+    rawWeights,
     bet.type === 'closestNumber'
       ? (x) => x.toFixed(numberDecimals)
       : (x) => compactDate((startDayMs ?? 0) + x * DAY_MS),

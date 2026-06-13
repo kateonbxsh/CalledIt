@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { CoinAmount } from '../components/CoinAmount';
 import { ELORating } from '../components/ELORating';
@@ -69,16 +70,16 @@ export function LeaderboardPage() {
                     }
                   </div>
 
-                  {/* Avatar */}
-                  <Avatar name={user.displayName} src={user.photoURL} round />
-
-                  {/* Name + username */}
-                  <div className="min-w-0 flex-1">
-                    <p className={`truncate font-bold ${isPodium ? 'text-ink' : 'text-ink/80'}`}>
-                      {user.displayName}
-                    </p>
-                    <p className="truncate text-xs text-ink/40">@{user.username}</p>
-                  </div>
+                  {/* Avatar + name + username — tap to open profile */}
+                  <Link to={`/profile/${user.uid}`} className="flex min-w-0 flex-1 items-center gap-3 transition hover:opacity-80">
+                    <Avatar name={user.displayName} src={user.photoURL} round />
+                    <div className="min-w-0 flex-1">
+                      <p className={`truncate font-bold ${isPodium ? 'text-ink' : 'text-ink/80'}`}>
+                        {user.displayName}
+                      </p>
+                      <p className="truncate text-xs text-ink/40">@{user.username}</p>
+                    </div>
+                  </Link>
 
                   {/* Right side: ELO rating + progress + coins */}
                   <div className="shrink-0">

@@ -20,6 +20,7 @@ import { awardDailyBonus } from './bonusService';
 import type {
   Bet,
   BetComment,
+  BetOption,
   BetResolution,
   ChanceSnapshot,
   CreateBetInput,
@@ -36,6 +37,8 @@ import {
   calculateChanceSummary,
   calculateSmoothedChanceSummary,
   chanceForOption,
+  dateGuessChance,
+  displayChanceSummary,
   projectChanceSummaryOverTime,
 } from '../utils/probability';
 import { applyRatingDelta, calculateRatingDelta } from '../utils/rating';
@@ -48,7 +51,7 @@ import {
   resolveClosestNumber,
 } from '../utils/closestGuess';
 import { isClosestType } from '../utils/betTypes';
-import { buildStatsAfterResolution } from './userService';
+import { buildStatsAfterResolution, getLeaderboard } from './userService';
 import { createNotification, uidsForUsernames, usersWhoCanSeeBet, usersWhoPredictedBet } from './notificationService';
 
 function optionId(label: string, existingIds: string[]) {
@@ -113,7 +116,13 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     groupId: input.groupId ?? null,
     creatorId: creator.uid,
     creatorUsername: creator.username,
-    deadline: input.deadline ? Timestamp.fromDate(input.deadline) : null,
+    // A guaranteed before/after event resolves at its target date, so the target
+    // date doubles as the deadline; otherwise use the explicit deadline.
+    deadline: input.type === 'date' && !input.eventMightNotHappen && input.targetDate
+      ? Timestamp.fromDate(input.targetDate)
+      : (input.deadline ? Timestamp.fromDate(input.deadline) : null),
+    targetDate: input.targetDate ? Timestamp.fromDate(input.targetDate) : null,
+    eventMightNotHappen: input.type === 'date' ? (input.eventMightNotHappen ?? false) : false,
     status: 'open',
     predictionCount: 0,
     totalCoinsStaked: 0,
@@ -348,34 +357,40 @@ export async function placePrediction(input: PredictionInput) {
       : (allowsMultipleChoices(bet) && input.optionIds?.length ? input.optionIds : [input.optionId]).filter(Boolean);
     const customOptionLabel = input.customOptionLabel?.trim();
     if (openChoice) {
-      if (customOptionLabel) {
-        const normalizedCustomOptionLabel = normalizeOptionLabel(customOptionLabel);
-        const existingOption = bet.options.find(
-          (option) => normalizeOptionLabel(option.label) === normalizedCustomOptionLabel,
-        );
-        const customOption =
-          existingOption ??
-          {
-            id: optionId(customOptionLabel, bet.options.map((option) => option.id)),
-            label: customOptionLabel,
-            createdBy: user.uid,
-          };
-        effectiveOptionId = customOption.id;
-        effectiveOptionIds = [customOption.id];
-        nextOptions = existingOption ? bet.options : [...bet.options, customOption];
-      } else {
-        const selectedExistingOptions = effectiveOptionIds
-          .map((id) => bet.options.find((option) => option.id === id))
-          .filter((option): option is NonNullable<typeof option> => Boolean(option));
-        if (selectedExistingOptions.length) {
-          effectiveOptionId = selectedExistingOptions[0].id;
-          effectiveOptionIds = allowsMultipleChoices(bet)
-            ? selectedExistingOptions.map((option) => option.id)
-            : [selectedExistingOptions[0].id];
+      // New answers to create: an array (multi) or the single legacy label.
+      const labels = (input.customOptionLabels?.length
+        ? input.customOptionLabels
+        : (customOptionLabel ? [customOptionLabel] : []))
+        .map((label) => label.trim())
+        .filter(Boolean);
+      // Existing options the user selected (only meaningful with multi-choice).
+      const selectedExistingIds = effectiveOptionIds.filter((id) => bet.options.some((option) => option.id === id));
+
+      const usedIds = bet.options.map((option) => option.id);
+      const newOptions: BetOption[] = [];
+      const customIds: string[] = [];
+      for (const label of labels) {
+        const normalized = normalizeOptionLabel(label);
+        const match = bet.options.find((option) => normalizeOptionLabel(option.label) === normalized)
+          ?? newOptions.find((option) => normalizeOptionLabel(option.label) === normalized);
+        if (match) {
+          customIds.push(match.id);
         } else {
-          throw new Error('Pick or add an answer.');
+          const created = { id: optionId(label, usedIds), label, createdBy: user.uid };
+          usedIds.push(created.id);
+          newOptions.push(created);
+          customIds.push(created.id);
         }
       }
+
+      const combinedIds = [...new Set([...selectedExistingIds, ...customIds])];
+      if (combinedIds.length === 0) throw new Error('Pick or add an answer.');
+      // New typed answers take precedence for single-choice bets (legacy behaviour).
+      effectiveOptionIds = allowsMultipleChoices(bet)
+        ? combinedIds
+        : [customIds[0] ?? selectedExistingIds[0]];
+      effectiveOptionId = effectiveOptionIds[0];
+      nextOptions = newOptions.length ? [...bet.options, ...newOptions] : bet.options;
     } else if (!closest) {
       const selectedExistingOptions = effectiveOptionIds
         .map((id) => bet.options.find((option) => option.id === id))
@@ -397,21 +412,47 @@ export async function placePrediction(input: PredictionInput) {
       );
       if (scoreError) throw new Error(scoreError);
     }
+    const nowMsForChance = Date.now();
+    const createdAtMs = bet.createdAt?.toMillis?.() ?? nowMsForChance;
+    const deadlineMs = bet.deadline?.toMillis?.() ?? null;
+    const targetDateMs = bet.targetDate?.toMillis?.() ?? null;
+    const chanceForDateGuess = (guess?: string | null) =>
+      guess
+        ? dateGuessChance({
+            guessMs: new Date(guess).getTime(),
+            createdAtMs,
+            deadlineMs,
+            nowMs: nowMsForChance,
+            guessCount: existing.length,
+          })
+        : 1 / (existing.length + 1);
+    const chanceForOptionIds = (ids: string[]) => {
+      const displayed = displayChanceSummary({
+        options: nextOptions,
+        summary: bet.chanceSummary,
+        type: bet.type,
+        createdAtMs,
+        deadlineMs,
+        targetDateMs,
+        nowMs: nowMsForChance,
+        status: bet.status,
+      });
+      return ids.reduce((sum, id) => sum + chanceForOption(displayed, id), 0)
+        || 1 / Math.max(1, nextOptions.length);
+    };
+
     const displayedChanceAtBetTime = closest
-      ? 1 / (existing.length + 1)
-      : (() => {
-          const projectedSummary = projectChanceSummaryOverTime({
-            options: nextOptions,
-            summary: bet.chanceSummary,
-            updatedAt: bet.updatedAt,
-            status: bet.status,
-          });
-          return Math.min(
-            0.95,
-            effectiveOptionIds.reduce((sum, id) => sum + chanceForOption(projectedSummary, id), 0)
-              || 1 / Math.max(1, nextOptions.length),
-          );
-        })();
+      ? chanceForDateGuess(bet.type === 'closestDate' ? input.dateGuess : null)
+      : Math.min(0.95, chanceForOptionIds(effectiveOptionIds));
+
+    // Current chance of the pick the user is leaving — drives the bailout fee.
+    const currentChanceOfExistingPick = existingPrediction
+      ? closest
+        ? chanceForDateGuess(bet.type === 'closestDate' ? existingPrediction.dateGuess : null)
+        : chanceForOptionIds(
+            existingPrediction.optionIds?.length ? existingPrediction.optionIds : [existingPrediction.optionId],
+          )
+      : undefined;
 
     const now = Timestamp.now();
     const previousStake = existingPrediction?.stake ?? 0;
@@ -425,6 +466,7 @@ export async function placePrediction(input: PredictionInput) {
           betCreatedAtMs: bet.createdAt?.toMillis?.(),
           deadlineMs: bet.deadline?.toMillis?.() ?? null,
           nowMs: now.toMillis(),
+          currentChanceOfExistingPick,
         })
       : 0;
     const balanceDelta = previousStake - input.stake - changeFee;
@@ -592,7 +634,11 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
   );
   const predictions = predictionSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
 
+  // Captured during the transaction (reset per attempt) to detect leaderboard moves afterwards.
+  let ratingChanges: Array<{ uid: string; oldRating: number; newRating: number }> = [];
+
   await runTransaction(db, async (transaction) => {
+    ratingChanges = [];
     const userRefs = [...new Set(predictions.map((prediction) => prediction.userId))]
       .map((userId) => doc(db, 'users', userId));
     const [betSnap, ...userSnaps] = await Promise.all([
@@ -608,6 +654,32 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
         .filter((snap) => snap.exists())
         .map((snap) => [snap.id, snap.data() as UserProfile]),
     );
+
+    // --- Event did not happen: refund every prediction, no winners/losers. ---
+    if (resolution.eventDidNotHappen) {
+      for (const prediction of predictions) {
+        if (!usersById.has(prediction.userId)) continue;
+        transaction.update(doc(db, 'users', prediction.userId), {
+          coinBalance: increment(prediction.stake),
+          updatedAt: serverTimestamp(),
+        });
+        transaction.update(doc(db, 'predictions', prediction.id), {
+          status: 'refunded',
+          correct: false,
+          coinDelta: prediction.stake,
+          ratingDelta: 0,
+          resolvedAt: serverTimestamp(),
+        });
+      }
+      transaction.update(betRef, {
+        status: 'resolved',
+        resolution: { ...resolution, eventDidNotHappen: true },
+        resolvedBy: resolverUid,
+        resolvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return;
+    }
 
     // --- Determine winners and payouts ---
     let winnerPredictionIds: string[] = [];
@@ -713,6 +785,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       }) + (scoreBonus?.ratingBonus ?? 0);
 
       const nextRating = applyRatingDelta(user.rating, ratingDelta);
+      ratingChanges.push({ uid: prediction.userId, oldRating: user.rating, newRating: nextRating });
       const coinDelta = (payout?.coinDelta ?? 0) + totalSpicyBonus;
       const netCoinDelta = correct ? coinDelta - prediction.stake : -prediction.stake;
 
@@ -768,7 +841,47 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       body: 'Check the results and see if you won.',
       url: `/#/bets/${bet.id}`,
     });
+    await notifyLeaderboardMoves(resolver, ratingChanges).catch(() => {});
   }
+}
+
+// After a resolve changes ratings, tell anyone whose leaderboard (top 50) rank
+// shifted up or down. Old ranks are recomputed by swapping changed users back to
+// their pre-resolution ratings within the freshly-fetched board.
+async function notifyLeaderboardMoves(
+  actor: UserProfile,
+  changes: Array<{ uid: string; oldRating: number; newRating: number }>,
+) {
+  if (changes.length === 0) return;
+  const changeByUid = new Map(changes.map((change) => [change.uid, change]));
+  const board = await getLeaderboard();
+  if (board.length === 0) return;
+
+  const newRank = new Map(
+    [...board].sort((a, b) => b.rating - a.rating).map((user, index) => [user.uid, index + 1]),
+  );
+  const oldRank = new Map(
+    board
+      .map((user) => ({ uid: user.uid, rating: changeByUid.get(user.uid)?.oldRating ?? user.rating }))
+      .sort((a, b) => b.rating - a.rating)
+      .map((user, index) => [user.uid, index + 1]),
+  );
+
+  await Promise.all(changes.map(async (change) => {
+    const nr = newRank.get(change.uid);
+    const or = oldRank.get(change.uid);
+    if (!nr || !or || nr === or) return;
+    const movedUp = nr < or;
+    await createNotification({
+      type: 'leaderboard_moved',
+      actor,
+      targetUids: [change.uid],
+      includeActor: true,
+      title: movedUp ? '📈 You climbed the leaderboard!' : '📉 You slipped on the leaderboard',
+      body: movedUp ? `You moved up to #${nr}.` : `You dropped to #${nr}.`,
+      url: '/#/leaderboard',
+    });
+  }));
 }
 
 export async function reopenBet(bet: Bet) {

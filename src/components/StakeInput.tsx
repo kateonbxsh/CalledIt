@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { CircleDollarSign } from 'lucide-react';
 
 export function StakeInput({
@@ -14,6 +15,14 @@ export function StakeInput({
   step?: number;
 }) {
   const normalized = Number.isFinite(value) ? value : min;
+  // Local text lets the user freely clear/retype (e.g. delete "10" to type "85")
+  // without the field snapping back to the minimum on every keystroke. The value
+  // is only clamped to the minimum when the field loses focus.
+  const [text, setText] = useState(String(normalized));
+  useEffect(() => {
+    setText(String(Number.isFinite(value) ? value : min));
+  }, [value, min]);
+
   return (
     <div>
       <p className="mb-1.5 text-xs font-semibold text-ink/50">{label}</p>
@@ -32,8 +41,20 @@ export function StakeInput({
             className="min-w-0 flex-1 bg-transparent text-center font-black text-citrus outline-none"
             type="number"
             min={min}
-            value={value}
-            onChange={(event) => onChange(Math.max(min, Number(event.target.value) || min))}
+            value={text}
+            onChange={(event) => {
+              const raw = event.target.value;
+              setText(raw);
+              const parsed = Number(raw);
+              // Push live updates while typing without forcing the minimum yet.
+              if (raw !== '' && Number.isFinite(parsed)) onChange(parsed);
+            }}
+            onBlur={() => {
+              const parsed = Number(text);
+              const clamped = Number.isFinite(parsed) && parsed >= min ? parsed : min;
+              onChange(clamped);
+              setText(String(clamped));
+            }}
             aria-label={label}
           />
         </label>

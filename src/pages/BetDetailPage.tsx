@@ -35,7 +35,7 @@ import {
 } from '../utils/closestGuess';
 import { percent, relativeTime } from '../utils/format';
 import { downscaleBetImage } from '../utils/image';
-import { chanceForOption, projectChanceSummaryOverTime } from '../utils/probability';
+import { chanceForOption, dateGuessChance, displayChanceSummary } from '../utils/probability';
 
 function datetimeLocalValue(date?: Date | null) {
   if (!date) return '';
@@ -89,10 +89,13 @@ function predictionDetail(bet: Bet, prediction: Prediction) {
   if (bet.type === 'closestDate') return closestDateGuessLabel(prediction.dateGuess);
 
   const optionIds = prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
-  const label = optionIds.map((optionId) => {
+  const labels = optionIds.map((optionId) => {
     const option = bet.options.find((item) => item.id === optionId);
     return option?.label ?? prediction.customOptionLabel ?? optionId;
-  }).join(', ');
+  });
+  // Multiple picks read as "A and/or B" when several can win, else "A or B".
+  const separator = labels.length > 1 ? (bet.allowMultipleOutcomes ? ' and/or ' : ' or ') : ', ';
+  const label = labels.join(separator);
   if (bet.type === 'sports' && prediction.scorePrediction) {
     return `${label}, ${prediction.scorePrediction.home}-${prediction.scorePrediction.away}`;
   }
@@ -126,6 +129,7 @@ export function BetDetailPage() {
   const [numericGuess, setNumericGuess] = useState('');
   const [dateGuess, setDateGuess] = useState('');
   const [customOptionLabel, setCustomOptionLabel] = useState('');
+  const [customLabels, setCustomLabels] = useState<string[]>([]);
   const [winningOptionId, setWinningOptionId] = useState('');
   const [winningOptionIds, setWinningOptionIds] = useState<string[]>([]);
   const [actualHomeScore, setActualHomeScore] = useState('');
@@ -133,6 +137,7 @@ export function BetDetailPage() {
   const [actualValue, setActualValue] = useState('');
   const [actualDateValue, setActualDateValue] = useState('');
   const [resolutionNote, setResolutionNote] = useState('');
+  const [resolveAsDidNotHappen, setResolveAsDidNotHappen] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -242,10 +247,13 @@ export function BetDetailPage() {
   const multiPrediction = bet ? supportsMultipleChoices(bet) : false;
   const canPredict = bet?.status === 'open';
   const projectedChanceSummary = bet
-    ? projectChanceSummaryOverTime({
+    ? displayChanceSummary({
         options: bet.options,
         summary: bet.chanceSummary,
-        updatedAt: bet.updatedAt,
+        type: bet.type,
+        createdAtMs: bet.createdAt?.toMillis?.() ?? Date.now(),
+        deadlineMs: bet.deadline?.toMillis?.() ?? null,
+        targetDateMs: bet.targetDate?.toMillis?.() ?? null,
         status: bet.status,
       })
     : [];
@@ -282,6 +290,12 @@ export function BetDetailPage() {
   );
 
   function buildResolution(): BetResolution {
+    if (resolveAsDidNotHappen) {
+      return {
+        eventDidNotHappen: true,
+        ...(resolutionNote.trim() ? { note: resolutionNote.trim() } : {}),
+      };
+    }
     if (closest && bet) {
       return {
         winningOptionId: 'guess',
@@ -311,7 +325,9 @@ export function BetDetailPage() {
         return;
       }
     }
-    if (!closest && !customOptionLabel.trim() && (multiPrediction ? selectedOptionIds.length === 0 : !selected)) {
+    const openChoiceMulti = bet.type === 'openChoice' && multiPrediction;
+    const hasOpenChoiceMultiPick = openChoiceMulti && (selectedOptionIds.length > 0 || customLabels.length > 0);
+    if (!closest && !hasOpenChoiceMultiPick && !customOptionLabel.trim() && (multiPrediction ? selectedOptionIds.length === 0 : !selected)) {
       setError('Select at least one option.');
       return;
     }
@@ -330,10 +346,12 @@ export function BetDetailPage() {
             : undefined,
         numericGuess: bet.type === 'closestNumber' && numericGuess !== '' ? Number(numericGuess) : undefined,
         dateGuess: bet.type === 'closestDate' && dateGuess ? dateGuess : undefined,
-        customOptionLabel: bet.type === 'openChoice' ? customOptionLabel : undefined,
+        customOptionLabel: bet.type === 'openChoice' && !openChoiceMulti ? customOptionLabel : undefined,
+        customOptionLabels: openChoiceMulti && customLabels.length ? customLabels : undefined,
       });
       setEditingPrediction(false);
       setCustomOptionLabel('');
+      setCustomLabels([]);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not place prediction.');
@@ -345,7 +363,7 @@ export function BetDetailPage() {
   function requestResolution(event: FormEvent) {
     event.preventDefault();
     if (!bet || !profile) return;
-    if (multiWinner && winningOptionIds.length === 0) {
+    if (!resolveAsDidNotHappen && multiWinner && winningOptionIds.length === 0) {
       setError('Select at least one winning option.');
       return;
     }
@@ -640,7 +658,7 @@ export function BetDetailPage() {
           {/* Closest type: show distribution before resolution and results after resolution */}
           {closest ? (
             <div className="rounded-md border border-line bg-white p-4">
-              <h2 className="mb-3 font-bold">Guess Distribution</h2>
+              <h2 className="mb-3 font-bold">Probability</h2>
               <ClosestDistributionChart bet={bet} predictions={predictions} />
               <h2 className={`mb-3 mt-4 font-bold ${bet.status === 'resolved' ? '' : 'hidden'}`}>
                 Results
@@ -915,7 +933,47 @@ export function BetDetailPage() {
                     </div>
                 ) : null}
 
-                {bet.type === 'openChoice' ? (
+                {bet.type === 'openChoice' && multiPrediction ? (
+                  <div className="block text-sm font-medium">
+                    Add your own answers
+                    <div className="mt-1 grid gap-2" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+                      {customLabels.map((label, index) => (
+                        <div
+                          key={`draft-${index}`}
+                          className="relative rounded-xl border-2 border-ink bg-ink px-3 py-2.5 text-left"
+                        >
+                          <input
+                            autoFocus
+                            value={label}
+                            onChange={(e) =>
+                              setCustomLabels((current) => current.map((l, i) => (i === index ? e.target.value : l)))
+                            }
+                            placeholder="New answer"
+                            className="w-full bg-transparent text-sm font-black text-white outline-none placeholder:text-white/40"
+                          />
+                          <p className="mt-1 text-[11px] font-black text-white/75">selected · tap × to remove</p>
+                          <button
+                            type="button"
+                            onClick={() => setCustomLabels((current) => current.filter((_, i) => i !== index))}
+                            className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-white/15 text-xs font-black text-white hover:bg-white/30"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setCustomLabels((current) => [...current, ''])}
+                        className="rounded-xl border-2 border-dashed border-line px-3 py-2.5 text-sm font-bold text-ink/55 transition hover:border-ink/30 hover:bg-field"
+                      >
+                        + Add answer
+                      </button>
+                    </div>
+                    <span className="mt-1 block text-xs text-ink/50">
+                      New answers are added as cards you bet on, alongside any existing cards you tapped above.
+                    </span>
+                  </div>
+                ) : bet.type === 'openChoice' ? (
                   <div className="block text-sm font-medium">
                     Add your own answer
                     <input
@@ -1101,7 +1159,22 @@ export function BetDetailPage() {
               </div>
             ) : (
               <form className="space-y-3" onSubmit={requestResolution}>
-                {!closest && multiWinner ? (
+                {bet.type === 'date' && bet.eventMightNotHappen ? (
+                  <label className="flex items-start gap-2 rounded-md bg-field px-3 py-2 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={resolveAsDidNotHappen}
+                      onChange={(e) => setResolveAsDidNotHappen(e.target.checked)}
+                    />
+                    <span>
+                      Event did not happen
+                      <span className="mt-0.5 block text-xs font-normal text-ink/55">Refunds every prediction.</span>
+                    </span>
+                  </label>
+                ) : null}
+
+                {resolveAsDidNotHappen ? null : !closest && multiWinner ? (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-ink/55">Winning options</p>
                     {bet.options.map((option, index) => (

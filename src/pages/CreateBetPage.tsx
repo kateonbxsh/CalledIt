@@ -32,6 +32,7 @@ export function CreateBetPage() {
   const [awayTeam, setAwayTeam] = useState('');
   const [numberLine, setNumberLine] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [eventMightNotHappen, setEventMightNotHappen] = useState(false);
   const [allowDraw, setAllowDraw] = useState(false);
   const [allowExactScore, setAllowExactScore] = useState(false);
   const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
@@ -118,6 +119,8 @@ export function CreateBetPage() {
           description: description || undefined,
           category,
           deadline: deadline ? new Date(deadline) : undefined,
+          targetDate: type === 'date' && targetDate ? new Date(targetDate) : undefined,
+          eventMightNotHappen: type === 'date' ? eventMightNotHappen : undefined,
           visibility,
           invitedUsernames: invited.filter((username) => !maskedSet.has(username)),
           maskedUsernames: selectedGroupId ? [...maskedSet] : [],
@@ -208,8 +211,18 @@ export function CreateBetPage() {
             </label>
             <label className="block text-sm font-medium">
               Deadline
-              <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-              <span className="mt-1 block text-xs text-ink/50">Optional: If not set, the bet stays open indefinitely</span>
+              <input
+                className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 disabled:opacity-50"
+                type="datetime-local"
+                value={type === 'date' && !eventMightNotHappen ? '' : deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                disabled={type === 'date' && !eventMightNotHappen}
+              />
+              <span className="mt-1 block text-xs text-ink/50">
+                {type === 'date' && !eventMightNotHappen
+                  ? 'Set by the target date — the event is guaranteed to happen.'
+                  : 'Optional: If not set, the bet stays open indefinitely'}
+              </span>
             </label>
           </div>
 
@@ -241,11 +254,27 @@ export function CreateBetPage() {
             </label>
           ) : null}
           {type === 'date' ? (
-            <label className="block text-sm font-medium">
-              Target date
-              <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} required />
-              <span className="mt-1 block text-xs text-ink/50">Friends choose before or on/after this date</span>
-            </label>
+            <div className="space-y-3">
+              <label className="block text-sm font-medium">
+                Target date
+                <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} required />
+                <span className="mt-1 block text-xs text-ink/50">Friends choose before or on/after this date</span>
+              </label>
+              <label className="flex items-start gap-2 rounded-md bg-field p-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={eventMightNotHappen}
+                  onChange={(e) => setEventMightNotHappen(e.target.checked)}
+                />
+                <span>
+                  <span className="font-semibold">Event might not happen</span>
+                  <span className="mt-0.5 block text-xs text-ink/55">
+                    Adds an "event did not happen" outcome at resolution that refunds everyone. Leave unchecked if the event is guaranteed — the target date then acts as the deadline.
+                  </span>
+                </span>
+              </label>
+            </div>
           ) : null}
           {type === 'sports' ? (
             <div className="space-y-3">

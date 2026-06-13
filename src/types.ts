@@ -90,6 +90,11 @@ export interface Bet {
   awayTeam?: string;
   imageUrl?: string;
   deadline?: Timestamp;
+  // Before/After ('date') bets: the date the "before" side decays toward 0.
+  targetDate?: Timestamp | null;
+  // Before/After ('date') bets: if true the event may never happen, so resolution
+  // offers an "event did not happen" outcome that refunds everyone.
+  eventMightNotHappen?: boolean;
   status: BetStatus;
   predictionCount: number;
   totalCoinsStaked: number;
@@ -110,6 +115,8 @@ export interface BetResolution {
   actualDateValue?: string;
   actualHomeScore?: number;
   actualAwayScore?: number;
+  // Before/After bets flagged "event might not happen": refunds every prediction.
+  eventDidNotHappen?: boolean;
   note?: string;
 }
 
@@ -135,7 +142,7 @@ export interface Prediction {
   mintedCoinReward?: number;
   poolCoinProfit?: number;
   spicyForecastBonus?: number;
-  status?: 'pending' | 'won' | 'lost';
+  status?: 'pending' | 'won' | 'lost' | 'refunded';
   correct?: boolean;
   coinDelta?: number;
   ratingDelta?: number;
@@ -191,6 +198,8 @@ export interface CreateBetInput {
   description?: string;
   category: string;
   deadline?: Date;
+  targetDate?: Date;
+  eventMightNotHappen?: boolean;
   visibility: BetVisibility;
   invitedUsernames: string[];
   maskedUsernames?: string[];
@@ -232,6 +241,9 @@ export interface PredictionInput {
   numericGuess?: number;
   dateGuess?: string;
   customOptionLabel?: string;
+  // Open-choice with multiple choices enabled: several new answers to add and
+  // bet on at once (alongside any selected existing options in optionIds).
+  customOptionLabels?: string[];
 }
 
 export interface FriendGroup {
@@ -318,6 +330,7 @@ export type NotificationEventType =
   | 'wager_deadline_passed'
   | 'group_updated'
   | 'reward_available'
+  | 'leaderboard_moved'
   | 'test_push';
 
 export interface AppNotification {
