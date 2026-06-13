@@ -27,6 +27,7 @@ const deadlineScanIntervalMs = Number(process.env.DEADLINE_SCAN_INTERVAL_MS || 1
 const quotaBackoffMs = Number(process.env.QUOTA_BACKOFF_MS || 15 * 60 * 1000);
 const rewardCycleMs = Number(process.env.REWARD_CYCLE_MS || 6 * 60 * 60 * 1000);
 const betBonusReminder = String(process.env.BET_BONUS_REMINDER || 'true').toLowerCase() === 'true';
+const allEnabledTargetUid = '__all_enabled__';
 
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
@@ -125,6 +126,23 @@ async function tokensForUser(uid) {
   return out;
 }
 
+async function allEnabledTokenEntries() {
+  const snap = await db
+    .collectionGroup('notificationTokens')
+    .where('enabled', '==', true)
+    .get();
+  const seen = new Set();
+  const out = [];
+  for (const doc of snap.docs) {
+    const token = doc.data().token;
+    if (token && !seen.has(token)) {
+      seen.add(token);
+      out.push({ ref: doc.ref, token });
+    }
+  }
+  return out;
+}
+
 async function claimNotification(ref) {
   return db.runTransaction(async (transaction) => {
     const snap = await transaction.get(ref);
@@ -141,8 +159,10 @@ async function claimNotification(ref) {
 
 async function sendNotification(notification) {
   const data = notification.data;
-  const targetUids = [...new Set(data.targetUids || [])].filter(Boolean);
-  if (targetUids.length === 0) {
+  const requestedTargetUids = [...new Set(data.targetUids || [])].filter(Boolean);
+  const broadcastAllEnabled = requestedTargetUids.includes(allEnabledTargetUid);
+  const targetUids = requestedTargetUids.filter((uid) => uid !== allEnabledTargetUid);
+  if (!broadcastAllEnabled && targetUids.length === 0) {
     await notification.ref.update({
       sentAt: admin.firestore.FieldValue.serverTimestamp(),
       sentCount: 0,
@@ -153,7 +173,9 @@ async function sendNotification(notification) {
     return;
   }
 
-  const tokenEntries = (await Promise.all(targetUids.map(tokensForUser))).flat();
+  const tokenEntries = broadcastAllEnabled
+    ? await allEnabledTokenEntries()
+    : (await Promise.all(targetUids.map(tokensForUser))).flat();
   if (tokenEntries.length === 0) {
     await notification.ref.update({
       sentAt: admin.firestore.FieldValue.serverTimestamp(),

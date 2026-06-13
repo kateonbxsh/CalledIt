@@ -231,7 +231,9 @@ export function MinigamesPage() {
     setMessage('');
     try {
       const result = await sendTestPushToAllUsers(profile);
-      setMessage(`✓ Test push sent to ${result.count} user(s) with enabled notifications.`);
+      setMessage(result.allEnabled
+        ? '✓ Test push queued for all users with enabled notifications.'
+        : `✓ Test push sent to ${result.count} user(s) with enabled notifications.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to send test push.');
     } finally {

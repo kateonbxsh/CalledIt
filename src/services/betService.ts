@@ -53,11 +53,11 @@ import {
 import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution, getLeaderboard } from './userService';
 import {
+  ALL_ENABLED_TARGET_UID,
   createNotification,
   uidsForUsernames,
   usersWhoCanSeeBet,
   usersWhoPredictedBet,
-  usersWithEnabledNotifications,
 } from './notificationService';
 
 function optionId(label: string, existingIds: string[]) {
@@ -139,7 +139,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     updatedAt: now,
   });
   const targetUids = input.visibility === 'public'
-    ? await usersWithEnabledNotifications()
+    ? [ALL_ENABLED_TARGET_UID]
     : await (async () => {
       const masked = new Set(normalizeUsernames(input.maskedUsernames ?? []));
       const privateTargets = await uidsForUsernames(

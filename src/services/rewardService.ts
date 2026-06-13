@@ -24,7 +24,7 @@ import type {
   RewardClaim,
   UserProfile,
 } from '../types';
-import { createNotification, uidsForUsernames, usersWithEnabledNotifications } from './notificationService';
+import { ALL_ENABLED_TARGET_UID, createNotification, uidsForUsernames } from './notificationService';
 import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
 
@@ -515,7 +515,7 @@ export async function postCompletedChallenge(params: {
     type: 'challenge_posted',
     actor: params.user,
     targetUids: audience.visibility === 'public'
-      ? await usersWithEnabledNotifications()
+      ? [ALL_ENABLED_TARGET_UID]
       : [
         params.user.uid,
         ...(await uidsForUsernames(audience.invitedUsernames)),
@@ -611,7 +611,7 @@ export async function createWagerChallenge(params: {
     });
   });
   const targetUids = audience.visibility === 'public'
-    ? await usersWithEnabledNotifications()
+    ? [ALL_ENABLED_TARGET_UID]
     : await (async () => {
       const privateTargets = [
         ...await uidsForUsernames([
@@ -705,7 +705,7 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
     type: 'wager_failed',
     actor: user,
     targetUids: challenge.visibility === 'public'
-      ? await usersWithEnabledNotifications()
+      ? [ALL_ENABLED_TARGET_UID]
       : await uidsForUsernames([
         ...(challenge.targetUsername ? [challenge.targetUsername] : []),
         ...(challenge.invitedUsernames ?? []),

@@ -23,6 +23,8 @@ type NotificationInput = {
   includeActor?: boolean;
 };
 
+export const ALL_ENABLED_TARGET_UID = '__all_enabled__';
+
 function appBaseUrl() {
   if (typeof window === 'undefined') return '';
   return new URL(import.meta.env.BASE_URL, window.location.origin).toString().replace(/\/$/, '');
@@ -210,43 +212,13 @@ export async function createTestPushNotification(user: UserProfile) {
   });
 }
 
-export async function usersWithEnabledNotifications() {
-  const usersSnap = await getDocs(
-    query(
-      collection(db, 'users'),
-      where('coinBalance', '>=', 0),
-    ),
-  );
-
-  const targetUids: string[] = [];
-  for (const userDoc of usersSnap.docs) {
-    const tokensSnap = await getDocs(
-      query(
-        collection(db, 'users', userDoc.id, 'notificationTokens'),
-        where('enabled', '==', true),
-      ),
-    );
-    if (tokensSnap.size > 0) {
-      targetUids.push(userDoc.id);
-    }
-  }
-
-  return targetUids;
-}
-
 export async function sendTestPushToAllUsers(actor: UserProfile) {
-  const targetUids = await usersWithEnabledNotifications();
-
-  if (targetUids.length === 0) {
-    throw new Error('No users with enabled notifications found');
-  }
-
   await addDoc(collection(db, 'notifications'), {
     type: 'test_push',
     actorUid: actor.uid,
     actorUsername: actor.username,
     actorDisplayName: actor.displayName,
-    targetUids,
+    targetUids: [ALL_ENABLED_TARGET_UID],
     title: '🧪 Test notification from admin',
     body: `Test sent at ${new Date().toLocaleTimeString()}. If you received this, push notifications are working!`,
     url: '/#/minigames',
@@ -255,7 +227,7 @@ export async function sendTestPushToAllUsers(actor: UserProfile) {
     createdAt: serverTimestamp(),
   });
 
-  return { sent: true, count: targetUids.length };
+  return { sent: true, count: 0, allEnabled: true };
 }
 
 export async function usersWhoPredictedBet(betId: string) {
