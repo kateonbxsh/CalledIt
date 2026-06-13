@@ -622,7 +622,7 @@ export async function createWagerChallenge(params: {
 
       if (audience.groupId) {
         const groupId = audience.groupId;
-        const groupSnap = await getDoc(doc(db, 'groups', groupId));
+        const groupSnap = await getDoc(doc(db, 'friendGroups', groupId));
         if (groupSnap.exists()) {
           const groupData = groupSnap.data() as any;
           if (groupData.memberUids && Array.isArray(groupData.memberUids)) {

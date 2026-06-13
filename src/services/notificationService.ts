@@ -257,7 +257,7 @@ export async function usersWhoCanSeeBet(betId: string) {
 
   // Add group members if bet has a group
   if (bet.groupId) {
-    const groupSnap = await getDoc(doc(db, 'groups', bet.groupId));
+    const groupSnap = await getDoc(doc(db, 'friendGroups', bet.groupId));
     if (groupSnap.exists()) {
       const groupData = groupSnap.data() as any;
       if (groupData.memberUids && Array.isArray(groupData.memberUids)) {

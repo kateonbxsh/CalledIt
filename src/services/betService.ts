@@ -147,7 +147,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
       );
 
       if (input.groupId) {
-        const groupSnap = await getDoc(doc(db, 'groups', input.groupId));
+        const groupSnap = await getDoc(doc(db, 'friendGroups', input.groupId));
         if (groupSnap.exists()) {
           const groupData = groupSnap.data() as any;
           if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
