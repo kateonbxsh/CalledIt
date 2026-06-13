@@ -85,24 +85,9 @@ export async function enablePushNotifications(user: UserProfile) {
   });
   if (!token) throw new Error('Could not create a push token for this device.');
 
+  // One doc per device, keyed by a stable device id. Enabling a device never
+  // touches other devices, so multiple devices can each receive independently.
   const deviceId = getDeviceId();
-  const tokensRef = collection(db, 'users', user.uid, 'notificationTokens');
-  const existingTokens = await getDocs(tokensRef);
-
-  // Disable all OTHER devices' tokens AND migrate old token-based IDs
-  await Promise.all(existingTokens.docs
-    .filter((item) => {
-      const isCurrentDevice = item.id === deviceId;
-      const isOldFormat = !item.id.startsWith('device_');
-      return (item.data().enabled === true && !isCurrentDevice) || isOldFormat;
-    })
-    .map((item) => setDoc(item.ref, {
-      enabled: false,
-      disabledAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true })));
-
-  // Register/update THIS device's token
   const thisDeviceDoc = doc(db, 'users', user.uid, 'notificationTokens', deviceId);
   const existingDoc = await getDoc(thisDeviceDoc);
 

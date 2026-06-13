@@ -49,7 +49,7 @@ import {
 } from '../utils/closestGuess';
 import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution } from './userService';
-import { createNotification, uidsForUsernames, usersWhoPredictedBet } from './notificationService';
+import { createNotification, uidsForUsernames, usersWhoCanSeeBet, usersWhoPredictedBet } from './notificationService';
 
 function optionId(label: string, existingIds: string[]) {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'option';
@@ -758,12 +758,14 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
   const resolverSnap = await getDoc(doc(db, 'users', resolverUid));
   const resolver = resolverSnap.exists() ? (resolverSnap.data() as UserProfile) : null;
   if (resolver) {
+    // Resolution is a user action, so the client is the single source for this
+    // notification (the worker does not also scan for resolved bets).
     await createNotification({
       type: 'bet_resolved',
       actor: resolver,
-      targetUids: predictions.map((prediction) => prediction.userId),
-      title: 'Bet resolved',
-      body: `${bet.title} has been resolved.`,
+      targetUids: await usersWhoCanSeeBet(bet.id),
+      title: `🎯 "${bet.title}" just got resolved!`,
+      body: 'Check the results and see if you won.',
       url: `/#/bets/${bet.id}`,
     });
   }

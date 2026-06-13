@@ -110,21 +110,19 @@ async function tokensForUser(uid) {
     .where('enabled', '==', true)
     .get();
 
-  const entries = snap.docs
-    .map((doc) => ({ ref: doc.ref, token: doc.data().token, data: doc.data() }))
-    .filter((entry) => entry.token)
-    .sort((left, right) => {
-      const leftMs = left.data.updatedAt?.toMillis?.() ?? left.data.createdAt?.toMillis?.() ?? 0;
-      const rightMs = right.data.updatedAt?.toMillis?.() ?? right.data.createdAt?.toMillis?.() ?? 0;
-      return rightMs - leftMs;
-    });
-  const [latest, ...older] = entries;
-  await Promise.all(older.map((entry) => entry.ref.update({
-    enabled: false,
-    disabledAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }).catch(() => {})));
-  return latest ? [{ ref: latest.ref, token: latest.token }] : [];
+  // One doc per device; send to every enabled device, de-duped by token value
+  // so an orphaned doc sharing a token can't cause a double send. Dead tokens
+  // are disabled by sendNotification when FCM rejects them.
+  const seen = new Set();
+  const out = [];
+  for (const doc of snap.docs) {
+    const token = doc.data().token;
+    if (token && !seen.has(token)) {
+      seen.add(token);
+      out.push({ ref: doc.ref, token });
+    }
+  }
+  return out;
 }
 
 async function claimNotification(ref) {
@@ -334,52 +332,6 @@ async function scanWagerDeadlines() {
   return created;
 }
 
-async function scanBetResolutions() {
-  const snap = await db
-    .collection('bets')
-    .where('status', '==', 'resolved')
-    .limit(100)
-    .get();
-  let created = 0;
-
-  for (const doc of snap.docs) {
-    const bet = { id: doc.id, ...doc.data() };
-    const notificationId = `bet_${bet.id}_resolved`;
-    const existingNotif = await db.collection('notifications').doc(notificationId).get();
-    if (existingNotif.exists) continue;
-
-    const targetUids = unique([
-      bet.creatorId,
-      ...(await predictionUserIdsForBet(bet.id)),
-      ...(await uidsForUsernames(bet.invitedUsernames || [])),
-    ]);
-
-    if (bet.groupId) {
-      try {
-        const group = await db.collection('groups').doc(bet.groupId).get();
-        if (group.exists) {
-          const groupUids = (group.data() || {}).memberUids || [];
-          targetUids.push(...groupUids);
-        }
-      } catch (err) {
-        // Ignore group fetch errors
-      }
-    }
-
-    const title = String(bet.title || 'A bet');
-    const didCreate = await createSystemNotification(notificationId, {
-      type: 'bet_resolved',
-      targetUids,
-      title: `🎯 "${title}" just got resolved!`,
-      body: `Check the results and see if you won.`,
-      url: appUrl(`bets/${bet.id}`),
-    });
-    if (didCreate) created += 1;
-  }
-
-  return created;
-}
-
 async function scanRewardAvailability() {
   const snap = await db
     .collection('users')
@@ -455,17 +407,15 @@ async function scanRewardAvailability() {
 }
 
 async function scanDeadlineReminders() {
-  const [betCount, wagerCount, resolutionCount, rewardCount] = await Promise.all([
+  const [betCount, wagerCount, rewardCount] = await Promise.all([
     scanBetDeadlines(),
     scanWagerDeadlines(),
-    scanBetResolutions(),
     scanRewardAvailability(),
   ]);
-  if (betCount || wagerCount || resolutionCount || rewardCount) {
+  if (betCount || wagerCount || rewardCount) {
     log('Created notifications', {
       deadlineBets: betCount,
       deadlineWagers: wagerCount,
-      resolvedBets: resolutionCount,
       rewards: rewardCount,
     });
   }
