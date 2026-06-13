@@ -34,6 +34,9 @@ messaging()
     instance.onBackgroundMessage((payload) => {
       const notification = payload.notification || {};
       const data = payload.data || {};
+      // If FCM already carries a notification payload, browsers show it.
+      // Avoid calling showNotification again to prevent duplicate pushes.
+      if (payload.notification) return;
       self.registration.showNotification(notification.title || data.title || 'Called It', {
         body: notification.body || data.body || 'Something happened in Called It.',
         icon: appIcon,

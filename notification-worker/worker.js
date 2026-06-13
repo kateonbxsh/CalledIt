@@ -127,17 +127,27 @@ async function tokensForUser(uid) {
 }
 
 async function allEnabledTokenEntries() {
-  const snap = await db
-    .collectionGroup('notificationTokens')
-    .where('enabled', '==', true)
-    .get();
   const seen = new Set();
   const out = [];
-  for (const doc of snap.docs) {
-    const token = doc.data().token;
-    if (token && !seen.has(token)) {
-      seen.add(token);
-      out.push({ ref: doc.ref, token });
+  const usersSnap = await db
+    .collection('users')
+    .where('coinBalance', '>=', 0)
+    .get();
+
+  for (const userDoc of usersSnap.docs) {
+    const tokenSnap = await db
+      .collection('users')
+      .doc(userDoc.id)
+      .collection('notificationTokens')
+      .where('enabled', '==', true)
+      .get();
+
+    for (const doc of tokenSnap.docs) {
+      const token = doc.data().token;
+      if (token && !seen.has(token)) {
+        seen.add(token);
+        out.push({ ref: doc.ref, token });
+      }
     }
   }
   return out;
@@ -209,6 +219,7 @@ async function sendNotification(notification) {
 
   const response = await messaging.sendEachForMulticast({
     tokens: tokenEntries.map((entry) => entry.token),
+    notification: { title, body },
     data: {
       title,
       body,
@@ -220,6 +231,10 @@ async function sendNotification(notification) {
     },
     webpush: {
       fcmOptions: { link: url },
+      notification: {
+        icon: iconUrl,
+        badge: badgeUrl,
+      },
     },
   });
 
