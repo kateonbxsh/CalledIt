@@ -338,15 +338,6 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
       updatedAt: serverTimestamp(),
     });
   });
-  await createNotification({
-    type: 'daily_reward_claimed',
-    actor: user,
-    targetUids: [user.uid],
-    includeActor: true,
-    title: 'Daily forecast claimed',
-    body: `${reward.label}: ${reward.amount >= 0 ? '+' : ''}${reward.amount} coins${reward.spicyBonus ? ` now, +${reward.spicyBonus} if your next prediction wins` : ''}.`,
-    url: '/#/minigames',
-  });
   return reward;
 }
 
@@ -393,15 +384,6 @@ export async function claimChest(user: UserProfile, chestId: string) {
       updatedAt: serverTimestamp(),
     });
   });
-  await createNotification({
-    type: 'chest_opened',
-    actor: user,
-    targetUids: [user.uid],
-    includeActor: true,
-    title: 'Chest opened',
-    body: `${chest.title} gave you +${chest.reward} coins.`,
-    url: '/#/minigames',
-  });
   return { amount: chest.reward, label: chest.title };
 }
 
@@ -446,15 +428,6 @@ export async function spinWheel(user: UserProfile) {
     });
   });
 
-  await createNotification({
-    type: 'wheel_spun',
-    actor: user,
-    targetUids: [user.uid],
-    includeActor: true,
-    title: 'Wheel result',
-    body: `The wheel landed on ${reward.amount >= 0 ? '+' : ''}${reward.amount} coins.`,
-    url: '/#/minigames',
-  });
   return reward.amount;
 }
 

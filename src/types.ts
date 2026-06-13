@@ -317,9 +317,6 @@ export type NotificationEventType =
   | 'wager_deadline_soon'
   | 'wager_deadline_passed'
   | 'group_updated'
-  | 'daily_reward_claimed'
-  | 'chest_opened'
-  | 'wheel_spun'
   | 'reward_available'
   | 'test_push';
 

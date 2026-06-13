@@ -8,7 +8,6 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { createNotification } from './notificationService';
 import type { DailyBonus, UserProfile } from '../types';
 
 // Bonus amounts for each action type
@@ -90,19 +89,6 @@ export async function awardDailyBonus(
 
       awarded = true;
     });
-
-    if (awarded) {
-      // Send notification
-      await createNotification({
-        type: 'reward_available',
-        actor: user,
-        targetUids: [user.uid],
-        includeActor: true,
-        title: `💰 Daily bonus earned! +${bonusAmount} coins`,
-        body: `You earned a bonus for ${bonusType}ing today. Keep up the activity!`,
-        url: '/#/me',
-      });
-    }
 
     return {
       awarded,
