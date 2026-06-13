@@ -24,7 +24,7 @@ import type {
   RewardClaim,
   UserProfile,
 } from '../types';
-import { createNotification, uidsForUsernames } from './notificationService';
+import { createNotification, uidsForUsernames, usersWithEnabledNotifications } from './notificationService';
 import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
 
@@ -514,10 +514,12 @@ export async function postCompletedChallenge(params: {
   await createNotification({
     type: 'challenge_posted',
     actor: params.user,
-    targetUids: [
-      params.user.uid,
-      ...(await uidsForUsernames(audience.invitedUsernames)),
-    ],
+    targetUids: audience.visibility === 'public'
+      ? await usersWithEnabledNotifications()
+      : [
+        params.user.uid,
+        ...(await uidsForUsernames(audience.invitedUsernames)),
+      ],
     includeActor: true,
     title: `✅ ${params.challenge.title} - Completed!`,
     body: `${params.user.displayName || params.user.username} completed the challenge and earned ${totalReward} coins!`,
@@ -608,24 +610,29 @@ export async function createWagerChallenge(params: {
       updatedAt: serverTimestamp(),
     });
   });
-  const targetUids = [
-    ...await uidsForUsernames([
-      ...(normalizedTarget ? [normalizedTarget] : []),
-      ...audience.invitedUsernames,
-    ]),
-  ];
+  const targetUids = audience.visibility === 'public'
+    ? await usersWithEnabledNotifications()
+    : await (async () => {
+      const privateTargets = [
+        ...await uidsForUsernames([
+          ...(normalizedTarget ? [normalizedTarget] : []),
+          ...audience.invitedUsernames,
+        ]),
+      ];
 
-  // Add group members if applicable
-  if (audience.groupId) {
-    const groupId = audience.groupId;
-    const groupSnap = await getDoc(doc(db, 'groups', groupId));
-    if (groupSnap.exists()) {
-      const groupData = groupSnap.data() as any;
-      if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
-        targetUids.push(...groupData.memberUids);
+      if (audience.groupId) {
+        const groupId = audience.groupId;
+        const groupSnap = await getDoc(doc(db, 'groups', groupId));
+        if (groupSnap.exists()) {
+          const groupData = groupSnap.data() as any;
+          if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
+            privateTargets.push(...groupData.memberUids);
+          }
+        }
       }
-    }
-  }
+
+      return privateTargets;
+    })();
 
   // Remove duplicates
   const uniqueTargetUids = [...new Set(targetUids)].filter(Boolean);
@@ -697,10 +704,12 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
   await createNotification({
     type: 'wager_failed',
     actor: user,
-    targetUids: await uidsForUsernames([
-      ...(challenge.targetUsername ? [challenge.targetUsername] : []),
-      ...(challenge.invitedUsernames ?? []),
-    ]),
+    targetUids: challenge.visibility === 'public'
+      ? await usersWithEnabledNotifications()
+      : await uidsForUsernames([
+        ...(challenge.targetUsername ? [challenge.targetUsername] : []),
+        ...(challenge.invitedUsernames ?? []),
+      ]),
     title: `⏳ ${challenge.title} - Wager ended`,
     body: `The wager was closed by ${user.displayName || user.username}. Better luck next time!`,
     url: '/#/challenges',

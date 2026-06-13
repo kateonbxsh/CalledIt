@@ -210,13 +210,12 @@ export async function createTestPushNotification(user: UserProfile) {
   });
 }
 
-export async function sendTestPushToAllUsers(actor: UserProfile) {
-  // Get all users with enabled notification tokens
+export async function usersWithEnabledNotifications() {
   const usersSnap = await getDocs(
     query(
       collection(db, 'users'),
-      where('coinBalance', '>=', 0) // Just get all users
-    )
+      where('coinBalance', '>=', 0),
+    ),
   );
 
   const targetUids: string[] = [];
@@ -224,13 +223,19 @@ export async function sendTestPushToAllUsers(actor: UserProfile) {
     const tokensSnap = await getDocs(
       query(
         collection(db, 'users', userDoc.id, 'notificationTokens'),
-        where('enabled', '==', true)
-      )
+        where('enabled', '==', true),
+      ),
     );
     if (tokensSnap.size > 0) {
       targetUids.push(userDoc.id);
     }
   }
+
+  return targetUids;
+}
+
+export async function sendTestPushToAllUsers(actor: UserProfile) {
+  const targetUids = await usersWithEnabledNotifications();
 
   if (targetUids.length === 0) {
     throw new Error('No users with enabled notifications found');

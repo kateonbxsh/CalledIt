@@ -52,7 +52,13 @@ import {
 } from '../utils/closestGuess';
 import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution, getLeaderboard } from './userService';
-import { createNotification, uidsForUsernames, usersWhoCanSeeBet, usersWhoPredictedBet } from './notificationService';
+import {
+  createNotification,
+  uidsForUsernames,
+  usersWhoCanSeeBet,
+  usersWhoPredictedBet,
+  usersWithEnabledNotifications,
+} from './notificationService';
 
 function optionId(label: string, existingIds: string[]) {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'option';
@@ -132,19 +138,26 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     createdAt: now,
     updatedAt: now,
   });
-  const masked = new Set(normalizeUsernames(input.maskedUsernames ?? []));
-  const targetUids = await uidsForUsernames(normalizeUsernames(input.invitedUsernames).filter((name) => !masked.has(name)));
+  const targetUids = input.visibility === 'public'
+    ? await usersWithEnabledNotifications()
+    : await (async () => {
+      const masked = new Set(normalizeUsernames(input.maskedUsernames ?? []));
+      const privateTargets = await uidsForUsernames(
+        normalizeUsernames(input.invitedUsernames).filter((name) => !masked.has(name)),
+      );
 
-  // Also notify group members if applicable
-  if (input.groupId) {
-    const groupSnap = await getDoc(doc(db, 'groups', input.groupId));
-    if (groupSnap.exists()) {
-      const groupData = groupSnap.data() as any;
-      if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
-        targetUids.push(...groupData.memberUids.filter((uid: string) => uid !== creator.uid));
+      if (input.groupId) {
+        const groupSnap = await getDoc(doc(db, 'groups', input.groupId));
+        if (groupSnap.exists()) {
+          const groupData = groupSnap.data() as any;
+          if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
+            privateTargets.push(...groupData.memberUids.filter((uid: string) => uid !== creator.uid));
+          }
+        }
       }
-    }
-  }
+
+      return privateTargets;
+    })();
 
   const uniqueTargetUids = [...new Set(targetUids)].filter(Boolean);
 
