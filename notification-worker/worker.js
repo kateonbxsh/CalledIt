@@ -108,7 +108,6 @@ async function tokensForUser(uid) {
     .collection('users')
     .doc(uid)
     .collection('notificationTokens')
-    .where('enabled', '==', true)
     .get();
 
   // One doc per device; send to every enabled device, de-duped by token value
@@ -117,6 +116,7 @@ async function tokensForUser(uid) {
   const seen = new Set();
   const out = [];
   for (const doc of snap.docs) {
+    if (doc.data().enabled !== true) continue;
     const token = doc.data().token;
     if (token && !seen.has(token)) {
       seen.add(token);
@@ -139,10 +139,10 @@ async function allEnabledTokenEntries() {
       .collection('users')
       .doc(userDoc.id)
       .collection('notificationTokens')
-      .where('enabled', '==', true)
       .get();
 
     for (const doc of tokenSnap.docs) {
+      if (doc.data().enabled !== true) continue;
       const token = doc.data().token;
       if (token && !seen.has(token)) {
         seen.add(token);
