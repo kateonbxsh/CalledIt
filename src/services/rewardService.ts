@@ -519,7 +519,7 @@ export async function postCompletedChallenge(params: {
       ...(await uidsForUsernames(audience.invitedUsernames)),
     ],
     includeActor: true,
-    title: `✅ **${params.challenge.title}** - Completed!`,
+    title: `✅ ${params.challenge.title} - Completed!`,
     body: `${params.user.displayName || params.user.username} completed the challenge and earned ${totalReward} coins!`,
     url: '/#/challenges',
   });
@@ -635,8 +635,8 @@ export async function createWagerChallenge(params: {
     actor: params.user,
     targetUids: uniqueTargetUids,
     title: normalizedTarget
-      ? `🎯 **${params.title.trim()}** - You've been challenged!`
-      : `🎮 **${params.title.trim()}** - New wager posted!`,
+      ? `🎯 ${params.title.trim()} - You've been challenged!`
+      : `🎮 ${params.title.trim()} - New wager posted!`,
     body: `${params.user.displayName || params.user.username} posted a wager for ${params.stake} coins.${normalizedTarget ? ' You were targeted!' : ''}`,
     url: '/#/challenges',
   });
@@ -672,7 +672,7 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
     type: 'wager_completed',
     actor: user,
     targetUids: [challenge.creatorId],
-    title: `🏆 **${challenge.title}** - Completed!`,
+    title: `🏆 ${challenge.title} - Completed!`,
     body: `${user.displayName || user.username} completed your wager and earned ${reward} coins!`,
     url: '/#/challenges',
   });
@@ -701,7 +701,7 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
       ...(challenge.targetUsername ? [challenge.targetUsername] : []),
       ...(challenge.invitedUsernames ?? []),
     ]),
-    title: `⏳ **${challenge.title}** - Wager ended`,
+    title: `⏳ ${challenge.title} - Wager ended`,
     body: `The wager was closed by ${user.displayName || user.username}. Better luck next time!`,
     url: '/#/challenges',
   });

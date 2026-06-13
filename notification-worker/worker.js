@@ -187,20 +187,17 @@ async function sendNotification(notification) {
 
   const response = await messaging.sendEachForMulticast({
     tokens: tokenEntries.map((entry) => entry.token),
-    notification: { title, body },
     data: {
       title,
       body,
       url,
       type: data.type || 'update',
       notificationId: notification.id,
+      icon: iconUrl,
+      badge: badgeUrl,
     },
     webpush: {
       fcmOptions: { link: url },
-      notification: {
-        icon: iconUrl,
-        badge: badgeUrl,
-      },
     },
   });
 

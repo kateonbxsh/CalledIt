@@ -152,7 +152,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     type: 'bet_created',
     actor: creator,
     targetUids: uniqueTargetUids,
-    title: `🎯 **${input.title.trim()}** - New bet posted!`,
+    title: `🎯 ${input.title.trim()} - New bet posted!`,
     body: `${creator.displayName || creator.username} created a new bet. Check it out and make your prediction!`,
     url: `/#/bets/${ref.id}`,
   });
@@ -301,7 +301,7 @@ export async function addBetComment(betId: string, user: UserProfile, body: stri
     type: 'bet_commented',
     actor: user,
     targetUids,
-    title: `💬 **${bet?.title ?? 'A bet'}** - New comment`,
+    title: `💬 ${bet?.title ?? 'A bet'} - New comment`,
     body: `${user.displayName || user.username} commented: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`,
     url: `/#/bets/${betId}`,
   });
@@ -604,8 +604,8 @@ export async function placePrediction(input: PredictionInput) {
       actor: input.user,
       targetUids: notificationPayload.targetUids,
       title: notificationPayload.type === 'bet_joined'
-        ? `👥 **${input.bet.title}** - Someone joined!`
-        : `📊 **${input.bet.title}** - Prediction updated`,
+        ? `👥 ${input.bet.title} - Someone joined!`
+        : `📊 ${input.bet.title} - Prediction updated`,
       body: notificationPayload.body,
       url: `/#/bets/${input.bet.id}`,
     });

@@ -204,7 +204,7 @@ export async function createTestPushNotification(user: UserProfile) {
     actor: user,
     targetUids: [user.uid],
     includeActor: true,
-    title: 'Test push from Called It',
+    title: 'Test push',
     body: 'If this arrived, the app, Firestore queue, VPS worker, FCM, and this device are connected.',
     url: '/#/me',
   });
