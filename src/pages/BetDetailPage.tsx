@@ -37,7 +37,7 @@ import {
 } from '../utils/closestGuess';
 import { percent, relativeTime } from '../utils/format';
 import { downscaleBetImage } from '../utils/image';
-import { chanceForOption, dateGuessChance, displayChanceSummary } from '../utils/probability';
+import { chanceForOption, displayChanceSummary } from '../utils/probability';
 
 function datetimeLocalValue(date?: Date | null) {
   if (!date) return '';

@@ -12,7 +12,7 @@ import {
 import type { Bet, Prediction } from '../types';
 import { closestDateGuessLabel } from '../utils/closestGuess';
 import { asDate } from '../utils/format';
-import { dateGuessChance } from '../utils/probability';
+import { calculateClosestGuessChances } from '../utils/probability';
 
 function asTime(date?: string | null) {
   if (!date) return null;
@@ -27,7 +27,7 @@ function compactDate(ms: number) {
   });
 }
 
-type Guess = { value: number; chance: number };
+type Guess = { value: number; chance: number; users: number; coins: number };
 
 type CurvePoint = {
   x: number;
@@ -36,44 +36,43 @@ type CurvePoint = {
   // tooltip shows a chance only when hovering a peak.
   peak?: number;
   chance?: number;
+  users?: number;
+  coins?: number;
 };
 
-// Every guess becomes its own hill. The peak height is proportional to the
-// guess's chance, while the width is inversely proportional to it: a confident
-// (high-chance) guess is a tall, thin spike, and an unlikely one flattens into a
-// low, wide mound. The drawn curve is the sum of all hills, so it stays smooth.
+// Use one deliberately broad bandwidth for every guess. Chance changes the
+// amount of probability mass, never the sharpness, so the result reads as one
+// smooth distribution rather than a row of narrow spikes.
 function buildCurve(guesses: Guess[], range: number): CurvePoint[] {
-  const maxChance = Math.max(...guesses.map((guess) => guess.chance)) || 1;
-  const sigmaMin = Math.max(range * 0.02, 1e-6);
-  const sigmaMax = Math.max(range * 0.16, sigmaMin * 4);
-  const shaped = guesses.map((guess) => {
-    const relative = guess.chance / maxChance; // 1 = most likely guess
-    const sigma = sigmaMin + (sigmaMax - sigmaMin) * (1 - relative);
-    return { ...guess, sigma };
-  });
+  const sorted = guesses.map((guess) => guess.value).sort((left, right) => left - right);
+  const gaps = sorted.slice(1).map((value, index) => value - sorted[index]).filter((gap) => gap > 0);
+  const averageGap = gaps.length ? gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length : range;
+  const sigma = Math.max(range * 0.24, averageGap * 0.55, 1e-6);
+  const gaussianScale = sigma * Math.sqrt(2 * Math.PI);
 
   const amplitude = (x: number) =>
-    shaped.reduce((sum, guess) => {
-      const u = (x - guess.value) / guess.sigma;
-      return sum + guess.chance * Math.exp(-0.5 * u * u);
+    guesses.reduce((sum, guess) => {
+      const u = (x - guess.value) / sigma;
+      return sum + (guess.chance * Math.exp(-0.5 * u * u)) / gaussianScale;
     }, 0);
 
-  const widest = Math.max(...shaped.map((guess) => guess.sigma));
   const values = guesses.map((guess) => guess.value);
-  const minX = Math.min(...values) - widest * 3;
-  const maxX = Math.max(...values) + widest * 3;
-  const steps = 220;
+  const minX = Math.min(...values) - sigma * 3;
+  const maxX = Math.max(...values) + sigma * 3;
+  const steps = 320;
   const grid: CurvePoint[] = Array.from({ length: steps + 1 }, (_, index) => {
     const x = minX + ((maxX - minX) * index) / steps;
     return { x, density: amplitude(x) };
   });
 
   // Exact sample at each guess so the peak dot and its tooltip sit right on top.
-  const peaks: CurvePoint[] = shaped.map((guess) => ({
+  const peaks: CurvePoint[] = guesses.map((guess) => ({
     x: guess.value,
     density: amplitude(guess.value),
     peak: amplitude(guess.value),
     chance: guess.chance,
+    users: guess.users,
+    coins: guess.coins,
   }));
 
   return [...grid, ...peaks].sort((a, b) => a.x - b.x);
@@ -84,19 +83,13 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
   const deadlineMs = bet.deadline ? asDate(bet.deadline).getTime() : null;
   const nowMs = Date.now();
 
-  // Closest-date guesses use the same date-aware chance that drives rewards.
-  const entries: Guess[] = bet.type === 'closestNumber'
-    ? predictions
-      .map((prediction) => prediction.numericGuess)
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-      .map((value) => ({ value, chance: 0 }))
-    : predictions
-      .map((prediction) => asTime(prediction.dateGuess))
-      .filter((value): value is number => value !== null)
-      .map((value) => ({
-        value,
-        chance: dateGuessChance({ guessMs: value, createdAtMs, deadlineMs, nowMs, guessCount: predictions.length }),
-      }));
+  const entries = calculateClosestGuessChances({
+    predictions,
+    type: bet.type === 'closestNumber' ? 'closestNumber' : 'closestDate',
+    createdAtMs,
+    deadlineMs,
+    nowMs,
+  });
 
   if (entries.length < 2) {
     return (
@@ -105,24 +98,6 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
       </div>
     );
   }
-
-  // Number guesses have no time model, so likelihood follows wisdom-of-crowd:
-  // guesses near the consensus (mean) are likelier than far-out outliers.
-  if (bet.type === 'closestNumber') {
-    const values = entries.map((entry) => entry.value);
-    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-    const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
-    const spread = Math.sqrt(variance) || (Math.max(...values) - Math.min(...values)) / 4 || 1;
-    entries.forEach((entry) => {
-      entry.chance = Math.exp(-0.5 * ((entry.value - mean) / spread) ** 2);
-    });
-  }
-
-  // Normalize so each peak reads as a real probability (the chances sum to 1).
-  const totalChance = entries.reduce((sum, entry) => sum + entry.chance, 0) || entries.length;
-  entries.forEach((entry) => {
-    entry.chance = entry.chance / totalChance;
-  });
 
   const values = entries.map((entry) => entry.value);
   const range = Math.max(1e-6, Math.max(...values) - Math.min(...values));
@@ -174,6 +149,7 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
                 <div className="rounded-md border border-line bg-white px-2.5 py-1.5 text-xs shadow-soft">
                   <p className="font-semibold text-ink">{formatX(point.x)}</p>
                   <p className="text-ink/60">{pct < 10 ? pct.toFixed(1) : Math.round(pct)}% chance</p>
+                  <p className="text-ink/45">{point.users} {point.users === 1 ? 'person' : 'people'} · {point.coins} coins</p>
                 </div>
               );
             }}

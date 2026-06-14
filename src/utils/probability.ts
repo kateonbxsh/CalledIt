@@ -210,27 +210,88 @@ export function displayChanceSummary(params: {
   return crowd;
 }
 
-// Per-guess chance for "closest date" bets. A guessed date that is near (or
-// already past) is unlikely and gets less likely as that date approaches; more
-// distant guesses keep more chance. Early in the bet's life the signal is weak
-// (close to the naive baseline), sharpening as time passes.
-export function dateGuessChance(params: {
-  guessMs: number;
+export interface ClosestGuessChance {
+  value: number;
+  chance: number;
+  users: number;
+  coins: number;
+}
+
+// Closest guesses follow the same crowd signal as ordinary options:
+// 62% people, 23% stake, and 15% predictor rating. At creation every distinct
+// guess starts equally likely; the crowd signal takes over smoothly toward the
+// deadline. Date guesses additionally lose probability as their date expires.
+export function calculateClosestGuessChances(params: {
+  predictions: Array<Pick<Prediction, 'numericGuess' | 'dateGuess' | 'stake' | 'userRating'>>;
+  type: 'closestNumber' | 'closestDate';
   createdAtMs: number;
   deadlineMs?: number | null;
   nowMs?: number;
-  guessCount?: number;
-}): number {
+}): ClosestGuessChance[] {
   const nowMs = params.nowMs ?? Date.now();
-  const baseline = 1 / Math.max(2, (params.guessCount ?? 1) + 1);
-  if (!Number.isFinite(params.guessMs)) return baseline;
-  if (params.guessMs <= nowMs) return 0.02; // already elapsed unresolved -> ~0
+  const groups = new Map<number, Array<(typeof params.predictions)[number]>>();
 
-  const horizon = params.deadlineMs && params.deadlineMs > params.createdAtMs
-    ? params.deadlineMs - params.createdAtMs
-    : 30 * ONE_DAY_MS;
-  const remaining = clamp((params.guessMs - nowMs) / horizon, 0, 1); // near guess -> small
-  const informed = clamp((nowMs - params.createdAtMs) / horizon, 0, 1);
-  const chance = baseline * (1 - informed) + remaining * informed;
-  return clamp(chance, 0.02, 0.95);
+  params.predictions.forEach((prediction) => {
+    const value = params.type === 'closestNumber'
+      ? prediction.numericGuess
+      : prediction.dateGuess
+        ? new Date(prediction.dateGuess).getTime()
+        : null;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return;
+    groups.set(value, [...(groups.get(value) ?? []), prediction]);
+  });
+
+  if (groups.size === 0) return [];
+
+  const validPredictions = Array.from(groups.values()).flat();
+  const totalUsers = validPredictions.length;
+  const totalCoins = validPredictions.reduce((sum, prediction) => sum + prediction.stake, 0) || 1;
+  const totalRating = validPredictions.reduce(
+    (sum, prediction) => sum + (prediction.userRating ?? DEFAULT_RATING),
+    0,
+  ) || 1;
+  const neutral = 1 / groups.size;
+  const rawProgress = deadlineProgress(params.createdAtMs, params.deadlineMs, nowMs);
+  const linearProgress = rawProgress ?? clamp(
+    (nowMs - params.createdAtMs) / (30 * ONE_DAY_MS),
+    0,
+    1,
+  );
+  // Smoothstep keeps the opening of the bet visibly close to uniform.
+  const convergence = linearProgress * linearProgress * (3 - 2 * linearProgress);
+
+  const weighted = Array.from(groups.entries()).map(([value, predictions]) => {
+    const coins = predictions.reduce((sum, prediction) => sum + prediction.stake, 0);
+    const rating = predictions.reduce(
+      (sum, prediction) => sum + (prediction.userRating ?? DEFAULT_RATING),
+      0,
+    );
+    const crowdChance =
+      0.62 * (predictions.length / totalUsers)
+      + 0.23 * (coins / totalCoins)
+      + 0.15 * (rating / totalRating);
+    const blendedChance = neutral + (crowdChance - neutral) * convergence;
+
+    let expiryWeight = 1;
+    if (params.type === 'closestDate') {
+      const fullWindow = Math.max(ONE_DAY_MS, value - params.createdAtMs);
+      const remainingRatio = clamp((value - nowMs) / fullWindow, 0, 1);
+      // The date is almost unpenalized early, then falls increasingly quickly
+      // as both the bet deadline and the guessed date approach.
+      expiryWeight = Math.pow(remainingRatio, 0.45 + convergence * 1.1);
+      if (value <= nowMs) expiryWeight = 0.001;
+    }
+
+    return {
+      value,
+      users: predictions.length,
+      coins: Math.round(coins),
+      chance: blendedChance * expiryWeight,
+    };
+  });
+
+  const total = weighted.reduce((sum, guess) => sum + guess.chance, 0) || 1;
+  return weighted
+    .map((guess) => ({ ...guess, chance: guess.chance / total }))
+    .sort((left, right) => left.value - right.value);
 }

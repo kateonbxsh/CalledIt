@@ -21,7 +21,7 @@ function payoutMultiplier(total: number, bombs: number, safeReveals: number) {
   for (let reveal = 0; reveal < safeReveals; reveal += 1) {
     inverseSurvival *= (total - reveal) / (total - bombs - reveal);
   }
-  return Math.min(4.5, 1 + (inverseSurvival - 1) * 0.72);
+  return Math.min(6, 1 + (inverseSurvival - 1) * 0.96);
 }
 
 export function MinesGame({

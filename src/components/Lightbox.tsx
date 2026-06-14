@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { ImgHTMLAttributes } from 'react';
 
@@ -35,11 +35,23 @@ export function ZoomableImage({
 
 export function Lightbox() {
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null);
+  const [scale, setScale] = useState(1);
+  const pinchStartRef = useRef<{ distance: number; scale: number } | null>(null);
+
+  function touchDistance(touches: React.TouchList) {
+    const first = touches.item(0);
+    const second = touches.item(1);
+    if (!first || !second) return 0;
+    return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+  }
 
   useEffect(() => {
     function onOpen(event: Event) {
       const detail = (event as CustomEvent<{ src: string; alt: string }>).detail;
-      if (detail?.src) setImage(detail);
+      if (detail?.src) {
+        setScale(1);
+        setImage(detail);
+      }
     }
     window.addEventListener(OPEN_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_EVENT, onOpen);
@@ -72,8 +84,42 @@ export function Lightbox() {
       <img
         src={image.src}
         alt={image.alt}
+        draggable={false}
         onClick={(event) => event.stopPropagation()}
+        onTouchStart={(event) => {
+          if (event.touches.length !== 2) return;
+          event.stopPropagation();
+          pinchStartRef.current = {
+            distance: touchDistance(event.touches),
+            scale,
+          };
+        }}
+        onTouchMove={(event) => {
+          if (event.touches.length !== 2 || !pinchStartRef.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const distance = touchDistance(event.touches);
+          if (distance <= 0 || pinchStartRef.current.distance <= 0) return;
+          setScale(Math.min(4, Math.max(1, pinchStartRef.current.scale * distance / pinchStartRef.current.distance)));
+        }}
+        onTouchEnd={(event) => {
+          event.stopPropagation();
+          if (event.touches.length < 2) {
+            pinchStartRef.current = null;
+            setScale(1);
+          }
+        }}
+        onTouchCancel={(event) => {
+          event.stopPropagation();
+          pinchStartRef.current = null;
+          setScale(1);
+        }}
         className="max-h-[90vh] max-w-full rounded-md object-contain shadow-lift"
+        style={{
+          touchAction: 'none',
+          transform: `scale(${scale})`,
+          transition: pinchStartRef.current ? 'none' : 'transform 180ms ease-out',
+        }}
       />
     </div>
   );

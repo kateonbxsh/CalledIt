@@ -9,7 +9,7 @@ const V0 = 480;
 const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 230, MAXVY = 260;
 const ANGLE_MIN = 20, ANGLE_MAX = 80;
 const CAM_OFF = 0.22;
-const MULT_K = 0.40, MULT_SCALE = 540, STAR_MULT = 0.05;
+const MULT_K = 0.52, MULT_SCALE = 500, STAR_MULT = 0.075;
 const STAR_BOOST = 230, MISSILE_PUSH = 230, MISSILE_MULT_PENALTY = 0.015, FIRST_BOAT = 340;
 
 const ASSET = (name: string) => `${import.meta.env.BASE_URL}plane-game/assets/${name}`;
@@ -71,6 +71,8 @@ export function PlaneGame({
   useEffect(() => {
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext('2d')!;
+    const appFontFamily = getComputedStyle(document.documentElement).fontFamily;
+    document.fonts?.load(`900 56px ${appFontFamily}`).catch(() => {});
     const IMG: Record<string, HTMLImageElement> = {};
     Object.entries(ASSETS).forEach(([k, v]) => { const im = new Image(); im.src = ASSET(v); IMG[k] = im; });
 
@@ -252,7 +254,7 @@ export function PlaneGame({
       if (st === 'aim') drawAim();
       drawPlane(); drawPops();
       plane.frameT += 1 / 60; if (plane.frameT > 0.05) { plane.frame = (plane.frame + 1) % 3; plane.frameT = 0; }
-      if (st === 'flying' || st === 'landing') { ctx.save(); ctx.textAlign = 'center'; ctx.font = '900 56px Segoe UI';
+      if (st === 'flying' || st === 'landing') { ctx.save(); ctx.textAlign = 'center'; ctx.font = `900 56px ${appFontFamily}`;
         ctx.fillStyle = 'rgba(47,125,99,0.26)'; ctx.fillText(mult.toFixed(2) + '×', W / 2, H * 0.22); ctx.restore(); }
     }
 
@@ -285,57 +287,72 @@ export function PlaneGame({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[120] select-none overflow-hidden bg-[#8ecae6]" style={{ touchAction: 'none' }}>
+    <div className="fixed inset-0 z-[120] select-none overflow-hidden bg-[#101927] text-white" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="block h-full w-full" />
 
       {/* HUD */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
-        <div className="rounded-xl bg-white/90 px-3 py-2 shadow-card">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-ink/50">Coins</p>
-          <CoinAmount amount={Math.round(coins)} className="text-base font-black" />
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-3 bg-gradient-to-b from-[#101927]/95 to-transparent px-4 pb-8"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 14px)' }}
+      >
+        <div>
+          <p className="text-xs font-bold uppercase text-sky-200/60">Arcade</p>
+          <h1 className="text-xl font-black">Sky Landing</h1>
         </div>
-        <button onClick={onClose}
-          className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-white/90 text-ink shadow-card transition active:scale-95">
-          <X size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 backdrop-blur">
+            <CoinAmount amount={Math.round(coins)} className="text-sm" />
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/10 text-white backdrop-blur transition active:scale-95"
+            aria-label="Close Sky Landing"
+          >
+            <X size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Aim controls */}
       {phase === 'aim' && (
-        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 border-t border-line bg-white/95 px-4 pt-4 backdrop-blur"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}>
-          <p className="text-center text-xs font-semibold text-ink/55">Drag the sky to aim ✈️ — the dotted line is your glide.</p>
+        <div
+          className="absolute inset-x-0 bottom-0 flex max-h-[58dvh] flex-col gap-3 overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#172337]/[0.98] px-4 pt-4 shadow-[0_-18px_45px_rgba(0,0,0,.35)] backdrop-blur"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
+        >
+          <p className="text-center text-xs font-semibold text-white/55">Drag the sky to aim. The dotted line shows your glide.</p>
           {err ? <p className="text-center text-xs font-bold text-coral">{err}</p> : null}
 
           <div className="mx-auto w-full max-w-md">
-            <StakeInput
-              label="Stake"
-              value={stake}
-              min={10}
-              step={10}
-              onChange={(v) => setStake(Math.max(10, Math.min(Math.floor(coins), Math.round(v))))}
-            />
-            <div className="mt-2 flex flex-wrap gap-2">
-              {stakes.map((s) => (
-                <button key={s} disabled={s > coins} onClick={() => setStake(s)}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-bold transition disabled:opacity-40 ${stake === s ? 'border-mint bg-mint/10 text-mint' : 'border-line bg-white text-ink/70'}`}>
-                  {s}
-                </button>
-              ))}
+            <div className="rounded-xl bg-white p-3 text-ink">
+              <StakeInput
+                label="Stake"
+                value={stake}
+                min={10}
+                step={10}
+                onChange={(v) => setStake(Math.max(10, Math.min(Math.floor(coins), Math.round(v))))}
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {stakes.map((s) => (
+                  <button key={s} disabled={s > coins} onClick={() => setStake(s)}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-bold transition disabled:opacity-40 ${stake === s ? 'border-sky bg-sky/10 text-sky' : 'border-line bg-white text-ink/70'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="mx-auto flex w-full max-w-md items-center gap-3">
-            <span className="text-sm font-bold text-ink/55">Angle</span>
+          <div className="mx-auto flex w-full max-w-md items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <span className="text-sm font-bold text-white/55">Angle</span>
             <input type="range" min={ANGLE_MIN} max={ANGLE_MAX} value={angle}
               onChange={(e) => setAngle(Number(e.target.value))}
-              className="h-8 flex-1 cursor-pointer accent-mint" />
-            <span className="w-12 text-right text-base font-black text-ink">{angle}°</span>
+              className="h-8 flex-1 cursor-pointer accent-sky" />
+            <span className="w-12 text-right text-base font-black text-white">{angle}°</span>
           </div>
 
           <button onClick={handleLaunch} disabled={!canPlay || busy}
-            className="btn-special mx-auto w-full max-w-md rounded-md px-4 py-3.5 text-base font-black disabled:opacity-50">
+            className="mx-auto w-full max-w-md rounded-xl bg-sky px-4 py-3.5 text-base font-black text-white shadow-lift transition active:scale-[.99] disabled:opacity-50">
             {busy ? 'Launching…' : coins < 10 ? 'Not enough coins' : <>Launch for <CoinAmount amount={stake} className="text-base" /></>}
           </button>
         </div>
@@ -343,27 +360,27 @@ export function PlaneGame({
 
       {/* Result */}
       {phase === 'over' && result && (
-        <div className="absolute inset-0 grid place-items-center bg-ink/45 px-5 backdrop-blur-sm">
-          <div className="w-full max-w-sm animate-soft-enter rounded-md border border-line bg-white p-6 text-center shadow-lift">
-            <h2 className="text-xl font-black text-ink">{result.won ? `🛬 Landed! ${result.mult.toFixed(2)}×` : '💥 Crashed'}</h2>
+        <div className="absolute inset-0 grid place-items-center bg-black/55 px-5 backdrop-blur-sm">
+          <div className="w-full max-w-sm animate-soft-enter rounded-2xl border border-white/10 bg-[#172337] p-6 text-center text-white shadow-lift">
+            <h2 className="text-2xl font-black">{result.won ? `Landed at ${result.mult.toFixed(2)}×` : 'Crashed'}</h2>
             <p className={`my-2 text-4xl font-black ${result.won ? 'text-mint' : 'text-coral'}`}>
               {result.won ? '+' : '-'}{result.won ? Math.round(result.payout) : stake}
             </p>
-            <p className="mb-4 text-sm text-ink/60">
+            <p className="mb-4 text-sm text-white/55">
               {result.won
-                ? `Stopped safely on the deck (${result.stars} ⭐ collected).`
-                : 'Into the sea — better angle next time.'}
+                ? `Stopped safely on deck with ${result.stars} stars.`
+                : 'Into the sea. Try a different angle next time.'}
             </p>
             {result.ratingDelta ? (
-              <p className="mb-4 rounded-md bg-plum/10 px-3 py-2 text-sm font-black text-plum">
+              <p className="mb-4 rounded-xl bg-plum/20 px-3 py-2 text-sm font-black text-purple-200">
                 Lucky flight: +{result.ratingDelta} ELO
               </p>
             ) : null}
             <div className="flex gap-2">
-              <button onClick={onClose} className="flex-1 rounded-md border border-line bg-white px-4 py-3 text-sm font-bold text-ink/70 transition hover:bg-field">Leave</button>
+              <button onClick={onClose} className="flex-1 rounded-xl border border-white/15 px-4 py-3 text-sm font-bold text-white/70">Leave</button>
               <button
                 onClick={() => { setResult(null); api.current?.playAgain(); if (stake > coins) setStake(stakes.find((s) => s <= coins) ?? stakes[0]); }}
-                className="btn-special flex-1 rounded-md px-4 py-3 text-sm font-black">
+                className="flex-1 rounded-xl bg-sky px-4 py-3 text-sm font-black text-white">
                 Play again
               </button>
             </div>

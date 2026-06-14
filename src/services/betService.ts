@@ -35,10 +35,10 @@ import {
   calculatePredictionRewards,
 } from '../utils/coins';
 import {
+  calculateClosestGuessChances,
   calculateChanceSummary,
   calculateSmoothedChanceSummary,
   chanceForOption,
-  dateGuessChance,
   displayChanceSummary,
   projectChanceSummaryOverTime,
 } from '../utils/probability';
@@ -434,16 +434,34 @@ export async function placePrediction(input: PredictionInput) {
     const createdAtMs = bet.createdAt?.toMillis?.() ?? nowMsForChance;
     const deadlineMs = bet.deadline?.toMillis?.() ?? null;
     const targetDateMs = bet.targetDate?.toMillis?.() ?? null;
-    const chanceForDateGuess = (guess?: string | null) =>
-      guess
-        ? dateGuessChance({
-            guessMs: new Date(guess).getTime(),
-            createdAtMs,
-            deadlineMs,
-            nowMs: nowMsForChance,
-            guessCount: existing.length,
-          })
-        : 1 / (existing.length + 1);
+    const chanceForClosestGuess = () => {
+      if (!closest) return 0;
+      const value = bet.type === 'closestDate'
+        ? input.dateGuess ? new Date(input.dateGuess).getTime() : null
+        : input.numericGuess;
+      if (typeof value !== 'number' || !Number.isFinite(value)) return 1 / (existing.length + 1);
+      const predictionsForChance = existing
+        .filter((prediction) => prediction.id !== existingPrediction?.id)
+        .map((prediction) => ({
+          numericGuess: prediction.numericGuess,
+          dateGuess: prediction.dateGuess,
+          stake: prediction.stake,
+          userRating: prediction.userRating,
+        }));
+      predictionsForChance.push({
+        numericGuess: bet.type === 'closestNumber' ? value : undefined,
+        dateGuess: bet.type === 'closestDate' ? input.dateGuess : undefined,
+        stake: input.stake,
+        userRating: user.rating,
+      });
+      return calculateClosestGuessChances({
+        predictions: predictionsForChance,
+        type: bet.type === 'closestDate' ? 'closestDate' : 'closestNumber',
+        createdAtMs,
+        deadlineMs,
+        nowMs: nowMsForChance,
+      }).find((guess) => guess.value === value)?.chance ?? 1 / predictionsForChance.length;
+    };
     const chanceForOptionIds = (ids: string[]) => {
       const displayed = displayChanceSummary({
         options: nextOptions,
@@ -460,13 +478,23 @@ export async function placePrediction(input: PredictionInput) {
     };
 
     const displayedChanceAtBetTime = closest
-      ? chanceForDateGuess(bet.type === 'closestDate' ? input.dateGuess : null)
+      ? chanceForClosestGuess()
       : Math.min(0.95, chanceForOptionIds(effectiveOptionIds));
 
     // Current chance of the pick the user is leaving — drives the bailout fee.
     const currentChanceOfExistingPick = existingPrediction
       ? closest
-        ? chanceForDateGuess(bet.type === 'closestDate' ? existingPrediction.dateGuess : null)
+        ? calculateClosestGuessChances({
+            predictions: existing,
+            type: bet.type === 'closestDate' ? 'closestDate' : 'closestNumber',
+            createdAtMs,
+            deadlineMs,
+            nowMs: nowMsForChance,
+          }).find((guess) => guess.value === (
+            bet.type === 'closestDate'
+              ? existingPrediction.dateGuess ? new Date(existingPrediction.dateGuess).getTime() : Number.NaN
+              : existingPrediction.numericGuess
+          ))?.chance
         : chanceForOptionIds(
             existingPrediction.optionIds?.length ? existingPrediction.optionIds : [existingPrediction.optionId],
           )
