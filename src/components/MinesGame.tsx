@@ -46,6 +46,7 @@ export function MinesGame({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [settlement, setSettlement] = useState<MinigameWinResult | null>(null);
+  const [lastCashout, setLastCashout] = useState(0);
 
   const total = size * size;
   const safeTotal = total - bombCount;
@@ -88,6 +89,7 @@ export function MinesGame({
   function revealCell(index: number) {
     if (phase !== 'playing' || revealed.has(index) || busy) return;
     if (bombs.has(index)) {
+      setLastCashout(Math.round(stake * payoutMultiplier(total, bombCount, revealed.size)));
       setRevealed(new Set([...revealed, index]));
       setPhase('lost');
       return;
@@ -106,11 +108,12 @@ export function MinesGame({
     setBombs(new Set());
     setRevealed(new Set());
     setSettlement(null);
+    setLastCashout(0);
     setError('');
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex min-h-dvh flex-col overflow-y-auto bg-[#101927] text-white">
+    <div className="fixed inset-0 z-[120] flex h-dvh flex-col overflow-hidden bg-[#101927] text-white sm:overflow-y-auto">
       <div
         className="flex items-center justify-between gap-3 px-4 pb-3"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 14px)' }}
@@ -134,10 +137,14 @@ export function MinesGame({
         </div>
       </div>
 
-      <main className={`mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-5 px-4 py-4 ${
-        phase === 'setup' ? 'pb-[min(58dvh,430px)] sm:pb-4' : ''
+      <main className={`mx-auto min-h-0 w-full flex-1 justify-center gap-5 overflow-hidden px-4 py-4 sm:min-h-max sm:overflow-visible ${
+        phase === 'setup'
+          ? 'flex max-w-3xl flex-col pb-[min(58dvh,430px)] sm:pb-4 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-center lg:gap-x-10'
+          : 'flex max-w-3xl flex-col'
       }`}>
-        <div className="flex items-end justify-between gap-3">
+        <div className={`flex items-end justify-between gap-3 ${
+          phase === 'setup' ? 'lg:col-start-2 lg:row-start-1' : ''
+        }`}>
           <div>
             <p className="text-sm font-semibold text-white/55">
               {phase === 'setup' ? 'Choose the board, bombs, and stake.' : `${revealed.size} of ${safeTotal} safe tiles found`}
@@ -162,7 +169,9 @@ export function MinesGame({
         </div>
 
         <div
-          className={`mx-auto grid w-full max-w-[min(72vh,620px)] gap-2 sm:gap-3 ${
+          className={`mx-auto grid w-[min(100%,calc(100dvh-13rem),620px)] shrink-0 gap-2 sm:w-full sm:max-w-[min(72vh,620px)] sm:gap-3 ${
+            phase === 'setup' ? 'lg:col-start-2 lg:row-start-2' : ''
+          } ${
             size === 3 ? 'grid-cols-3' : 'grid-cols-5'
           }`}
         >
@@ -194,7 +203,7 @@ export function MinesGame({
         </div>
 
         {phase === 'setup' ? (
-          <section className="fixed inset-x-0 bottom-0 z-20 max-h-[58dvh] overflow-y-auto rounded-t-2xl border border-white/10 bg-[#172337]/[0.98] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-18px_45px_rgba(0,0,0,.35)] backdrop-blur sm:static sm:max-h-none sm:overflow-visible sm:rounded-2xl sm:bg-white/[0.07] sm:pb-4 sm:shadow-lift">
+          <section className="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-white/10 bg-[#172337]/[0.98] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-18px_45px_rgba(0,0,0,.35)] backdrop-blur sm:static sm:overflow-visible sm:rounded-2xl sm:bg-white/[0.07] sm:pb-4 sm:shadow-lift lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:w-full lg:self-center">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="mb-2 text-xs font-black uppercase text-white/45">Board</p>
@@ -290,6 +299,36 @@ export function MinesGame({
             <p className="mt-2 text-sm text-white/55">
               {phase === 'won' ? `${revealed.size} safe tiles at ${multiplier.toFixed(2)}x.` : 'The stake is gone. The next board is freshly shuffled.'}
             </p>
+            <div
+              className={`mx-auto mt-4 grid w-full max-w-56 gap-1.5 ${
+                size === 3 ? 'grid-cols-3' : 'grid-cols-5'
+              }`}
+              aria-label="Mine locations"
+            >
+              {cells.map((index) => {
+                const isBomb = bombs.has(index);
+                const wasRevealed = revealed.has(index);
+                return (
+                  <div
+                    key={`result-${size}-${index}`}
+                    className={`grid aspect-square place-items-center rounded-lg border ${
+                      isBomb
+                        ? 'border-coral/70 bg-coral/20 text-coral'
+                        : wasRevealed
+                          ? 'border-mint/60 bg-mint/15 text-mint'
+                          : 'border-white/10 bg-white/5 text-white/15'
+                    }`}
+                  >
+                    {isBomb ? <Bomb className="h-1/2 w-1/2" /> : wasRevealed ? <Gem className="h-1/2 w-1/2" /> : null}
+                  </div>
+                );
+              })}
+            </div>
+            {phase === 'lost' ? (
+              <p className="mt-4 rounded-xl bg-white/5 px-3 py-2 text-sm font-semibold text-white/60">
+                Last available cashout: <CoinAmount amount={lastCashout} className="ml-1 text-sm" />
+              </p>
+            ) : null}
             {settlement?.ratingDelta ? (
               <p className="mt-3 rounded-xl bg-plum/20 px-3 py-2 text-sm font-black text-purple-200">
                 Lucky board: +{settlement.ratingDelta} ELO

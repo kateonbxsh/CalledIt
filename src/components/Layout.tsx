@@ -367,7 +367,10 @@ export function Layout() {
       ) : null}
 
       {profileMenuOpen ? (
-        <div className="fixed bottom-24 right-4 z-40 w-56 animate-soft-enter rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden">
+        <div
+          className="fixed right-4 z-40 w-56 animate-soft-enter rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden"
+          style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}
+        >
           <div className="mb-1 flex items-center justify-between gap-2 rounded-xl bg-field px-3 py-2">
             <CoinAmount amount={profile?.coinBalance ?? 0} className="text-sm" />
             <span className="text-xs font-bold text-ink/55">{profile?.rating ?? 1000} ELO</span>
@@ -399,7 +402,7 @@ export function Layout() {
         className={`fixed bottom-0 left-0 right-0 z-50 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4] px-2 pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
           bottomNavVisible || actionMenuOpen || profileMenuOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
-        style={{ paddingBottom: `max(1.5rem, calc(env(safe-area-inset-bottom) + 1.5rem))` }}
+        style={{ paddingBottom: 'max(0.5rem, calc(env(safe-area-inset-bottom) + 0.25rem))' }}
       >
         <BottomNavLink to="/" label="Bets" icon={Home} attention={attention.bets} />
         <BottomNavLink to="/challenges" label="Challenges" icon={Trophy} attention={attention.wagers} />
