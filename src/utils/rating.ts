@@ -21,7 +21,10 @@ export function calculateRatingDelta(input: RatingDeltaInput) {
   const timingMultiplier = clamp(input.timingMultiplier ?? 1, 0.65, 1.25);
   const revisionMultiplier = clamp(1 - (input.revisionCount ?? 0) * 0.12, 0.5, 1);
   let rawDelta = 32 * stakeMultiplier * (result - p) * upsetMultiplier * timingMultiplier * revisionMultiplier;
-  rawDelta = clamp(rawDelta, -45, 80);
+  // Losing should sting noticeably less than winning rewards, so dampen the
+  // negative swing and keep its floor tighter than the win ceiling.
+  if (!input.correct) rawDelta *= 0.5;
+  rawDelta = clamp(rawDelta, -22, 80);
 
   if (input.currentRating < 500 && rawDelta < 0) {
     rawDelta *= 0.5;

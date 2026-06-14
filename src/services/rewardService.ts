@@ -527,6 +527,31 @@ export async function postCompletedChallenge(params: {
   });
 }
 
+// Lets the author of a completed challenge edit its caption and who can see it
+// after the fact. Reward/claim state is untouched — only the comment and the
+// audience (visibility + invited usernames + group) change.
+export async function updateChallengeCompletion(params: {
+  user: UserProfile;
+  challenge: ChallengeActivity;
+  comment?: string;
+  visibility: BetVisibility;
+  groupId?: string;
+  groups?: FriendGroup[];
+  invitedUsernames?: string[];
+}) {
+  if (params.challenge.completerId !== params.user.uid && params.challenge.creatorId !== params.user.uid) {
+    throw new Error('You can only edit your own completion.');
+  }
+  const audience = challengeAudience(params);
+  await updateDoc(doc(db, 'challenges', params.challenge.id), {
+    comment: params.comment?.trim() || null,
+    visibility: audience.visibility,
+    invitedUsernames: audience.invitedUsernames,
+    groupId: audience.groupId,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function legacyPostCompletedChallenge(params: {
   user: UserProfile;
   title: string;

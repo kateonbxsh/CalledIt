@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Layout } from './components/Layout';
+import { Lightbox } from './components/Lightbox';
 import { useAuth } from './contexts/AuthContext';
 import { AuthPage } from './pages/AuthPage';
 import { BetDetailPage } from './pages/BetDetailPage';
@@ -114,6 +115,7 @@ export function App() {
           <span className="mt-1 block text-ink/65">{notificationToast.body}</span>
         </a>
       ) : null}
+      <Lightbox />
     </>
   );
 }

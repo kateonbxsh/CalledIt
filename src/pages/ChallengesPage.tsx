@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Target, Trophy, Users, XCircle } from 'lucide-react';
+import { CheckCircle2, Pencil, Target, Trophy, Users, XCircle } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { RewardChest } from '../components/RewardChest';
+import { ZoomableImage } from '../components/Lightbox';
 import { StakeInput } from '../components/StakeInput';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +17,7 @@ import {
   failWagerChallenge,
   listChallengeActivities,
   postCompletedChallenge,
+  updateChallengeCompletion,
   weeklyChallengesForUser,
 } from '../services/rewardService';
 import { getUsersByIds } from '../services/userService';
@@ -55,6 +57,10 @@ export function ChallengesPage() {
   const [proofByChallenge, setProofByChallenge] = useState<Record<string, string>>({});
   const [commentByChallenge, setCommentByChallenge] = useState<Record<string, string>>({});
   const [weeklyReward, setWeeklyReward] = useState<{ coins: number; chest: number } | null>(null);
+  const [editChallenge, setEditChallenge] = useState<ChallengeActivity | null>(null);
+  const [editComment, setEditComment] = useState('');
+  const [editVisibility, setEditVisibility] = useState<BetVisibility>('public');
+  const [editGroupId, setEditGroupId] = useState('');
 
   const weekKey = currentWeekKey();
   const weekly = useMemo(
@@ -197,6 +203,35 @@ export function ChallengesPage() {
     }
   }
 
+  function openEdit(challenge: ChallengeActivity) {
+    setEditChallenge(challenge);
+    setEditComment(challenge.comment ?? '');
+    setEditVisibility(challenge.visibility);
+    setEditGroupId(challenge.groupId ?? '');
+  }
+
+  async function saveEdit() {
+    if (!profile || !editChallenge) return;
+    setBusy(`edit-${editChallenge.id}`);
+    setError('');
+    try {
+      await updateChallengeCompletion({
+        user: profile,
+        challenge: editChallenge,
+        comment: editComment || undefined,
+        visibility: editGroupId ? 'private' : editVisibility,
+        groupId: editGroupId || undefined,
+        groups,
+      });
+      setEditChallenge(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update completion.');
+    } finally {
+      setBusy('');
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -285,6 +320,8 @@ export function ChallengesPage() {
                   && activity.creatorId !== profile?.uid
                   && (!activity.targetUsername || activity.targetUsername === profile?.username);
                 const canFail = activity.type === 'wager' && activity.status === 'open' && activity.creatorId === profile?.uid;
+                const canEditCompletion = activity.type === 'completion'
+                  && (activity.completerId === profile?.uid || activity.creatorId === profile?.uid);
                 const actorId = activity.type === 'completion' ? (activity.completerId || activity.creatorId) : activity.creatorId;
                 const actorUsername = activity.type === 'completion'
                   ? (activity.completerUsername || activity.creatorUsername)
@@ -331,9 +368,9 @@ export function ChallengesPage() {
                       ) : (
                         <h2 className="text-lg font-black leading-snug">{activity.title}</h2>
                       )}
-                      {activity.body ? <p className="mt-1.5 whitespace-pre-wrap text-sm leading-5 text-ink/65">{activity.body}</p> : null}
+                      {activity.body ? <p className="mt-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-5 text-ink/65">{activity.body}</p> : null}
                       {activity.comment ? (
-                        <p className="mt-2.5 rounded-md bg-field px-3 py-2 text-sm font-semibold leading-5 text-ink/75">
+                        <p className="mt-2.5 rounded-md bg-field px-3 py-2 text-sm font-semibold leading-5 text-ink/75 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                           {activity.comment}
                         </p>
                       ) : null}
@@ -359,7 +396,7 @@ export function ChallengesPage() {
                       ) : null}
                       </div>
                       {activity.proofImageUrl ? (
-                        <img src={activity.proofImageUrl} alt="" className="h-40 w-full rounded-md border border-line object-cover sm:h-36" loading="lazy" />
+                        <ZoomableImage src={activity.proofImageUrl} alt="" className="h-40 w-full rounded-md border border-line object-cover sm:h-36" loading="lazy" />
                       ) : null}
                     </div>
                     <div>
@@ -394,6 +431,15 @@ export function ChallengesPage() {
                           className="mt-3 inline-flex items-center gap-2 rounded-md border border-coral/30 px-4 py-2 text-sm font-bold text-coral disabled:opacity-50"
                         >
                           <XCircle size={16} /> Claim stake + 50%
+                        </button>
+                      ) : null}
+                      {canEditCompletion ? (
+                        <button
+                          onClick={() => openEdit(activity)}
+                          disabled={!!busy}
+                          className="mt-3 inline-flex items-center gap-2 rounded-md border border-line px-4 py-2 text-sm font-bold text-ink/70 transition hover:bg-field disabled:opacity-50"
+                        >
+                          <Pencil size={15} /> Edit completion
                         </button>
                       ) : null}
                     </div>
@@ -465,7 +511,7 @@ export function ChallengesPage() {
               />
             </label>
             {proofByChallenge[weeklyModalChallenge.id] ? (
-              <img src={proofByChallenge[weeklyModalChallenge.id]} alt="" className="mt-3 h-44 w-full rounded-md object-cover" />
+              <ZoomableImage src={proofByChallenge[weeklyModalChallenge.id]} alt="" className="mt-3 h-44 w-full rounded-md object-cover" />
             ) : null}
             <label className="mt-3 block text-sm font-medium">
               Comment
@@ -588,6 +634,63 @@ export function ChallengesPage() {
               className="mt-5 w-full rounded-md border border-line bg-white px-4 py-3 text-sm font-bold text-ink hover:bg-field transition"
             >
               Nice
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {editChallenge ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black">Edit completion</h2>
+                <p className="mt-1 text-sm text-ink/55">{editChallenge.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditChallenge(null)}
+                className="rounded-md border border-line px-3 py-1.5 text-sm font-bold"
+              >
+                Close
+              </button>
+            </div>
+            <label className="mt-4 block text-sm font-medium">
+              Visibility
+              <select
+                className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
+                value={editGroupId || editVisibility}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === 'public') {
+                    setEditVisibility('public');
+                    setEditGroupId('');
+                  } else {
+                    setEditVisibility('private');
+                    setEditGroupId(value);
+                  }
+                }}
+              >
+                <option value="public">Public</option>
+                {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select>
+            </label>
+            <label className="mt-3 block text-sm font-medium">
+              Comment
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-md border border-line bg-field px-3 py-2 text-sm"
+                value={editComment}
+                onChange={(event) => setEditComment(event.target.value)}
+                placeholder="Add a caption, rating, or what happened"
+                maxLength={280}
+              />
+            </label>
+            <button
+              onClick={saveEdit}
+              disabled={!!busy}
+              className="btn-special mt-4 w-full rounded-md px-4 py-3 text-sm font-bold disabled:opacity-45"
+            >
+              {busy === `edit-${editChallenge.id}` ? 'Saving...' : 'Save changes'}
             </button>
           </div>
         </div>

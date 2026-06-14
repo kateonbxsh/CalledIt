@@ -103,7 +103,7 @@ service cloud.firestore {
     function canApplyResolutionToUser() {
       return signedIn()
         && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['coinBalance', 'rating', 'rank', 'stats', 'pendingSpicyForecast', 'updatedAt']);
+          .hasOnly(['coinBalance', 'rating', 'rank', 'stats', 'pendingSpicyForecasts', 'updatedAt']);
     }
 
     function canApplyPredictionResult() {
@@ -177,7 +177,7 @@ service cloud.firestore {
               'lastRefillAt',
               'coinBalance',
               'lastDailyForecastAt',
-              'pendingSpicyForecast',
+              'pendingSpicyForecasts',
               'lastWheelSpinAt',
               'stats'
             ])

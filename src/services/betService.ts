@@ -142,6 +142,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     ? [ALL_ENABLED_TARGET_UID]
     : await (async () => {
       const masked = new Set(normalizeUsernames(input.maskedUsernames ?? []));
+      const maskedUids = new Set(masked.size ? await uidsForUsernames([...masked]) : []);
       const privateTargets = await uidsForUsernames(
         normalizeUsernames(input.invitedUsernames).filter((name) => !masked.has(name)),
       );
@@ -151,7 +152,10 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
         if (groupSnap.exists()) {
           const groupData = groupSnap.data() as any;
           if (groupData.memberUids && Array.isArray(groupData.memberUids)) {
-            privateTargets.push(...groupData.memberUids.filter((uid: string) => uid !== creator.uid));
+            // Masked members are hidden from the bet, so they must not be notified.
+            privateTargets.push(
+              ...groupData.memberUids.filter((uid: string) => uid !== creator.uid && !maskedUids.has(uid)),
+            );
           }
         }
       }
@@ -612,16 +616,18 @@ export async function placePrediction(input: PredictionInput) {
     | { type: 'bet_joined' | 'prediction_updated'; targetUids: string[]; body: string }
     | null;
   if (notificationPayload) {
-    await createNotification({
-      type: notificationPayload.type,
-      actor: input.user,
-      targetUids: notificationPayload.targetUids,
-      title: notificationPayload.type === 'bet_joined'
-        ? `👥 ${input.bet.title} - Someone joined!`
-        : `📊 ${input.bet.title} - Prediction updated`,
-      body: notificationPayload.body,
-      url: `/#/bets/${input.bet.id}`,
-    });
+    // Someone newly joining a bet you're in is too noisy, so we don't notify on
+    // 'bet_joined' anymore — only on prediction updates.
+    if (notificationPayload.type === 'prediction_updated') {
+      await createNotification({
+        type: 'prediction_updated',
+        actor: input.user,
+        targetUids: notificationPayload.targetUids,
+        title: `📊 ${input.bet.title} - Prediction updated`,
+        body: notificationPayload.body,
+        url: `/#/bets/${input.bet.id}`,
+      });
+    }
 
     // Award daily bonus for making a new prediction
     if (notificationPayload.type === 'bet_joined') {

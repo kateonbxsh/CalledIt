@@ -7,6 +7,7 @@ import { ChanceChart } from '../components/ChanceChart';
 import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
+import { ZoomableImage } from '../components/Lightbox';
 import { StakeInput } from '../components/StakeInput';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
@@ -564,7 +565,7 @@ export function BetDetailPage() {
             <ChevronLeft size={21} />
           </button>
           {bet.imageUrl ? (
-            <img src={bet.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-md border border-line object-cover shadow-soft sm:h-20 sm:w-20" />
+            <ZoomableImage src={bet.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-md border border-line object-cover shadow-soft sm:h-20 sm:w-20" />
           ) : null}
           <div className="min-w-0">
             <h1 className="break-words text-2xl font-black tracking-normal sm:text-3xl md:truncate">{bet.title}</h1>
@@ -649,7 +650,7 @@ export function BetDetailPage() {
 
           <div className="animate-soft-enter rounded-md border border-line bg-white p-4">
             {bet.description ? (
-              <p className="whitespace-pre-wrap text-sm leading-6 text-ink/75">{bet.description}</p>
+              <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-ink/75">{bet.description}</p>
             ) : (
               <p className="text-sm text-ink/50 italic">No description provided</p>
             )}
@@ -1289,7 +1290,7 @@ export function BetDetailPage() {
                         <span className="text-xs font-semibold text-ink/45">@{comment.username}</span>
                         <span className="text-xs text-ink/35">{relativeTime(comment.createdAt)}</span>
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-ink/75">{comment.body}</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-ink/75">{comment.body}</p>
                     </div>
                     {canDeleteComment ? (
                       <button
