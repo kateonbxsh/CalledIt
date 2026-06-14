@@ -18,6 +18,7 @@ import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
 import { useAuth } from '../contexts/AuthContext';
 import { listFeedBets } from '../services/betService';
+import { groupHasUnread, listGroupReadStates, listMyFriendGroups } from '../services/friendGroupService';
 import { getChestDefinitions, listChallengeActivities } from '../services/rewardService';
 import { canClaimSixHourReward } from '../utils/coins';
 import { isMobileBrowser, isStandaloneApp } from '../utils/device';
@@ -33,9 +34,12 @@ const navItems = [
   { to: '/how-to-play', label: 'How to Play', icon: HelpCircle },
 ];
 
-function AttentionDot() {
+function AttentionDot({ desktop = false }: { desktop?: boolean }) {
   return (
-    <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full border-2 border-[#f8faf4] bg-coral px-0.5 text-[9px] font-black leading-none text-white">
+    <span className={desktop
+      ? 'absolute -left-2 top-1/2 grid h-5 min-w-5 -translate-y-1/2 place-items-center rounded-full border-2 border-[#f8faf4] bg-coral px-1 text-[10px] font-black leading-none text-white'
+      : 'absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full border-2 border-[#f8faf4] bg-coral px-0.5 text-[9px] font-black leading-none text-white'
+    }>
       !
     </span>
   );
@@ -58,7 +62,7 @@ function NavItem({ to, label, icon: Icon, attention = false }: (typeof navItems)
         <>
           <Icon size={17} className={isActive ? 'text-white' : 'text-ink/50 group-hover:text-ink'} />
           <span className="hidden lg:inline">{label}</span>
-          {attention ? <AttentionDot /> : null}
+          {attention ? <AttentionDot desktop /> : null}
         </>
       )}
     </NavLink>
@@ -97,7 +101,9 @@ export function Layout() {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
-  const [attention, setAttention] = useState({ bets: false, wagers: false, games: false });
+  const [mobileNavHeight, setMobileNavHeight] = useState(88);
+  const [attention, setAttention] = useState({ bets: false, wagers: false, games: false, groups: false });
+  const mobileNavRef = useRef<HTMLElement>(null);
   const lastScrollYRef = useRef(0);
   const scrollIntentRef = useRef(0);
   const attentionCheckedAtRef = useRef(0);
@@ -110,11 +116,13 @@ export function Layout() {
     if (!force && now - attentionCheckedAtRef.current < 5 * 60_000) return;
     attentionCheckedAtRef.current = now;
     try {
-      const [publicBets, privateBets, activities, chests] = await Promise.all([
+      const [publicBets, privateBets, activities, chests, groups, groupReads] = await Promise.all([
         listFeedBets('public', profile),
         listFeedBets('private', profile),
         listChallengeActivities(profile),
         getChestDefinitions(profile),
+        listMyFriendGroups(profile),
+        listGroupReadStates(profile.uid),
       ]);
       const seenBetsAt = Number(localStorage.getItem(seenKey('bets')) ?? 0);
       const seenWagersAt = Number(localStorage.getItem(seenKey('wagers')) ?? 0);
@@ -137,6 +145,7 @@ export function Layout() {
         bets: location.pathname === '/' ? false : unseenBet,
         wagers: location.pathname.startsWith('/challenges') ? false : unseenWager,
         games: location.pathname.startsWith('/minigames') ? false : !!gamesSignature && gamesSignature !== seenGamesSignature,
+        groups: groups.some((group) => groupHasUnread(group, groupReads, profile.uid)),
       });
     } catch {
       // Navigation should stay quiet when an attention check is unavailable.
@@ -146,6 +155,20 @@ export function Layout() {
   useEffect(() => {
     setShowInstallNav(isMobileBrowser() && !isStandaloneApp());
   }, [location.pathname]);
+
+  useEffect(() => {
+    const nav = mobileNavRef.current;
+    if (!nav) return;
+    const measure = () => setMobileNavHeight(Math.ceil(nav.getBoundingClientRect().height));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
 
   useEffect(() => {
     if (!profile) return;
@@ -177,8 +200,13 @@ export function Layout() {
   useEffect(() => {
     if (!profile) return;
     const onFocus = () => void refreshAttention();
+    const onGroupRead = () => void refreshAttention(true);
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    window.addEventListener('called-it:group-read', onGroupRead);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('called-it:group-read', onGroupRead);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.uid]);
 
@@ -259,7 +287,7 @@ export function Layout() {
             <NavItem
               key={item.to}
               {...item}
-              attention={item.to === '/' ? attention.bets : item.to === '/challenges' ? attention.wagers : item.to === '/minigames' ? attention.games : false}
+              attention={item.to === '/' ? attention.bets : item.to === '/challenges' ? attention.wagers : item.to === '/minigames' ? attention.games : item.to === '/groups' ? attention.groups : false}
             />
           ))}
           <div className="relative pt-2 hidden lg:block">
@@ -338,7 +366,7 @@ export function Layout() {
       {(actionMenuOpen || profileMenuOpen) && !window.matchMedia('(min-width: 1024px)').matches ? (
         <button
           type="button"
-          className="fixed inset-0 z-30 animate-fade-in bg-ink/35 transition"
+          className="fixed inset-0 z-40 animate-fade-in bg-ink/35 transition"
           onClick={() => {
             setActionMenuOpen(false);
             setProfileMenuOpen(false);
@@ -348,7 +376,10 @@ export function Layout() {
       ) : null}
 
       {actionMenuOpen && !window.matchMedia('(min-width: 1024px)').matches ? (
-        <div className="fixed bottom-24 left-4 right-4 z-40 grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift">
+        <div
+          className="fixed left-4 right-4 z-[60] grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift"
+          style={{ bottom: `${mobileNavHeight + 8}px` }}
+        >
           <Link
             to="/create"
             onClick={() => setActionMenuOpen(false)}
@@ -368,8 +399,8 @@ export function Layout() {
 
       {profileMenuOpen ? (
         <div
-          className="fixed right-4 z-40 w-56 animate-soft-enter rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden"
-          style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}
+          className="fixed right-4 z-[60] w-56 animate-soft-enter rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden"
+          style={{ bottom: `${mobileNavHeight + 8}px` }}
         >
           <div className="mb-1 flex items-center justify-between gap-2 rounded-xl bg-field px-3 py-2">
             <CoinAmount amount={profile?.coinBalance ?? 0} className="text-sm" />
@@ -399,6 +430,7 @@ export function Layout() {
       ) : null}
 
       <nav
+        ref={mobileNavRef}
         className={`fixed bottom-0 left-0 right-0 z-50 grid grid-cols-[repeat(3,minmax(0,1fr))_64px_repeat(3,minmax(0,1fr))] items-center border-t border-line bg-[#f8faf4] px-2 pt-2 shadow-lift transition-transform duration-200 lg:hidden ${
           bottomNavVisible || actionMenuOpen || profileMenuOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
@@ -406,7 +438,7 @@ export function Layout() {
       >
         <BottomNavLink to="/" label="Bets" icon={Home} attention={attention.bets} />
         <BottomNavLink to="/challenges" label="Challenges" icon={Trophy} attention={attention.wagers} />
-        <BottomNavLink to="/groups" label="Groups" icon={Users} />
+        <BottomNavLink to="/groups" label="Groups" icon={Users} attention={attention.groups} />
         <button
           type="button"
           onClick={() => {

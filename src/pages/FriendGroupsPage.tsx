@@ -1,15 +1,22 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { MessageCircle, Pencil, Plus, Send, Trash2, Users, X } from 'lucide-react';
+import { Timestamp, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { PageHeader } from '../components/PageHeader';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import {
   createFriendGroup,
   deleteFriendGroup,
+  groupHasUnread,
+  listGroupMessages,
+  listGroupReadStates,
   listMyFriendGroups,
+  markGroupRead,
+  sendGroupMessage,
   updateFriendGroup,
 } from '../services/friendGroupService';
-import type { FriendGroup } from '../types';
+import type { FriendGroup, GroupMessage, GroupReadState } from '../types';
+import { relativeTime } from '../utils/format';
 
 type EditingState = { groupId: string | null; name: string; members: string[] };
 
@@ -23,19 +30,51 @@ export function FriendGroupsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [readStates, setReadStates] = useState<Map<string, GroupReadState>>(new Map());
+  const [chatGroup, setChatGroup] = useState<FriendGroup | null>(null);
+  const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [messageCursor, setMessageCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [messagesHaveMore, setMessagesHaveMore] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messageBody, setMessageBody] = useState('');
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatScrollModeRef = useRef<'bottom' | 'preserve'>('bottom');
+  const previousChatViewportRef = useRef({ scrollHeight: 0, scrollTop: 0 });
+
+  useLayoutEffect(() => {
+    const panel = chatScrollRef.current;
+    if (!panel || !chatGroup) return;
+
+    if (chatScrollModeRef.current === 'preserve') {
+      const previous = previousChatViewportRef.current;
+      panel.scrollTop = panel.scrollHeight - previous.scrollHeight + previous.scrollTop;
+      chatScrollModeRef.current = 'bottom';
+      return;
+    }
+
+    panel.scrollTop = panel.scrollHeight;
+  }, [chatGroup, messages]);
 
   const load = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     try {
-      setGroups(await listMyFriendGroups(profile));
+      const [nextGroups, nextReads] = await Promise.all([
+        listMyFriendGroups(profile),
+        listGroupReadStates(profile.uid),
+      ]);
+      setGroups(nextGroups);
+      setReadStates(nextReads);
     } finally {
       setLoading(false);
     }
   }, [profile]);
 
   useEffect(() => {
-    load();
+    void load().catch((err) => {
+      setError(err instanceof Error ? err.message : 'Could not load groups.');
+      setLoading(false);
+    });
   }, [load]);
 
   function openCreate() {
@@ -84,6 +123,72 @@ export function FriendGroupsPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete group.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openChat(group: FriendGroup) {
+    if (!profile) return;
+    chatScrollModeRef.current = 'bottom';
+    setChatGroup(group);
+    setMessages([]);
+    setMessageCursor(null);
+    setMessagesHaveMore(false);
+    setMessagesLoading(true);
+    try {
+      const page = await listGroupMessages(group.id);
+      setMessages(page.messages);
+      setMessageCursor(page.cursor);
+      setMessagesHaveMore(page.hasMore);
+      await markGroupRead(group.id, profile.uid);
+      setReadStates((current) => new Map(current).set(group.id, {
+        groupId: group.id,
+        lastReadAt: group.lastMessageAt ?? page.messages.at(-1)?.createdAt ?? Timestamp.now(),
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load chat.');
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!chatGroup || !messageCursor || messagesLoading) return;
+    const panel = chatScrollRef.current;
+    if (panel) {
+      previousChatViewportRef.current = {
+        scrollHeight: panel.scrollHeight,
+        scrollTop: panel.scrollTop,
+      };
+      chatScrollModeRef.current = 'preserve';
+    }
+    setMessagesLoading(true);
+    try {
+      const page = await listGroupMessages(chatGroup.id, messageCursor);
+      setMessages((current) => [...page.messages, ...current]);
+      setMessageCursor(page.cursor);
+      setMessagesHaveMore(page.hasMore);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
+
+  async function submitMessage(event: FormEvent) {
+    event.preventDefault();
+    if (!profile || !chatGroup || !messageBody.trim()) return;
+    chatScrollModeRef.current = 'bottom';
+    setBusy(true);
+    try {
+      await sendGroupMessage(chatGroup, profile, messageBody);
+      setMessageBody('');
+      const page = await listGroupMessages(chatGroup.id);
+      setMessages(page.messages);
+      setMessageCursor(page.cursor);
+      setMessagesHaveMore(page.hasMore);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send message.');
     } finally {
       setBusy(false);
     }
@@ -170,8 +275,12 @@ export function FriendGroupsPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map((group) => {
             const isCreator = group.creatorId === profile?.uid;
+            const unread = profile ? groupHasUnread(group, readStates, profile.uid) : false;
             return (
-              <div key={group.id} className="rounded-md border border-line bg-white p-4">
+              <div key={group.id} className={`relative rounded-md border bg-white p-4 ${unread ? 'border-coral/40 shadow-soft' : 'border-line'}`}>
+                {unread ? (
+                  <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full border-2 border-[#edf0e8] bg-coral px-1 text-[10px] font-black text-white">!</span>
+                ) : null}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-black">{group.name}</p>
@@ -213,6 +322,15 @@ export function FriendGroupsPage() {
                     </span>
                   ) : null}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => void openChat(group)}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-line bg-field px-3 py-2.5 text-sm font-bold text-ink/70 transition hover:bg-white"
+                >
+                  <MessageCircle size={16} />
+                  Open chat
+                  {group.lastMessagePreview ? <span className="max-w-40 truncate font-normal text-ink/40">· {group.lastMessagePreview}</span> : null}
+                </button>
               </div>
             );
           })}
@@ -243,6 +361,68 @@ export function FriendGroupsPage() {
                 {busy ? 'Deleting…' : 'Delete'}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {chatGroup ? (
+        <div className="fixed inset-0 z-[70] flex animate-fade-in items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+          <div className="flex h-[min(92dvh,760px)] w-full animate-soft-enter flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:h-[min(82dvh,760px)] sm:max-w-4xl sm:rounded-2xl">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-3">
+              <div className="min-w-0">
+                <h2 className="truncate font-black">{chatGroup.name}</h2>
+                <p className="text-xs font-semibold text-ink/40">{chatGroup.memberUsernames.length + 1} members</p>
+              </div>
+              <button type="button" onClick={() => setChatGroup(null)} className="grid h-9 w-9 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95" aria-label="Close chat">
+                <X size={17} />
+              </button>
+            </div>
+            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-field/60 p-4">
+              <div className="flex min-h-full flex-col justify-end gap-3">
+                {messagesHaveMore ? (
+                  <button onClick={loadOlderMessages} disabled={messagesLoading} className="mx-auto block rounded-md bg-white px-3 py-2 text-xs font-bold text-ink/55 shadow-soft">
+                    {messagesLoading ? 'Loading...' : 'Load older messages'}
+                  </button>
+                ) : null}
+                {!messagesLoading && messages.length === 0 ? (
+                  <div className="grid flex-1 place-items-center text-center">
+                    <div>
+                      <MessageCircle size={28} className="mx-auto text-ink/20" />
+                      <p className="mt-2 text-sm font-bold text-ink/40">Start the group chat.</p>
+                    </div>
+                  </div>
+                ) : messages.map((message, messageIndex) => {
+                  const mine = message.authorId === profile?.uid;
+                  return (
+                    <div
+                      key={message.id}
+                      className={`animate-comment-enter flex ${mine ? 'justify-end' : 'justify-start'}`}
+                      style={{ animationDelay: `${Math.min(messageIndex, 10) * 25}ms` }}
+                    >
+                      <div className={`max-w-[82%] rounded-2xl px-3 py-2 sm:max-w-[70%] ${mine ? 'rounded-br-md bg-ink text-white' : 'rounded-bl-md bg-white text-ink shadow-soft'}`}>
+                        {!mine ? <p className="text-xs font-black opacity-55">{message.authorDisplayName || message.authorUsername}</p> : null}
+                        <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-5">{message.body}</p>
+                        <p className={`mt-1 text-[10px] ${mine ? 'text-white/45' : 'text-ink/35'}`}>
+                          {message.createdAt ? relativeTime(message.createdAt) : 'just now'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <form onSubmit={submitMessage} className="flex shrink-0 gap-2 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <input
+                value={messageBody}
+                onChange={(event) => setMessageBody(event.target.value)}
+                maxLength={1000}
+                placeholder="Message the group"
+                className="min-w-0 flex-1 rounded-md border border-line bg-field px-3 py-2.5 text-sm"
+              />
+              <button type="submit" disabled={!messageBody.trim() || busy} className="grid h-10 w-10 place-items-center rounded-md bg-ink text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40" aria-label="Send message">
+                <Send size={17} />
+              </button>
+            </form>
           </div>
         </div>
       ) : null}

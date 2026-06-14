@@ -253,8 +253,26 @@ export interface FriendGroup {
   creatorUsername: string;
   memberUsernames: string[];
   memberUids: string[];
+  lastMessageAt?: Timestamp | null;
+  lastMessagePreview?: string | null;
+  lastMessageSenderId?: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export interface GroupMessage {
+  id: string;
+  groupId: string;
+  authorId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  body: string;
+  createdAt: Timestamp;
+}
+
+export interface GroupReadState {
+  groupId: string;
+  lastReadAt: Timestamp;
 }
 
 export type DailyForecastMode = 'safe' | 'random' | 'chaos' | 'spicy';
@@ -314,6 +332,17 @@ export interface ChallengeActivity {
   failedAt?: Timestamp | null;
 }
 
+export interface ChallengeComment {
+  id: string;
+  challengeId: string;
+  authorId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  body: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 export type NotificationEventType =
   | 'bet_created'
   | 'bet_joined'
@@ -329,6 +358,8 @@ export type NotificationEventType =
   | 'wager_deadline_soon'
   | 'wager_deadline_passed'
   | 'group_updated'
+  | 'group_message'
+  | 'challenge_commented'
   | 'reward_available'
   | 'leaderboard_moved'
   | 'test_push';

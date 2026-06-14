@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -8,16 +9,20 @@ import {
   limit,
   orderBy,
   query,
+  startAfter,
   runTransaction,
   serverTimestamp,
   Timestamp,
   updateDoc,
   where,
+  type DocumentData,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type {
   BetVisibility,
   ChallengeActivity,
+  ChallengeComment,
   ChestDefinition,
   DailyForecastMode,
   FriendGroup,
@@ -499,6 +504,77 @@ export async function listChallengeActivities(user: UserProfile, groups: FriendG
   );
 }
 
+export type ChallengeCommentPage = {
+  comments: ChallengeComment[];
+  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  hasMore: boolean;
+};
+
+export async function listChallengeComments(
+  challengeId: string,
+  cursor?: QueryDocumentSnapshot<DocumentData> | null,
+  pageSize = 20,
+): Promise<ChallengeCommentPage> {
+  const commentsRef = collection(db, 'challenges', challengeId, 'comments');
+  const pageQuery = cursor
+    ? query(commentsRef, orderBy('createdAt', 'desc'), startAfter(cursor), limit(pageSize))
+    : query(commentsRef, orderBy('createdAt', 'desc'), limit(pageSize));
+  const snap = await getDocs(pageQuery);
+  return {
+    comments: snap.docs
+      .map((item) => ({ id: item.id, challengeId, ...item.data() }) as ChallengeComment)
+      .reverse(),
+    cursor: snap.docs.at(-1) ?? null,
+    hasMore: snap.docs.length === pageSize,
+  };
+}
+
+export async function addChallengeComment(
+  challenge: ChallengeActivity,
+  user: UserProfile,
+  body: string,
+) {
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error('Write a comment first.');
+  if (trimmed.length > 500) throw new Error('Comments can be at most 500 characters.');
+  await addDoc(collection(db, 'challenges', challenge.id, 'comments'), {
+    challengeId: challenge.id,
+    authorId: user.uid,
+    authorUsername: user.username,
+    authorDisplayName: user.displayName,
+    body: trimmed,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  const targetUids = new Set<string>([
+    challenge.creatorId,
+    ...(challenge.completerId ? [challenge.completerId] : []),
+    ...await uidsForUsernames(challenge.invitedUsernames ?? []),
+  ]);
+  await createNotification({
+    type: 'challenge_commented',
+    actor: user,
+    targetUids: [...targetUids],
+    title: `New comment on ${challenge.title}`,
+    body: `${user.displayName || user.username}: ${trimmed.slice(0, 120)}`,
+    url: '/#/challenges',
+  });
+}
+
+export async function updateChallengeComment(challengeId: string, commentId: string, body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error('A comment cannot be empty.');
+  if (trimmed.length > 500) throw new Error('Comments can be at most 500 characters.');
+  await updateDoc(doc(db, 'challenges', challengeId, 'comments', commentId), {
+    body: trimmed,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteChallengeComment(challengeId: string, commentId: string) {
+  await deleteDoc(doc(db, 'challenges', challengeId, 'comments', commentId));
+}
+
 export async function postCompletedChallenge(params: {
   user: UserProfile;
   challenge: WeeklyChallengeDefinition;
@@ -722,6 +798,62 @@ export async function createWagerChallenge(params: {
 
   // Award daily bonus for creating a challenge
   await awardDailyBonus(params.user, 'challenge');
+}
+
+export async function updateWagerChallenge(params: {
+  challenge: ChallengeActivity;
+  user: UserProfile;
+  title: string;
+  body?: string;
+  stake: number;
+  deadline: Date;
+}) {
+  const { challenge, user, title, body, stake: nextStake, deadline } = params;
+  if (challenge.type !== 'wager' || challenge.status !== 'open') throw new Error('Only open wagers can be edited.');
+  if (challenge.creatorId !== user.uid) throw new Error('Only the creator can edit this wager.');
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) throw new Error('Wager title is required.');
+  if (trimmedTitle.length > 160) throw new Error('Keep the wager title under 160 characters.');
+  if ((body?.trim().length ?? 0) > 1000) throw new Error('Keep proof rules under 1000 characters.');
+  if (nextStake < 10) throw new Error('Minimum challenge stake is 10 coins.');
+  if (Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) {
+    throw new Error('Choose a future deadline.');
+  }
+  const currentDeadline = challenge.deadline?.toDate();
+  const deadlineChanged = !currentDeadline || Math.abs(currentDeadline.getTime() - deadline.getTime()) > 60 * 1000;
+  if (deadlineChanged && deadline.getTime() < Date.now() + 7 * 24 * 60 * 60 * 1000) {
+    throw new Error('A new wager deadline must be at least one week away.');
+  }
+
+  const bonus = Math.max(5, Math.round(nextStake * 0.2)) * REWARD_MULTIPLIER;
+  await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, 'users', user.uid);
+    const challengeRef = doc(db, 'challenges', challenge.id);
+    const [userSnap, challengeSnap] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(challengeRef),
+    ]);
+    const currentUser = userSnap.data() as UserProfile | undefined;
+    const currentChallenge = challengeSnap.data() as ChallengeActivity | undefined;
+    if (!currentUser || !currentChallenge) throw new Error('Wager not found.');
+    if (currentChallenge.status !== 'open' || currentChallenge.creatorId !== user.uid) {
+      throw new Error('This wager can no longer be edited.');
+    }
+    const balanceChange = (currentChallenge.stake ?? 0) - nextStake;
+    if (currentUser.coinBalance + balanceChange < 0) throw new Error('Insufficient coins.');
+    transaction.update(userRef, {
+      coinBalance: currentUser.coinBalance + balanceChange,
+      updatedAt: serverTimestamp(),
+    });
+    transaction.update(challengeRef, {
+      title: trimmedTitle,
+      body: body?.trim() || null,
+      stake: nextStake,
+      bonus,
+      deadline: Timestamp.fromDate(deadline),
+      updatedAt: serverTimestamp(),
+    });
+  });
 }
 
 export async function completeWagerChallenge(challenge: ChallengeActivity, user: UserProfile, proofImageUrl: string) {

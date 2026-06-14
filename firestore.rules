@@ -64,6 +64,34 @@ service cloud.firestore {
       );
     }
 
+    function canReadChallengeById(challengeId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/challenges/$(challengeId))
+        && (
+          get(/databases/$(database)/documents/challenges/$(challengeId)).data.visibility == 'public' ||
+          get(/databases/$(database)/documents/challenges/$(challengeId)).data.creatorId == request.auth.uid ||
+          username() in get(/databases/$(database)/documents/challenges/$(challengeId)).data.invitedUsernames ||
+          (
+            get(/databases/$(database)/documents/challenges/$(challengeId)).data.groupId != null &&
+            exists(/databases/$(database)/documents/friendGroups/$(get(/databases/$(database)/documents/challenges/$(challengeId)).data.groupId)) &&
+            (
+              get(/databases/$(database)/documents/friendGroups/$(get(/databases/$(database)/documents/challenges/$(challengeId)).data.groupId)).data.creatorId == request.auth.uid ||
+              request.auth.uid in get(/databases/$(database)/documents/friendGroups/$(get(/databases/$(database)/documents/challenges/$(challengeId)).data.groupId)).data.memberUids
+            )
+          ) ||
+          isAdmin()
+        );
+    }
+
+    function isGroupMember(groupId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/friendGroups/$(groupId))
+        && (
+          get(/databases/$(database)/documents/friendGroups/$(groupId)).data.creatorId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/friendGroups/$(groupId)).data.memberUids
+        );
+    }
+
     function canReadGroupLinkedResource() {
       return signedIn()
         && resource.data.keys().hasAny(['groupId'])
@@ -184,6 +212,11 @@ service cloud.firestore {
         ) ||
         canApplyResolutionToUser()
       );
+
+      match /groupReads/{groupId} {
+        allow read, create, update: if signedIn() && request.auth.uid == userId;
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
       allow delete: if false;
     }
 
@@ -312,7 +345,13 @@ service cloud.firestore {
         && request.resource.data.body.size() <= 1000
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
-      allow update: if false;
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['body', 'updatedAt'])
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        && request.resource.data.body.size() <= 1000
+        && request.resource.data.updatedAt == request.time;
       allow delete: if signedIn() && (
         resource.data.userId == request.auth.uid ||
         isAdmin()
@@ -346,6 +385,27 @@ service cloud.firestore {
         canSyncChallengeGroupInvites()
       );
       allow delete: if false;
+
+      match /comments/{commentId} {
+        allow read: if canReadChallengeById(challengeId);
+        allow create: if canReadChallengeById(challengeId)
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.challengeId == challengeId
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 500
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if canReadChallengeById(challengeId)
+          && resource.data.authorId == request.auth.uid
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['body', 'updatedAt'])
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 500
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if canReadChallengeById(challengeId)
+          && (resource.data.authorId == request.auth.uid || isAdmin());
+      }
     }
 
     match /adminConfig/{uid} {
@@ -360,12 +420,28 @@ service cloud.firestore {
       );
       allow create: if signedIn()
         && request.resource.data.creatorId == request.auth.uid;
-      allow update: if signedIn()
-        && resource.data.creatorId == request.auth.uid
-        && request.resource.data.diff(resource.data).changedKeys()
-            .hasOnly(['name', 'memberUsernames', 'memberUids', 'updatedAt']);
+      allow update: if signedIn() && (
+        (
+          resource.data.creatorId == request.auth.uid
+          && request.resource.data.diff(resource.data).changedKeys()
+              .hasOnly(['name', 'memberUsernames', 'memberUids', 'updatedAt'])
+        ) ||
+        (
+          isGroupMember(groupId)
+          && request.resource.data.diff(resource.data).changedKeys()
+              .hasOnly(['lastMessageAt', 'lastMessagePreview', 'lastMessageSenderId', 'updatedAt'])
+        )
+      );
       allow delete: if signedIn()
         && resource.data.creatorId == request.auth.uid;
+
+      match /messages/{messageId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.groupId == groupId;
+        allow update, delete: if false;
+      }
     }
   }
 }

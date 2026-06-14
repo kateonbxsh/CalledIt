@@ -24,6 +24,7 @@ import {
   placePrediction,
   reopenBet,
   resolveBet,
+  updateBetComment,
   updateBetMetadata,
 } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
@@ -147,6 +148,8 @@ export function BetDetailPage() {
   const [busy, setBusy] = useState(false);
   const [commentBusy, setCommentBusy] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState('');
+  const [editingCommentBody, setEditingCommentBody] = useState('');
   const [confirmingResolution, setConfirmingResolution] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editingBet, setEditingBet] = useState(false);
@@ -535,6 +538,26 @@ export function BetDetailPage() {
       setError(err instanceof Error ? err.message : 'Could not delete comment.');
     } finally {
       setDeletingCommentId('');
+    }
+  }
+
+  async function onUpdateComment(comment: BetComment) {
+    if (!editingCommentBody.trim()) return;
+    setCommentBusy(true);
+    setError('');
+    try {
+      await updateBetComment(comment.id, editingCommentBody);
+      setComments((current) => current.map((item) => (
+        item.id === comment.id
+          ? { ...item, body: editingCommentBody.trim() }
+          : item
+      )));
+      setEditingCommentId('');
+      setEditingCommentBody('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update comment.');
+    } finally {
+      setCommentBusy(false);
     }
   }
 
@@ -1326,10 +1349,16 @@ export function BetDetailPage() {
             <p className="rounded-md bg-field px-3 py-3 text-sm text-ink/50">No comments yet</p>
           ) : (
             <div className="space-y-3">
-              {comments.map((comment) => {
+              {comments.map((comment, commentIndex) => {
                 const canDeleteComment = profile?.uid === comment.userId || profile?.isAdmin;
+                const canEditComment = profile?.uid === comment.userId;
+                const isEditingComment = editingCommentId === comment.id;
                 return (
-                  <article key={comment.id} className="flex gap-3 rounded-md bg-field p-3">
+                  <article
+                    key={comment.id}
+                    className="animate-comment-enter flex gap-3 rounded-md bg-field p-3 transition hover:bg-line/45"
+                    style={{ animationDelay: `${Math.min(commentIndex, 10) * 35}ms` }}
+                  >
                     <Avatar
                       name={comment.displayName || comment.username}
                       src={comment.photoURL}
@@ -1343,18 +1372,71 @@ export function BetDetailPage() {
                         <span className="text-xs font-semibold text-ink/45">@{comment.username}</span>
                         <span className="text-xs text-ink/35">{relativeTime(comment.createdAt)}</span>
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-ink/75">{comment.body}</p>
+                      {isEditingComment ? (
+                        <div className="animate-action-reveal mt-2">
+                          <textarea
+                            value={editingCommentBody}
+                            onChange={(event) => setEditingCommentBody(event.target.value)}
+                            maxLength={1000}
+                            className="min-h-20 w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-mint"
+                          />
+                          <div className="mt-2 flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCommentId('');
+                                setEditingCommentBody('');
+                              }}
+                              className="rounded-md px-3 py-1.5 text-xs font-bold text-ink/55 hover:bg-white"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void onUpdateComment(comment)}
+                              disabled={commentBusy || !editingCommentBody.trim()}
+                              className="rounded-md bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-ink/75">
+                          {comment.body}
+                          {comment.updatedAt && comment.updatedAt.toMillis() > comment.createdAt.toMillis() + 1000 ? (
+                            <span className="ml-2 text-xs font-semibold text-ink/35">edited</span>
+                          ) : null}
+                        </p>
+                      )}
                     </div>
-                    {canDeleteComment ? (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteComment(comment)}
-                        disabled={deletingCommentId === comment.id}
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-coral disabled:opacity-40"
-                        aria-label="Delete comment"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                    {!isEditingComment ? (
+                      <div className="flex shrink-0">
+                        {canEditComment ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCommentId(comment.id);
+                              setEditingCommentBody(comment.body);
+                            }}
+                            className="grid h-8 w-8 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-ink"
+                            aria-label="Edit comment"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        ) : null}
+                        {canDeleteComment ? (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteComment(comment)}
+                            disabled={deletingCommentId === comment.id}
+                            className="grid h-8 w-8 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-coral disabled:opacity-40"
+                            aria-label="Delete comment"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </article>
                 );

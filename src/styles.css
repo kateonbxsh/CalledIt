@@ -162,6 +162,39 @@ button {
   100% { transform: scale(1) rotate(0); filter: brightness(1); }
 }
 
+@keyframes challenge-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes comment-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes action-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .animate-soft-enter {
   animation: soft-enter 240ms ease-out both;
 }
@@ -193,6 +226,40 @@ button {
 
 .animate-mine-reveal {
   animation: mine-reveal 360ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.challenge-feed-card {
+  animation: challenge-card-enter 360ms cubic-bezier(.2,.8,.2,1) both;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.challenge-feed-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(18, 20, 23, 0.09);
+}
+
+.challenge-card-icon {
+  transition: transform 220ms cubic-bezier(.2,.8,.2,1);
+}
+
+.challenge-feed-card:hover .challenge-card-icon {
+  transform: rotate(-4deg) scale(1.06);
+}
+
+.challenge-comment-preview {
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.challenge-comment-preview:hover {
+  transform: translateX(3px);
+}
+
+.animate-comment-enter {
+  animation: comment-enter 280ms ease-out both;
+}
+
+.animate-action-reveal {
+  animation: action-reveal 220ms ease-out both;
 }
 
 .animate-mine-burst {

@@ -332,6 +332,16 @@ export async function deleteBetComment(commentId: string) {
   await deleteDoc(doc(db, 'comments', commentId));
 }
 
+export async function updateBetComment(commentId: string, body: string) {
+  const text = body.trim();
+  if (!text) throw new Error('A comment cannot be empty.');
+  if (text.length > 1000) throw new Error('Keep comments under 1000 characters.');
+  await updateDoc(doc(db, 'comments', commentId), {
+    body: text,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function placePrediction(input: PredictionInput) {
   const predictionRef = doc(db, 'predictions', `${input.bet.id}_${input.user.uid}`);
   const betRef = doc(db, 'bets', input.bet.id);
@@ -1071,7 +1081,7 @@ export async function amendBetResolution(bet: Bet, newResolution: BetResolution,
       ratingChanges.push({ uid: prediction.userId, oldRating: user.rating, newRating: result.finalRating });
 
       transaction.update(userRef, {
-        coinBalance: increment(result.newGross - oldGross),
+        coinBalance: Math.max(0, user.coinBalance + result.newGross - oldGross),
         rating: result.finalRating,
         rank: rankForRating(result.finalRating),
         pendingSpicyForecasts: result.finalPending,

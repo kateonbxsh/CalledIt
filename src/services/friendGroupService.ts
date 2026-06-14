@@ -6,13 +6,19 @@ import {
   getDoc,
   getDocs,
   limit,
+  orderBy,
   query,
+  runTransaction,
   serverTimestamp,
+  setDoc,
+  startAfter,
   updateDoc,
   where,
+  type DocumentData,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { Bet, ChallengeActivity, FriendGroup, UserProfile } from '../types';
+import type { Bet, ChallengeActivity, FriendGroup, GroupMessage, GroupReadState, UserProfile } from '../types';
 import { createNotification } from './notificationService';
 
 async function resolveUids(usernames: string[]): Promise<string[]> {
@@ -132,4 +138,86 @@ export async function updateFriendGroup(
 
 export async function deleteFriendGroup(groupId: string) {
   await deleteDoc(doc(db, 'friendGroups', groupId));
+}
+
+export type GroupMessagePage = {
+  messages: GroupMessage[];
+  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  hasMore: boolean;
+};
+
+export async function listGroupMessages(
+  groupId: string,
+  cursor?: QueryDocumentSnapshot<DocumentData> | null,
+  pageSize = 30,
+): Promise<GroupMessagePage> {
+  const messagesRef = collection(db, 'friendGroups', groupId, 'messages');
+  const pageQuery = cursor
+    ? query(messagesRef, orderBy('createdAt', 'desc'), startAfter(cursor), limit(pageSize))
+    : query(messagesRef, orderBy('createdAt', 'desc'), limit(pageSize));
+  const snap = await getDocs(pageQuery);
+  return {
+    messages: snap.docs
+      .map((item) => ({ id: item.id, groupId, ...item.data() }) as GroupMessage)
+      .reverse(),
+    cursor: snap.docs.at(-1) ?? null,
+    hasMore: snap.docs.length === pageSize,
+  };
+}
+
+export async function sendGroupMessage(group: FriendGroup, user: UserProfile, body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error('Write a message first.');
+  if (trimmed.length > 1000) throw new Error('Messages can be at most 1000 characters.');
+  const groupRef = doc(db, 'friendGroups', group.id);
+  const messageRef = doc(collection(db, 'friendGroups', group.id, 'messages'));
+  await runTransaction(db, async (transaction) => {
+    transaction.set(messageRef, {
+      groupId: group.id,
+      authorId: user.uid,
+      authorUsername: user.username,
+      authorDisplayName: user.displayName,
+      body: trimmed,
+      createdAt: serverTimestamp(),
+    });
+    transaction.update(groupRef, {
+      lastMessageAt: serverTimestamp(),
+      lastMessagePreview: trimmed.slice(0, 160),
+      lastMessageSenderId: user.uid,
+      updatedAt: serverTimestamp(),
+    });
+  });
+  await markGroupRead(group.id, user.uid);
+  await createNotification({
+    type: 'group_message',
+    actor: user,
+    targetUids: [group.creatorId, ...group.memberUids],
+    title: group.name,
+    body: `${user.displayName || user.username}: ${trimmed.slice(0, 140)}`,
+    url: '/#/groups',
+  });
+}
+
+export async function markGroupRead(groupId: string, userId: string) {
+  await setDoc(doc(db, 'users', userId, 'groupReads', groupId), {
+    groupId,
+    lastReadAt: serverTimestamp(),
+  }, { merge: true });
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('called-it:group-read'));
+}
+
+export async function listGroupReadStates(userId: string) {
+  const snap = await getDocs(query(collection(db, 'users', userId, 'groupReads'), limit(100)));
+  return new Map(
+    snap.docs.map((item) => [
+      item.id,
+      { groupId: item.id, ...item.data() } as GroupReadState,
+    ]),
+  );
+}
+
+export function groupHasUnread(group: FriendGroup, reads: Map<string, GroupReadState>, userId: string) {
+  if (!group.lastMessageAt || group.lastMessageSenderId === userId) return false;
+  const readAt = reads.get(group.id)?.lastReadAt;
+  return !readAt || readAt.toMillis() < group.lastMessageAt.toMillis();
 }

@@ -1,27 +1,31 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Pencil, Target, Trophy, Users, XCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CheckCircle2, Clock3, ImagePlus, MessageCircle, Pencil, Send, Target, Trash2, Trophy, Users, X, XCircle } from 'lucide-react';
+import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { RewardChest } from '../components/RewardChest';
 import { ZoomableImage } from '../components/Lightbox';
 import { StakeInput } from '../components/StakeInput';
-import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { listMyFriendGroups } from '../services/friendGroupService';
 import {
   completeWagerChallenge,
-  createWagerChallenge,
+  addChallengeComment,
   currentWeekKey,
+  deleteChallengeComment,
   failWagerChallenge,
   listChallengeActivities,
+  listChallengeComments,
   postCompletedChallenge,
   updateChallengeCompletion,
+  updateChallengeComment,
+  updateWagerChallenge,
   weeklyChallengesForUser,
 } from '../services/rewardService';
 import { getUsersByIds } from '../services/userService';
-import type { BetVisibility, ChallengeActivity, FriendGroup } from '../types';
+import type { BetVisibility, ChallengeActivity, ChallengeComment, FriendGroup } from '../types';
 import type { WeeklyChallengeDefinition } from '../services/rewardService';
 import { relativeTime } from '../utils/format';
 import { downscaleBetImage } from '../utils/image';
@@ -40,8 +44,6 @@ function statusStyle(status: ChallengeActivity['status']) {
 
 export function ChallengesPage() {
   const { profile } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
   const [activities, setActivities] = useState<ChallengeActivity[]>([]);
   const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [topTab, setTopTab] = useState<'wagers' | 'activity'>('wagers');
@@ -61,6 +63,21 @@ export function ChallengesPage() {
   const [editComment, setEditComment] = useState('');
   const [editVisibility, setEditVisibility] = useState<BetVisibility>('public');
   const [editGroupId, setEditGroupId] = useState('');
+  const [stakeEditChallenge, setStakeEditChallenge] = useState<ChallengeActivity | null>(null);
+  const [editWagerTitle, setEditWagerTitle] = useState('');
+  const [editWagerBody, setEditWagerBody] = useState('');
+  const [editWagerDeadline, setEditWagerDeadline] = useState('');
+  const [editStake, setEditStake] = useState(10);
+  const [commentChallenge, setCommentChallenge] = useState<ChallengeActivity | null>(null);
+  const [challengeComments, setChallengeComments] = useState<ChallengeComment[]>([]);
+  const [commentCursor, setCommentCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [commentsHaveMore, setCommentsHaveMore] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [editingThreadCommentId, setEditingThreadCommentId] = useState('');
+  const [editingThreadCommentBody, setEditingThreadCommentBody] = useState('');
+  const [recentCommentsByChallenge, setRecentCommentsByChallenge] = useState<Record<string, ChallengeComment[]>>({});
+  const [completingWagerId, setCompletingWagerId] = useState('');
 
   const weekKey = currentWeekKey();
   const weekly = useMemo(
@@ -91,6 +108,32 @@ export function ChallengesPage() {
     if (activeTab === 'private') return activity.visibility === 'private';
     return activity.groupId === activeTab;
   });
+  const visibleActivityIds = visibleActivities.map((activity) => activity.id).join('|');
+
+  useEffect(() => {
+    const missingIds = visibleActivities
+      .map((activity) => activity.id)
+      .filter((id) => recentCommentsByChallenge[id] === undefined);
+    if (missingIds.length === 0) return;
+    let cancelled = false;
+    void Promise.all(missingIds.map(async (id) => {
+      const page = await listChallengeComments(id, null, 2);
+      return [id, page.comments] as const;
+    })).then((entries) => {
+      if (cancelled) return;
+      setRecentCommentsByChallenge((current) => ({
+        ...current,
+        ...Object.fromEntries(entries),
+      }));
+    }).catch((err) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load recent comments.');
+    });
+    return () => {
+      cancelled = true;
+    };
+  // The joined id list is the stable identity of the currently visible cards.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleActivityIds]);
 
   async function load() {
     setLoading(true);
@@ -232,6 +275,125 @@ export function ChallengesPage() {
     }
   }
 
+  function openWagerEdit(challenge: ChallengeActivity) {
+    setStakeEditChallenge(challenge);
+    setEditWagerTitle(challenge.title);
+    setEditWagerBody(challenge.body ?? '');
+    setEditWagerDeadline(datetimeLocalValue(challenge.deadline?.toDate() ?? null));
+    setEditStake(challenge.stake ?? 10);
+  }
+
+  async function saveWagerEdit() {
+    if (!profile || !stakeEditChallenge) return;
+    setBusy(`stake-${stakeEditChallenge.id}`);
+    setError('');
+    try {
+      await updateWagerChallenge({
+        challenge: stakeEditChallenge,
+        user: profile,
+        title: editWagerTitle,
+        body: editWagerBody || undefined,
+        stake: editStake,
+        deadline: new Date(editWagerDeadline),
+      });
+      setStakeEditChallenge(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update wager stake.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function openComments(challenge: ChallengeActivity) {
+    setCommentChallenge(challenge);
+    setEditingThreadCommentId('');
+    setEditingThreadCommentBody('');
+    setChallengeComments([]);
+    setCommentCursor(null);
+    setCommentsHaveMore(false);
+    setCommentsLoading(true);
+    try {
+      const page = await listChallengeComments(challenge.id);
+      setChallengeComments(page.comments);
+      setCommentCursor(page.cursor);
+      setCommentsHaveMore(page.hasMore);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load comments.');
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  async function refreshComments(challenge: ChallengeActivity) {
+    const [thread, recent] = await Promise.all([
+      listChallengeComments(challenge.id),
+      listChallengeComments(challenge.id, null, 2),
+    ]);
+    setChallengeComments(thread.comments);
+    setCommentCursor(thread.cursor);
+    setCommentsHaveMore(thread.hasMore);
+    setRecentCommentsByChallenge((current) => ({ ...current, [challenge.id]: recent.comments }));
+  }
+
+  async function loadOlderComments() {
+    if (!commentChallenge || !commentCursor || commentsLoading) return;
+    setCommentsLoading(true);
+    try {
+      const page = await listChallengeComments(commentChallenge.id, commentCursor);
+      setChallengeComments((current) => [...page.comments, ...current]);
+      setCommentCursor(page.cursor);
+      setCommentsHaveMore(page.hasMore);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  async function submitComment(event: FormEvent) {
+    event.preventDefault();
+    if (!profile || !commentChallenge || !newComment.trim()) return;
+    setBusy(`comment-${commentChallenge.id}`);
+    try {
+      await addChallengeComment(commentChallenge, profile, newComment);
+      setNewComment('');
+      await refreshComments(commentChallenge);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not post comment.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function saveThreadComment(comment: ChallengeComment) {
+    if (!commentChallenge || !editingThreadCommentBody.trim()) return;
+    setBusy(`edit-comment-${comment.id}`);
+    setError('');
+    try {
+      await updateChallengeComment(commentChallenge.id, comment.id, editingThreadCommentBody);
+      setEditingThreadCommentId('');
+      setEditingThreadCommentBody('');
+      await refreshComments(commentChallenge);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update comment.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function removeThreadComment(comment: ChallengeComment) {
+    if (!commentChallenge) return;
+    setBusy(`delete-comment-${comment.id}`);
+    setError('');
+    try {
+      await deleteChallengeComment(commentChallenge.id, comment.id);
+      await refreshComments(commentChallenge);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete comment.');
+    } finally {
+      setBusy('');
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -314,7 +476,7 @@ export function ChallengesPage() {
                 body={topTab === 'wagers' ? 'Create a coin-backed wager to get started.' : 'Complete a weekly challenge to see it here.'}
               />
             ) : (
-              visibleActivities.map((activity) => {
+              visibleActivities.map((activity, activityIndex) => {
                 const canComplete = activity.type === 'wager'
                   && activity.status === 'open'
                   && activity.creatorId !== profile?.uid
@@ -322,6 +484,9 @@ export function ChallengesPage() {
                 const canFail = activity.type === 'wager' && activity.status === 'open' && activity.creatorId === profile?.uid;
                 const canEditCompletion = activity.type === 'completion'
                   && (activity.completerId === profile?.uid || activity.creatorId === profile?.uid);
+                const canEditWager = activity.type === 'wager'
+                  && activity.status === 'open'
+                  && activity.creatorId === profile?.uid;
                 const actorId = activity.type === 'completion' ? (activity.completerId || activity.creatorId) : activity.creatorId;
                 const actorUsername = activity.type === 'completion'
                   ? (activity.completerUsername || activity.creatorUsername)
@@ -329,124 +494,271 @@ export function ChallengesPage() {
                 const actorDisplayName = activity.type === 'completion'
                   ? (activity.completerDisplayName || activity.completerUsername || activity.creatorDisplayName || activity.creatorUsername)
                   : (activity.creatorDisplayName || activity.creatorUsername);
-                return (
-                  <article key={activity.id} className="rounded-md border border-line bg-white p-4 shadow-soft">
-                    <div className="relative mb-2">
-                      {/* Group badge + compact edit, aligned to far right */}
-                      <div className="absolute right-0 top-0 flex items-center gap-1.5">
-                        {activity.groupId && groups.find(g => g.id === activity.groupId) && (
-                          <div className="flex items-center gap-1.5 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/60">
-                            <Users size={12} />
-                            {groups.find(g => g.id === activity.groupId)?.name}
+                const recentComments = recentCommentsByChallenge[activity.id] ?? [];
+                if (activity.type === 'wager') {
+                  const group = activity.groupId ? groups.find((item) => item.id === activity.groupId) : null;
+                  const completionReward = (activity.stake ?? 0) + (activity.bonus ?? 0);
+                  const completionOpen = completingWagerId === activity.id;
+                  return (
+                    <article
+                      key={activity.id}
+                      className="challenge-feed-card group min-w-0 max-w-full overflow-hidden rounded-md border border-line bg-white shadow-soft"
+                      style={{ animationDelay: `${Math.min(activityIndex, 8) * 45}ms` }}
+                    >
+                      <div className="min-w-0 border-b border-line px-4 py-4 sm:px-5">
+                        <div className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] items-start gap-3 sm:grid-cols-[40px_minmax(0,1fr)_auto]">
+                          <div className="challenge-card-icon grid h-10 w-10 shrink-0 place-items-center rounded-md bg-citrus/12 text-citrus">
+                            <Target size={19} />
                           </div>
-                        )}
-                        {canEditCompletion ? (
-                          <button
-                            type="button"
-                            onClick={() => openEdit(activity)}
-                            disabled={!!busy}
-                            aria-label="Edit completion"
-                            title="Edit completion"
-                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink/45 transition hover:bg-field hover:text-ink disabled:opacity-50"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                        ) : null}
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                              <Link to={`/profile/${activity.creatorId}`} className="font-black text-ink/70 hover:underline">
+                                {activity.creatorDisplayName || activity.creatorUsername}
+                              </Link>
+                              <span className="font-semibold text-ink/35">@{activity.creatorUsername}</span>
+                              <span className="font-semibold text-ink/35">{activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}</span>
+                              {group ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-field px-2 py-0.5 font-bold text-ink/50">
+                                  <Users size={11} /> {group.name}
+                                </span>
+                              ) : null}
+                            </div>
+                            <h2 className="mt-1.5 break-words text-lg font-black leading-snug [overflow-wrap:anywhere]">{activity.title}</h2>
+                            {activity.body ? (
+                              <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-ink/60 [overflow-wrap:anywhere]">{activity.body}</p>
+                            ) : null}
+                          </div>
+                          <div className="col-start-2 row-start-2 mt-2 flex min-w-0 items-center gap-1 sm:col-start-3 sm:row-start-1 sm:mt-0">
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusStyle(activity.status)}`}>
+                              {activity.status}
+                            </span>
+                            {canEditWager ? (
+                              <button
+                                type="button"
+                                onClick={() => openWagerEdit(activity)}
+                                className="grid h-8 w-8 place-items-center rounded-md text-ink/40 transition hover:bg-field hover:text-ink"
+                                aria-label="Edit wager"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
-                      {/* Left side badges and info */}
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-40">
-                        <Link to={`/profile/${actorId}`} className="text-xs font-semibold text-ink/45 hover:text-ink hover:underline">
-                          @{actorUsername}
-                        </Link>
-                        {activity.type === 'wager' ? (
-                          <span className="rounded-full bg-citrus/10 px-2 py-0.5 text-xs font-black text-citrus">wager</span>
-                        ) : (
-                          <span className="rounded-full bg-mint/10 px-2 py-0.5 text-xs font-black text-mint">weekly</span>
-                        )}
-                        <span className="text-xs font-semibold text-ink/35">
-                          {activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-black ${statusStyle(activity.status)}`}>
-                          {activity.status}
-                        </span>
+
+                      <div className="grid gap-px bg-line sm:grid-cols-3">
+                        <div className="bg-field/65 px-4 py-3">
+                          <p className="text-xs font-bold text-ink/40">Target</p>
+                          <p className="mt-1 text-sm font-black">@{activity.targetUsername || 'anyone invited'}</p>
+                        </div>
+                        <div className="bg-field/65 px-4 py-3">
+                          <p className="text-xs font-bold text-ink/40">Reward if completed</p>
+                          <CoinAmount amount={completionReward} className="mt-1 text-sm" />
+                        </div>
+                        <div className="bg-field/65 px-4 py-3">
+                          <p className="text-xs font-bold text-ink/40">Deadline</p>
+                          <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-black">
+                            <Clock3 size={14} className="text-ink/40" />
+                            {activity.deadline ? relativeTime(activity.deadline) : 'No deadline'}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
-                      <div className="min-w-0">
-                      {activity.type === 'completion' ? (
-                        <h2 className="text-base leading-snug">
-                          <span className="font-black">{actorDisplayName}</span>
-                          <span className="font-normal"> completed </span>
-                          <span className="font-black">{activity.title}</span>
-                        </h2>
-                      ) : (
-                        <h2 className="text-lg font-black leading-snug">{activity.title}</h2>
-                      )}
-                      {activity.body ? <p className="mt-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-5 text-ink/65">{activity.body}</p> : null}
-                      {activity.comment ? (
-                        <p className="mt-2.5 rounded-md bg-field px-3 py-2 text-sm font-semibold leading-5 text-ink/75 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                          {activity.comment}
-                        </p>
+
+                      {activity.proofImageUrl ? (
+                        <div className="border-t border-line p-4">
+                          <ZoomableImage src={activity.proofImageUrl} alt="Wager proof" className="h-40 w-full rounded-md border border-line object-cover sm:h-48" loading="lazy" />
+                        </div>
                       ) : null}
-                      {activity.type === 'wager' ? (
-                        <div className="mt-3 grid gap-2 rounded-md bg-field p-3 text-sm sm:grid-cols-4">
-                          <div>
-                            <p className="text-xs font-bold text-ink/40">Stake</p>
-                            <CoinAmount amount={activity.stake ?? 0} className="mt-1 text-sm" />
+
+                      {recentComments.length > 0 ? (
+                        <div className="space-y-2 border-t border-line px-4 py-3">
+                          {recentComments.map((comment) => (
+                            <button
+                              key={comment.id}
+                              type="button"
+                              onClick={() => void openComments(activity)}
+                              className="challenge-comment-preview block w-full rounded-md bg-field px-3 py-2 text-left"
+                            >
+                              <span className="text-xs font-black text-ink/65">{comment.authorDisplayName || comment.authorUsername}</span>
+                              <span className="ml-2 break-words text-sm text-ink/60 [overflow-wrap:anywhere]">{comment.body}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {completionOpen && canComplete ? (
+                        <div className="animate-action-reveal border-t border-line bg-field/55 p-4">
+                          <div className="flex items-center gap-2 text-sm font-black">
+                            <ImagePlus size={17} className="text-mint" /> Add proof to complete
                           </div>
-                          <div>
-                            <p className="text-xs font-bold text-ink/40">Completion bonus</p>
-                            <CoinAmount amount={activity.bonus ?? 0} className="mt-1 text-sm" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-ink/40">Target</p>
-                            <p className="mt-1 font-bold">@{activity.targetUsername || 'anyone'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-ink/40">Deadline</p>
-                            <p className="mt-1 font-bold">{activity.deadline ? relativeTime(activity.deadline) : 'No deadline'}</p>
+                          <input
+                            className="mt-3 w-full rounded-md border border-line bg-white px-3 py-2 text-sm"
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) processImage(file, (value) => setProofByChallenge((current) => ({ ...current, [activity.id]: value })));
+                            }}
+                          />
+                          {proofByChallenge[activity.id] ? (
+                            <ZoomableImage src={proofByChallenge[activity.id]} alt="Selected proof" className="mt-3 h-36 w-full rounded-md object-cover" />
+                          ) : null}
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setCompletingWagerId('')}
+                              className="flex-1 rounded-md border border-line bg-white px-3 py-2 text-sm font-bold text-ink/60"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => complete(activity)}
+                              disabled={!!busy || !proofByChallenge[activity.id]}
+                              className="flex-1 rounded-md bg-mint px-3 py-2 text-sm font-black text-white disabled:opacity-40"
+                            >
+                              Complete for <CoinAmount amount={completionReward} className="text-sm text-white" />
+                            </button>
                           </div>
                         </div>
                       ) : null}
-                      </div>
-                      {activity.proofImageUrl ? (
-                        <ZoomableImage src={activity.proofImageUrl} alt="" className="h-40 w-full rounded-md border border-line object-cover sm:h-36" loading="lazy" />
-                      ) : null}
-                    </div>
-                    <div>
-                      {canComplete ? (
-                        <div className="mt-3 rounded-md border border-line p-3">
-                          <label className="block text-sm font-medium">
-                            Proof photo
-                            <input
-                              className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
-                              type="file"
-                              accept="image/*"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                if (file) processImage(file, (value) => setProofByChallenge((current) => ({ ...current, [activity.id]: value })));
-                              }}
-                            />
-                          </label>
-                          {proofByChallenge[activity.id] ? <img src={proofByChallenge[activity.id]} alt="" className="mt-2 max-h-40 w-full rounded-md object-cover" /> : null}
+
+                      <div className="grid min-w-0 gap-2 border-t border-line px-4 py-3 sm:flex sm:flex-wrap sm:items-center">
+                        {canComplete && !completionOpen ? (
                           <button
-                            onClick={() => complete(activity)}
-                            disabled={!!busy}
-                            className="mt-2 inline-flex items-center gap-2 rounded-md bg-mint px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                            type="button"
+                            onClick={() => setCompletingWagerId(activity.id)}
+                            className="inline-flex min-w-0 max-w-full items-center justify-center gap-2 rounded-md bg-mint px-4 py-2 text-sm font-black text-white"
                           >
                             <CheckCircle2 size={16} /> Complete wager
                           </button>
-                        </div>
-                      ) : null}
-                      {canFail ? (
+                        ) : null}
+                        {canFail ? (
+                          <button
+                            type="button"
+                            onClick={() => fail(activity)}
+                            disabled={!!busy}
+                            className="inline-flex min-w-0 max-w-full items-center justify-center gap-2 rounded-md border border-coral/25 px-4 py-2 text-sm font-black text-coral disabled:opacity-40"
+                          >
+                            <XCircle size={16} /> Claim <CoinAmount amount={Math.round((activity.stake ?? 0) * 1.5)} className="text-sm text-coral" />
+                          </button>
+                        ) : null}
                         <button
-                          onClick={() => fail(activity)}
-                          disabled={!!busy}
-                          className="mt-3 inline-flex items-center gap-2 rounded-md border border-coral/30 px-4 py-2 text-sm font-bold text-coral disabled:opacity-50"
+                          type="button"
+                          onClick={() => void openComments(activity)}
+                          className="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-ink/55 transition hover:bg-field hover:text-ink sm:ml-auto"
                         >
-                          <XCircle size={16} /> Claim stake + 50%
+                          <MessageCircle size={16} /> Comments
                         </button>
-                      ) : null}
+                      </div>
+                    </article>
+                  );
+                }
+                const completionGroup = activity.groupId ? groups.find((item) => item.id === activity.groupId) : null;
+                return (
+                  <article
+                    key={activity.id}
+                    className="challenge-feed-card group overflow-hidden rounded-md border border-line bg-white shadow-soft"
+                    style={{ animationDelay: `${Math.min(activityIndex, 8) * 45}ms` }}
+                  >
+                    <div className="border-b border-line px-4 py-4 sm:px-5">
+                      <div className="flex items-start gap-3">
+                        <div className="challenge-card-icon grid h-10 w-10 shrink-0 place-items-center rounded-md bg-mint/12 text-mint">
+                          <Trophy size={19} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                            <Link to={`/profile/${actorId}`} className="font-black text-ink/70 hover:underline">
+                              {actorDisplayName}
+                            </Link>
+                            <span className="font-semibold text-ink/35">@{actorUsername}</span>
+                            <span className="font-semibold text-ink/35">{activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}</span>
+                            {completionGroup ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-field px-2 py-0.5 font-bold text-ink/50">
+                                <Users size={11} /> {completionGroup.name}
+                              </span>
+                            ) : null}
+                          </div>
+                          <h2 className="mt-1.5 text-lg font-black leading-snug">{activity.title}</h2>
+                          {activity.body ? (
+                            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-ink/60 [overflow-wrap:anywhere]">{activity.body}</p>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${statusStyle(activity.status)}`}>
+                            {activity.status}
+                          </span>
+                          {canEditCompletion ? (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(activity)}
+                              disabled={!!busy}
+                              className="grid h-8 w-8 place-items-center rounded-md text-ink/40 transition hover:bg-field hover:text-ink disabled:opacity-40"
+                              aria-label="Edit completion"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-px bg-line sm:grid-cols-3">
+                      <div className="bg-field/65 px-4 py-3">
+                        <p className="text-xs font-bold text-ink/40">Completed by</p>
+                        <p className="mt-1 text-sm font-black">{actorDisplayName}</p>
+                      </div>
+                      <div className="bg-field/65 px-4 py-3">
+                        <p className="text-xs font-bold text-ink/40">Coins earned</p>
+                        <CoinAmount amount={(activity.reward ?? 0) + (activity.chestReward ?? 0)} className="mt-1 text-sm" />
+                      </div>
+                      <div className="bg-field/65 px-4 py-3">
+                        <p className="text-xs font-bold text-ink/40">Completed</p>
+                        <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-black">
+                          <Clock3 size={14} className="text-ink/40" />
+                          {activity.completedAt ? relativeTime(activity.completedAt) : relativeTime(activity.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {(activity.proofImageUrl || activity.comment) ? (
+                      <div className={`grid gap-4 border-t border-line p-4 ${activity.proofImageUrl && activity.comment ? 'sm:grid-cols-[180px_1fr]' : ''}`}>
+                        {activity.proofImageUrl ? (
+                          <ZoomableImage src={activity.proofImageUrl} alt="Challenge proof" className="h-44 w-full rounded-md border border-line object-cover" loading="lazy" />
+                        ) : null}
+                        {activity.comment ? (
+                          <div className="self-center rounded-md bg-field px-4 py-3">
+                            <p className="text-xs font-black uppercase text-ink/35">Completion note</p>
+                            <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-6 text-ink/70 [overflow-wrap:anywhere]">{activity.comment}</p>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {recentComments.length > 0 ? (
+                      <div className="space-y-2 border-t border-line px-4 py-3">
+                        {recentComments.map((comment) => (
+                          <button
+                            key={comment.id}
+                            type="button"
+                            onClick={() => void openComments(activity)}
+                            className="challenge-comment-preview block w-full rounded-md bg-field px-3 py-2 text-left"
+                          >
+                            <span className="text-xs font-black text-ink/65">{comment.authorDisplayName || comment.authorUsername}</span>
+                            <span className="ml-2 break-words text-sm text-ink/60 [overflow-wrap:anywhere]">{comment.body}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="flex items-center border-t border-line px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => void openComments(activity)}
+                        className="ml-auto inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-ink/55 transition hover:bg-field hover:text-ink active:scale-95"
+                      >
+                        <MessageCircle size={16} /> Comments
+                      </button>
                     </div>
                   </article>
                 );
@@ -697,6 +1009,191 @@ export function ChallengesPage() {
             >
               {busy === `edit-${editChallenge.id}` ? 'Saving...' : 'Save changes'}
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {stakeEditChallenge ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+          <div className="flex max-h-[92dvh] w-full max-w-lg animate-soft-enter flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:rounded-2xl">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 py-4 sm:px-5">
+              <div>
+                <h2 className="text-lg font-black">Edit wager</h2>
+                <p className="mt-1 text-sm text-ink/55">Update the challenge and its terms.</p>
+              </div>
+              <button type="button" onClick={() => setStakeEditChallenge(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95">
+                <X size={17} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              <label className="block text-sm font-medium">
+                Title
+                <input
+                  value={editWagerTitle}
+                  onChange={(event) => setEditWagerTitle(event.target.value)}
+                  maxLength={160}
+                  className="mt-1 w-full min-w-0 rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
+                  required
+                />
+              </label>
+              <label className="block text-sm font-medium">
+                Proof rules
+                <textarea
+                  value={editWagerBody}
+                  onChange={(event) => setEditWagerBody(event.target.value)}
+                  maxLength={1000}
+                  className="mt-1 min-h-24 w-full min-w-0 resize-y rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
+                  placeholder="What counts as proof?"
+                />
+              </label>
+              <div className="min-w-0">
+                <StakeInput label="Stake" value={editStake} min={10} step={10} onChange={(value) => setEditStake(Math.max(10, Math.round(value)))} />
+              </div>
+              <label className="block min-w-0 text-sm font-medium">
+                Deadline
+                <input
+                  type="datetime-local"
+                  value={editWagerDeadline}
+                  onChange={(event) => setEditWagerDeadline(event.target.value)}
+                  className="mt-1 block w-full min-w-0 max-w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
+                  required
+                />
+                <p className="mt-1 text-xs text-ink/45">A changed deadline must be at least one week away.</p>
+              </label>
+              <p className="rounded-md bg-field px-3 py-2 text-sm text-ink/55">
+                Completion bonus: <CoinAmount amount={Math.max(5, Math.round(editStake * 0.2)) * 2} className="ml-1 text-sm" />
+              </p>
+            </div>
+            <div className="shrink-0 border-t border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
+              <button
+                onClick={saveWagerEdit}
+                disabled={!!busy || !editWagerTitle.trim() || !editWagerDeadline}
+                className="btn-special w-full rounded-xl px-4 py-3 text-sm font-bold disabled:opacity-45"
+              >
+                {busy === `stake-${stakeEditChallenge.id}` ? 'Saving...' : 'Save wager'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {commentChallenge ? (
+        <div className="fixed inset-0 z-[70] flex animate-fade-in items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+          <div className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift animate-soft-enter sm:h-[72dvh] sm:max-h-[760px] sm:max-w-5xl sm:rounded-2xl">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 py-4 sm:px-6">
+              <div className="min-w-0">
+                <h2 className="text-lg font-black">Comments</h2>
+                <p className="truncate text-sm text-ink/50">{commentChallenge.title}</p>
+              </div>
+              <button type="button" onClick={() => setCommentChallenge(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95">
+                <X size={17} />
+              </button>
+            </div>
+            <div className="min-h-48 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:px-6 sm:py-5">
+              {commentsHaveMore ? (
+                <button onClick={loadOlderComments} disabled={commentsLoading} className="mx-auto block rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/60">
+                  {commentsLoading ? 'Loading...' : 'Load older comments'}
+                </button>
+              ) : null}
+              {!commentsLoading && challengeComments.length === 0 ? (
+                <p className="py-10 text-center text-sm font-semibold text-ink/40">No comments yet.</p>
+              ) : challengeComments.map((comment, commentIndex) => {
+                const canEdit = comment.authorId === profile?.uid;
+                const canDelete = canEdit || profile?.isAdmin;
+                const isEditing = editingThreadCommentId === comment.id;
+                return (
+                  <div
+                    key={comment.id}
+                    className="animate-comment-enter rounded-md bg-field px-3 py-2.5 sm:px-4 sm:py-3"
+                    style={{ animationDelay: `${Math.min(commentIndex, 10) * 35}ms` }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <p className="text-sm font-black">{comment.authorDisplayName || comment.authorUsername}</p>
+                          <span className="text-xs text-ink/35">{comment.createdAt ? relativeTime(comment.createdAt) : 'just now'}</span>
+                          {comment.updatedAt && comment.createdAt && comment.updatedAt.toMillis() > comment.createdAt.toMillis() + 1000 ? (
+                            <span className="text-xs font-semibold text-ink/35">edited</span>
+                          ) : null}
+                        </div>
+                        {isEditing ? (
+                          <div className="animate-action-reveal mt-2">
+                            <textarea
+                              value={editingThreadCommentBody}
+                              onChange={(event) => setEditingThreadCommentBody(event.target.value)}
+                              maxLength={500}
+                              className="min-h-20 w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm"
+                            />
+                            <div className="mt-2 flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingThreadCommentId('');
+                                  setEditingThreadCommentBody('');
+                                }}
+                                className="rounded-md px-3 py-1.5 text-xs font-bold text-ink/55"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void saveThreadComment(comment)}
+                                disabled={!editingThreadCommentBody.trim() || !!busy}
+                                className="rounded-md bg-ink px-3 py-1.5 text-xs font-black text-white disabled:opacity-40"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-ink/70">{comment.body}</p>
+                        )}
+                      </div>
+                      {!isEditing && (canEdit || canDelete) ? (
+                        <div className="flex shrink-0">
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingThreadCommentId(comment.id);
+                                setEditingThreadCommentBody(comment.body);
+                              }}
+                              className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white hover:text-ink"
+                              aria-label="Edit comment"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          ) : null}
+                          {canDelete ? (
+                            <button
+                              type="button"
+                              onClick={() => void removeThreadComment(comment)}
+                              disabled={busy === `delete-comment-${comment.id}`}
+                              className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white hover:text-coral disabled:opacity-40"
+                              aria-label="Delete comment"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <form onSubmit={submitComment} className="flex shrink-0 gap-2 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+              <input
+                value={newComment}
+                onChange={(event) => setNewComment(event.target.value)}
+                maxLength={500}
+                placeholder="Write a comment"
+                className="min-w-0 flex-1 rounded-md border border-line bg-field px-3 py-2.5 text-sm"
+              />
+              <button type="submit" disabled={!newComment.trim() || !!busy} className="grid h-10 w-10 place-items-center rounded-md bg-ink text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40" aria-label="Post comment">
+                <Send size={17} />
+              </button>
+            </form>
           </div>
         </div>
       ) : null}
