@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 150" width="460" height="150">
+  <!-- Rare long ship: a very wide flat deck (y≈80) = the easiest, longest landing strip. -->
+  <!-- masts + flags -->
+  <rect x="120" y="20" width="6" height="60" rx="3" fill="#6b7b8c"/>
+  <path d="M126 22 L168 32 L126 42 Z" fill="#2f7d63"/>
+  <rect x="250" y="28" width="6" height="52" rx="3" fill="#6b7b8c"/>
+  <path d="M256 30 L292 40 L256 50 Z" fill="#d8534f"/>
+  <rect x="360" y="24" width="6" height="56" rx="3" fill="#6b7b8c"/>
+  <path d="M366 26 L398 34 L366 44 Z" fill="#d49a25"/>
+  <!-- bridge / cabins -->
+  <rect x="96" y="48" width="280" height="32" rx="6" fill="#8ecae6" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="118" cy="64" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="146" cy="64" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="174" cy="64" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="290" cy="64" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="318" cy="64" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="346" cy="64" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <!-- deck (landing surface) -->
+  <rect x="36" y="78" width="388" height="13" rx="5" fill="#f2c879"/>
+  <!-- hull -->
+  <path d="M28 89 L432 89 L392 134 L68 134 Z" fill="#2f7d63"/>
+  <path d="M28 89 L432 89 L424 100 L36 100 Z" fill="#266650"/>
+  <!-- trim + portholes -->
+  <rect x="60" y="110" width="340" height="7" rx="3" fill="#f7f5ee" opacity="0.85"/>
+  <circle cx="110" cy="113" r="4" fill="#2f7d63"/>
+  <circle cx="190" cy="113" r="4" fill="#2f7d63"/>
+  <circle cx="270" cy="113" r="4" fill="#2f7d63"/>
+  <circle cx="350" cy="113" r="4" fill="#2f7d63"/>
+</svg>

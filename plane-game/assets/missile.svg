@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 56" width="120" height="56">
+  <!-- Flat rocket pointing LEFT (incoming toward the plane). Matches the flat boat/plane style. -->
+  <!-- exhaust flame at the tail (right) -->
+  <path d="M96 28 L120 18 L112 28 L120 38 Z" fill="#f7a23b"/>
+  <path d="M96 28 L110 22 L106 28 L110 34 Z" fill="#f2c879"/>
+  <!-- tail fins -->
+  <path d="M88 12 L104 2 L96 20 Z" fill="#b8413d"/>
+  <path d="M88 44 L104 54 L96 36 Z" fill="#b8413d"/>
+  <!-- body -->
+  <rect x="34" y="16" width="62" height="24" rx="12" fill="#d8534f"/>
+  <!-- nose cone -->
+  <path d="M6 28 L40 14 L40 42 Z" fill="#b8413d"/>
+  <!-- window + stripe -->
+  <circle cx="54" cy="28" r="7" fill="#8ecae6" stroke="#e9f6fb" stroke-width="2"/>
+  <rect x="72" y="24" width="20" height="8" rx="4" fill="#f7f5ee" opacity="0.85"/>
+</svg>

@@ -1,11 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BadgeDollarSign, Dice5, Flame, Gift, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import {
+  BadgeDollarSign,
+  Bomb,
+  Check,
+  ChevronRight,
+  Dice5,
+  Flame,
+  Gift,
+  MessageCircle,
+  Plane,
+  PlusCircle,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Trophy,
+  X,
+  Zap,
+} from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
+import { MinesGame } from '../components/MinesGame';
 import { PageHeader } from '../components/PageHeader';
+import { PlaneGame } from '../components/PlaneGame';
 import { RewardChest } from '../components/RewardChest';
 import { useAuth } from '../contexts/AuthContext';
 import {
+  awardPlaneWin,
+  awardMinigameWin,
+  chargeMinigameStake,
+  chargePlaneStake,
   claimChest,
   claimDailyForecast,
   getChestDefinitions,
@@ -109,7 +132,9 @@ export function MinigamesPage() {
   const [wheelTurns, setWheelTurns] = useState(0);
   const [openedChestId, setOpenedChestId] = useState('');
   const [forecastMode, setForecastMode] = useState<DailyForecastMode | null>(null);
+  const [forecastOpen, setForecastOpen] = useState(false);
   const [wheelOpen, setWheelOpen] = useState(false);
+  const [chestsOpen, setChestsOpen] = useState(false);
   const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
   const [dailyBonusProgress, setDailyBonusProgress] = useState<any>({
     totalClaimed: 0,
@@ -119,8 +144,11 @@ export function MinigamesPage() {
     claimedTypes: [],
   });
   const [testPushSending, setTestPushSending] = useState(false);
+  const [showPlane, setShowPlane] = useState(false);
+  const [showMines, setShowMines] = useState(false);
   const forecastAvailable = profile ? canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
   const wheelAvailable = profile ? canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
+  const openableChests = chests.filter((chest) => chest.unlocked && !chest.claimed).length;
 
   useEffect(() => {
     if (!profile) return;
@@ -159,6 +187,7 @@ export function MinigamesPage() {
         spicy: `Spicy reward claimed: +${reward.amount} now, +${reward.spicyBonus ?? 0} only if your next prediction wins.`,
       };
       setMessage(messages[mode]);
+      setForecastOpen(false);
       setRewardPopup({
         title: `${mode[0].toUpperCase()}${mode.slice(1)} forecast`,
         amount: reward.amount,
@@ -185,6 +214,7 @@ export function MinigamesPage() {
       const reward = await claimChest(profile, chestId);
       setOpenedChestId(chestId);
       setMessage(`Chest opened: +${reward.amount} coins.`);
+      setChestsOpen(false);
       setRewardPopup({
         title: `${reward.label} opened`,
         amount: reward.amount,
@@ -246,194 +276,382 @@ export function MinigamesPage() {
       <PageHeader title="Minigames" description="Daily coin games, milestone chests, and little bits of chaos." />
       {message ? <p className="mb-4 rounded-2xl bg-mint/10 p-3 text-sm font-semibold text-mint">{message}</p> : null}
 
-      {/* Daily Bonus Progress */}
-      {dailyBonusProgress && (
-        <div className="mb-4 rounded-md border border-line bg-gradient-to-r from-citrus/5 to-plum/5 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Gift size={18} className="text-citrus" />
-            <h3 className="font-black">Daily bonuses</h3>
+      <section className="mb-7">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase text-ink/40">Replayable</p>
+            <h2 className="text-xl font-black">Arcade</h2>
           </div>
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center justify-between rounded-md bg-white/50 px-3 py-2">
-              <span className="text-ink/70">Earned today</span>
-              <span className="font-black"><CoinAmount amount={dailyBonusProgress.totalClaimed} className="text-sm" /></span>
-            </div>
-            <div className="flex items-center justify-between rounded-md bg-white/50 px-3 py-2">
-              <span className="text-ink/70">Potential remaining</span>
-              <span className="font-black"><CoinAmount amount={dailyBonusProgress.potential} className="text-sm" /></span>
-            </div>
-            <div className="text-xs text-ink/50">
-              {(dailyBonusProgress.claimedTypes?.length ?? 0) > 0
-                ? `Claimed: ${dailyBonusProgress.claimedTypes.join(', ')} • Get +${dailyBonusProgress.potential} more!`
-                : 'Claim bonuses by creating bets, challenges, predictions, or comments'}
-            </div>
-          </div>
+          <p className="hidden text-xs font-semibold text-ink/45 sm:block">Wins have a small chance to award 1-2 ELO.</p>
         </div>
-      )}
-
-      {/* Admin: Test Push Button */}
-      {profile?.isAdmin && (
-        <div className="mb-4 rounded-md border border-line bg-field p-4">
+        <div className="grid gap-3 md:grid-cols-2">
           <button
-            onClick={sendTestPush}
-            disabled={testPushSending}
-            className="w-full rounded-md bg-plum px-4 py-2 text-sm font-bold text-white transition-all enabled:hover:bg-plum/90 disabled:opacity-60"
+            onClick={() => setShowPlane(true)}
+            disabled={!profile}
+            className="group flex min-h-36 items-center gap-4 rounded-2xl border border-sky/20 bg-gradient-to-br from-sky/15 via-white to-mint/10 p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-sky/45 hover:shadow-lift active:scale-[.99] disabled:opacity-60"
           >
-            {testPushSending ? 'Sending...' : '🧪 Send Test Push to All Users'}
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-sky text-white shadow-soft transition group-hover:rotate-[-4deg] group-hover:scale-105">
+              <Plane size={25} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-black">Sky Landing</h3>
+              <p className="mt-1 text-sm leading-5 text-ink/60">Aim, dodge missiles, collect stars, and stop on a ship before the deck runs out.</p>
+              <span className="mt-3 inline-flex rounded-lg bg-sky px-3 py-1.5 text-xs font-black text-white">Play</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setShowMines(true)}
+            disabled={!profile}
+            className="group flex min-h-36 items-center gap-4 rounded-2xl border border-coral/20 bg-gradient-to-br from-coral/10 via-white to-plum/10 p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-coral/45 hover:shadow-lift active:scale-[.99] disabled:opacity-60"
+          >
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-coral text-white shadow-soft transition group-hover:rotate-6 group-hover:scale-105">
+              <Bomb size={25} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-black">Mines</h3>
+              <p className="mt-1 text-sm leading-5 text-ink/60">Reveal safe tiles to grow the multiplier, then cash out before a bomb takes the stake.</p>
+              <span className="mt-3 inline-flex rounded-lg bg-coral px-3 py-1.5 text-xs font-black text-white">Play</span>
+            </div>
           </button>
         </div>
-      )}
+      </section>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <section className="rounded-md border border-line bg-white p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <BadgeDollarSign size={18} className="text-citrus" />
-            <h2 className="font-black">Forecast</h2>
+      {profile?.isAdmin ? (
+        <button
+          onClick={sendTestPush}
+          disabled={testPushSending}
+          className="mb-6 w-full rounded-md bg-plum px-4 py-2 text-sm font-bold text-white transition-all enabled:hover:bg-plum/90 disabled:opacity-60"
+        >
+          {testPushSending ? 'Sending...' : 'Send test push to all users'}
+        </button>
+      ) : null}
+
+      <div className="mb-3">
+        <p className="text-xs font-black uppercase text-ink/40">Timed and earned</p>
+        <h2 className="text-xl font-black">Rewards</h2>
+      </div>
+      {dailyBonusProgress ? (
+        <section className="mb-4 rounded-2xl border border-line bg-white p-4 shadow-soft">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Gift size={18} className="text-citrus" />
+                <h3 className="font-black">Daily activity bonuses</h3>
+              </div>
+              <p className="mt-1 max-w-xl text-xs leading-5 text-ink/55">
+                Do each activity once per day to collect its reward automatically. They reset at midnight UTC.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <div className="rounded-xl bg-mint/10 px-3 py-2">
+                <p className="text-2xs font-bold uppercase text-mint/70">Earned</p>
+                <CoinAmount amount={dailyBonusProgress.totalClaimed} className="text-sm" />
+              </div>
+              <div className="rounded-xl bg-citrus/10 px-3 py-2">
+                <p className="text-2xs font-bold uppercase text-citrus/70">Left</p>
+                <CoinAmount amount={dailyBonusProgress.potential} className="text-sm" />
+              </div>
+            </div>
           </div>
-          <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
-            Claim every 6 hours. {forecastAvailable ? 'Available now.' : 'Cooldown in progress.'}
-          </p>
-          <div className="grid gap-3">
-            {(['safe', 'random', 'chaos', 'spicy'] as DailyForecastMode[]).map((mode) => {
-              const selected = forecastMode === mode;
-              const card = forecastCards[mode];
-              const ForecastIcon = card.Icon;
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { type: 'bet', label: 'Create a bet', amount: dailyBonusProgress.bonusAmounts.bet, Icon: PlusCircle },
+              { type: 'challenge', label: 'Create a wager', amount: dailyBonusProgress.bonusAmounts.challenge, Icon: Trophy },
+              { type: 'prediction', label: 'Make a prediction', amount: dailyBonusProgress.bonusAmounts.prediction, Icon: Target },
+              { type: 'comment', label: 'Comment on a bet', amount: dailyBonusProgress.bonusAmounts.comment, Icon: MessageCircle },
+            ].map(({ type, label, amount, Icon }) => {
+              const claimed = dailyBonusProgress.claimedTypes?.includes(type);
               return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => forecast(mode)}
-                  disabled={!!busy || !forecastAvailable}
-                  className={`group min-h-28 rounded-2xl border p-3 text-left shadow-card transition disabled:opacity-50 ${
-                    selected ? 'animate-reward-pop border-citrus bg-white ring-2 ring-citrus/20' : card.shell
+                <div
+                  key={type}
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
+                    claimed ? 'border-mint/20 bg-mint/10' : 'border-line bg-field'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl shadow-soft transition group-hover:scale-105 ${card.icon}`}>
-                      <ForecastIcon size={22} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-base font-black">{card.title}</span>
-                      <span className="mt-1 block text-sm leading-6 text-ink/60">{card.copy}</span>
-                      {selected ? <span className="mt-3 inline-flex rounded-full bg-citrus/10 px-2 py-0.5 text-2xs font-black text-citrus">Revealed</span> : null}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          {profile?.pendingSpicyForecasts && profile.pendingSpicyForecasts.length > 0 ? (
-            <p className="mt-3 rounded-md bg-citrus/10 p-3 text-xs font-bold text-citrus">
-              Spicy bonus armed: +{profile.pendingSpicyForecasts.reduce((sum, b) => sum + b.bonus, 0)} on your next win.
-              {profile.pendingSpicyForecasts.length > 1 && ` (${profile.pendingSpicyForecasts.length} stacked)`}
-            </p>
-          ) : null}
-        </section>
-
-        <section className="rounded-md border border-line bg-white p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Sparkles size={18} className="text-plum" />
-            <h2 className="font-black">Wheel</h2>
-          </div>
-          <p className="mb-3 rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/55">
-            {wheelAvailable ? 'Wheel spin available now.' : 'Wheel on cooldown. Available in up to 6 hours.'}
-          </p>
-          <div className="grid h-56 place-items-center rounded-md bg-field">
-            <button
-              type="button"
-              onClick={() => setWheelOpen(true)}
-              className="grid h-40 w-40 place-items-center overflow-hidden rounded-full border-8 border-white bg-[conic-gradient(from_22.5deg,#2f7d63,#d95f46,#d49a25,#8c98a5,#3b75af,#d95f46,#6f5ca8,#121417,#2f7d63)] text-white shadow-lift"
-            >
-              <span className="btn-special rounded-full px-4 py-2 text-sm font-black">{wheelAvailable ? 'Open wheel' : 'View wheel'}</span>
-            </button>
-          </div>
-        </section>
-
-        <section className="rounded-md border border-line bg-white p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Gift size={18} className="text-mint" />
-            <h2 className="font-black">Chests</h2>
-          </div>
-          <div className="space-y-3">
-            {chests.length === 0 ? (
-              <div className="grid min-h-40 place-items-center rounded-md border border-dashed border-line bg-field px-4 text-center">
-                <p className="text-sm font-bold text-ink/50">No chests right now.</p>
-              </div>
-            ) : chests.map((chest) => {
-              const opening = busy === `chest-${chest.id}` || openedChestId === chest.id;
-              return (
-                <div key={chest.id} className="rounded-md bg-field p-3">
-                  <div className="flex items-center gap-3">
-                    <RewardChest open={opening} className="h-16 w-20 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-bold">{chest.title}</p>
-                        <CoinAmount amount={chest.reward} className="shrink-0 text-xs" />
-                      </div>
-                      <p className="mt-0.5 text-xs text-ink/50">{chest.description}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => openChest(chest.id)}
-                    disabled={!chest.unlocked || chest.claimed || !!busy}
-                    className="mt-2 w-full rounded-md border border-line bg-white px-3 py-2 text-xs font-bold disabled:opacity-45"
-                  >
-                    {chest.claimed ? 'Opened' : chest.unlocked ? 'Open chest' : 'Locked'}
-                  </button>
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${claimed ? 'bg-mint text-white' : 'bg-white text-ink/50'}`}>
+                    {claimed ? <Check size={17} /> : <Icon size={17} />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold">{label}</span>
+                    <CoinAmount amount={amount} className="text-xs" />
+                  </span>
                 </div>
               );
             })}
           </div>
         </section>
-
+      ) : null}
+      <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
+        {[
+          {
+            id: 'forecast',
+            title: 'Forecast',
+            copy: 'Choose Safe, Random, Chaos, or Spicy.',
+            status: forecastAvailable ? 'Available now' : 'Cooling down',
+            statusClass: forecastAvailable ? 'bg-mint/10 text-mint' : 'bg-field text-ink/45',
+            Icon: BadgeDollarSign,
+            iconClass: 'bg-citrus/10 text-citrus',
+            action: () => setForecastOpen(true),
+          },
+          {
+            id: 'wheel',
+            title: 'Wheel',
+            copy: 'Spin for bonuses, blanks, and a few painful misses.',
+            status: wheelAvailable ? 'Spin ready' : 'Cooling down',
+            statusClass: wheelAvailable ? 'bg-plum/10 text-plum' : 'bg-field text-ink/45',
+            Icon: Sparkles,
+            iconClass: 'bg-plum/10 text-plum',
+            action: () => setWheelOpen(true),
+          },
+          {
+            id: 'chests',
+            title: 'Chests',
+            copy: 'Unlock milestone rewards through bets and challenges.',
+            status: openableChests > 0 ? `${openableChests} to open` : chests.length ? 'No open chests' : 'No chests',
+            statusClass: openableChests > 0 ? 'bg-sky/10 text-sky' : 'bg-field text-ink/45',
+            Icon: Gift,
+            iconClass: 'bg-sky/10 text-sky',
+            action: () => setChestsOpen(true),
+          },
+        ].map(({ id, title, copy, status, statusClass, Icon, iconClass, action }, index) => (
+          <button
+            key={id}
+            type="button"
+            onClick={action}
+            className={`group flex w-full items-center gap-3 p-4 text-left transition hover:bg-field/70 active:bg-field ${
+              index ? 'border-t border-line' : ''
+            }`}
+          >
+            <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${iconClass}`}>
+              <Icon size={21} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-black">{title}</span>
+              <span className="mt-0.5 block text-xs leading-5 text-ink/50">{copy}</span>
+              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-2xs font-black sm:hidden ${statusClass}`}>
+                {status}
+              </span>
+            </span>
+            <span className={`hidden shrink-0 rounded-full px-2.5 py-1 text-2xs font-black sm:inline-flex ${statusClass}`}>
+              {status}
+            </span>
+            <ChevronRight size={18} className="shrink-0 text-ink/30 transition group-hover:translate-x-0.5 group-hover:text-ink/60" />
+          </button>
+        ))}
       </div>
 
-      {wheelOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-md border border-line bg-white p-5 shadow-lift">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-black">Spin the wheel</h2>
-              <button onClick={() => setWheelOpen(false)} className="rounded-md border border-line px-3 py-1.5 text-sm font-bold">Close</button>
-            </div>
-            <div className="relative mx-auto grid h-80 w-80 max-w-full place-items-center">
-              <div className="absolute top-0 z-10 h-0 w-0 border-x-[14px] border-t-[24px] border-x-transparent border-t-ink" />
-              <svg
-                viewBox="0 0 300 300"
-                className="h-72 w-72 rounded-full border-8 border-white shadow-lift transition-transform duration-[4200ms] ease-out"
-                style={{ transform: `rotate(${wheelRotation}deg)` }}
+      {forecastOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+          <div className="max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lift sm:max-w-2xl sm:rounded-2xl sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black">Choose a forecast</h2>
+                <p className="mt-1 text-sm text-ink/50">
+                  Pick one reward every 6 hours. Each option has a different level of risk.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForecastOpen(false)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field text-ink/60 transition hover:bg-line"
+                aria-label="Close forecast"
               >
-                {wheelRewards.map((option, index) => {
-                  const mid = (360 / wheelRewards.length) * index + 360 / wheelRewards.length / 2;
-                  const labelPoint = polarToCartesian(150, 150, 92, mid);
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(['safe', 'random', 'chaos', 'spicy'] as DailyForecastMode[]).map((mode) => {
+                const selected = forecastMode === mode;
+                const card = forecastCards[mode];
+                const ForecastIcon = card.Icon;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => forecast(mode)}
+                    disabled={!!busy || !forecastAvailable}
+                    className={`group min-h-28 rounded-2xl border p-3 text-left shadow-card transition disabled:opacity-50 ${
+                      selected ? 'animate-reward-pop border-citrus bg-white ring-2 ring-citrus/20' : card.shell
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl shadow-soft transition group-hover:scale-105 ${card.icon}`}>
+                        <ForecastIcon size={22} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-base font-black">{card.title}</span>
+                        <span className="mt-1 block text-sm leading-6 text-ink/60">{card.copy}</span>
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {!forecastAvailable ? (
+              <p className="mt-4 rounded-xl bg-field px-3 py-2 text-center text-xs font-bold text-ink/50">
+                Your next forecast becomes available when the 6-hour cooldown ends.
+              </p>
+            ) : null}
+            {profile?.pendingSpicyForecasts && profile.pendingSpicyForecasts.length > 0 ? (
+              <p className="mt-3 rounded-xl bg-citrus/10 p-3 text-xs font-bold text-citrus">
+                Spicy bonus armed: +{profile.pendingSpicyForecasts.reduce((sum, bonus) => sum + bonus.bonus, 0)} on your next prediction win.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {chestsOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+          <div className="max-h-[88dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lift sm:max-w-2xl sm:rounded-2xl sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black">Reward chests</h2>
+                <p className="mt-1 text-sm text-ink/50">Complete milestones to unlock permanent one-time rewards.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChestsOpen(false)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field text-ink/60 transition hover:bg-line"
+                aria-label="Close chests"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {chests.length === 0 ? (
+                <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
+                  <div>
+                    <Gift size={28} className="mx-auto text-ink/25" />
+                    <p className="mt-2 text-sm font-bold text-ink/50">There are no chests right now.</p>
+                  </div>
+                </div>
+              ) : chests.map((chest) => {
+                const opening = busy === `chest-${chest.id}` || openedChestId === chest.id;
+                return (
+                  <div key={chest.id} className="rounded-xl border border-line bg-field p-3">
+                    <div className="flex items-center gap-3">
+                      <RewardChest open={opening} className="h-16 w-20 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-bold">{chest.title}</p>
+                          <CoinAmount amount={chest.reward} className="shrink-0 text-xs" />
+                        </div>
+                        <p className="mt-0.5 text-xs leading-5 text-ink/50">{chest.description}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openChest(chest.id)}
+                      disabled={!chest.unlocked || chest.claimed || !!busy}
+                      className={`mt-3 w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition disabled:opacity-45 ${
+                        chest.unlocked && !chest.claimed
+                          ? 'border-sky bg-sky text-white shadow-soft hover:shadow-lift'
+                          : 'border-line bg-white text-ink/60'
+                      }`}
+                    >
+                      {chest.claimed ? 'Opened' : chest.unlocked ? 'Open chest' : 'Locked'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {wheelOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/65 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+          <div className="w-full overflow-hidden rounded-t-2xl border border-white/10 bg-[#141b26] text-white shadow-lift sm:max-w-lg sm:rounded-2xl">
+            <div className="flex items-start justify-between gap-3 px-5 pt-5">
+              <div>
+                <p className="text-2xs font-black uppercase text-white/40">One spin every 6 hours</p>
+                <h2 className="mt-1 text-xl font-black">Lucky wheel</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWheelOpen(false)}
+                className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/15 hover:text-white"
+                aria-label="Close wheel"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="relative mx-auto mt-2 grid aspect-square w-[min(86vw,390px)] place-items-center">
+              <div className="absolute inset-[5%] rounded-full bg-black/25 blur-xl" />
+              <div className="absolute top-[1%] z-20 h-9 w-8 drop-shadow-[0_5px_5px_rgba(0,0,0,.45)]">
+                <div className="mx-auto h-3 w-5 rounded-t-full bg-white" />
+                <div className="mx-auto h-0 w-0 border-x-[14px] border-t-[25px] border-x-transparent border-t-white" />
+              </div>
+              <div className="relative grid h-[90%] w-[90%] place-items-center rounded-full border border-white/15 bg-[#202b3b] p-[4.5%] shadow-[0_22px_55px_rgba(0,0,0,.4),inset_0_0_0_2px_rgba(255,255,255,.05)]">
+                {Array.from({ length: 16 }, (_, index) => {
+                  const angle = index * 22.5;
+                  const radians = (angle * Math.PI) / 180;
                   return (
-                    <g key={`${option.label}-${index}`}>
-                      <path d={wheelSlicePath(index, wheelRewards.length)} fill={wheelColors[index % wheelColors.length]} />
-                      <text
-                        x={labelPoint.x}
-                        y={labelPoint.y}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        transform={`rotate(${mid}, ${labelPoint.x}, ${labelPoint.y})`}
-                        className="fill-white text-[13px] font-black"
-                      >
-                        {option.label}
-                      </text>
-                    </g>
+                    <span
+                      key={angle}
+                      className="absolute left-1/2 top-1/2 h-2 w-2 rounded-full bg-white/80 shadow-[0_0_8px_rgba(255,255,255,.55)]"
+                      style={{
+                        left: `${50 + Math.sin(radians) * 45}%`,
+                        top: `${50 - Math.cos(radians) * 45}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    />
                   );
                 })}
-                <circle cx="150" cy="150" r="42" fill="white" />
-                <text x="150" y="153" textAnchor="middle" dominantBaseline="middle" className="fill-[#121417] text-[12px] font-black">
-                  {wheelResult === null ? 'READY' : !wheelRevealed ? 'SPIN' : wheelResult > 0 ? `+${wheelResult}` : String(wheelResult)}
-                </text>
-              </svg>
+                <svg
+                  viewBox="0 0 300 300"
+                  className="h-full w-full rounded-full transition-transform duration-[4200ms] ease-out"
+                  style={{ transform: `rotate(${wheelRotation}deg)` }}
+                >
+                  {wheelRewards.map((option, index) => {
+                    const mid = (360 / wheelRewards.length) * index + 360 / wheelRewards.length / 2;
+                    const labelPoint = polarToCartesian(150, 150, 96, mid);
+                    const labelRotation = mid > 90 && mid < 270 ? mid + 180 : mid;
+                    return (
+                      <g key={`${option.label}-${index}`}>
+                        <path
+                          d={wheelSlicePath(index, wheelRewards.length)}
+                          fill={wheelColors[index % wheelColors.length]}
+                          stroke="rgba(255,255,255,.24)"
+                          strokeWidth="2"
+                        />
+                        <text
+                          x={labelPoint.x}
+                          y={labelPoint.y}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          transform={`rotate(${labelRotation}, ${labelPoint.x}, ${labelPoint.y})`}
+                          className="fill-white text-[14px] font-black"
+                          style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,.18)', strokeWidth: 2 }}
+                        >
+                          {option.label}
+                        </text>
+                      </g>
+                    );
+                  })}
+                  <circle cx="150" cy="150" r="45" fill="#141b26" stroke="rgba(255,255,255,.2)" strokeWidth="5" />
+                  <circle cx="150" cy="150" r="34" fill="#f7f8f4" />
+                  <text x="150" y="151" textAnchor="middle" dominantBaseline="middle" className="fill-[#121417] text-[12px] font-black">
+                    {wheelResult === null ? 'SPIN' : !wheelRevealed ? '...' : wheelResult > 0 ? `+${wheelResult}` : String(wheelResult)}
+                  </text>
+                </svg>
+              </div>
             </div>
-            <button
-              onClick={wheel}
-              disabled={!!busy || !wheelAvailable}
-              className="btn-special mt-5 w-full rounded-md px-4 py-3 text-sm font-bold disabled:opacity-50"
-            >
-              {busy === 'wheel' ? 'Spinning slowly...' : wheelAvailable ? 'Spin today' : 'Already spun today'}
-            </button>
+            <div className="border-t border-white/10 bg-white/[0.04] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
+              <div className="mb-3 flex items-center justify-between text-xs text-white/45">
+                <span>Possible result</span>
+                <span>-80 to +400</span>
+              </div>
+              <button
+                onClick={wheel}
+                disabled={!!busy || !wheelAvailable}
+                className="w-full rounded-xl bg-white px-4 py-3.5 text-sm font-black text-ink shadow-lift transition enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-40"
+              >
+                {busy === 'wheel' ? 'Spinning...' : wheelAvailable ? 'Spin the wheel' : 'Wheel is cooling down'}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -464,6 +682,26 @@ export function MinigamesPage() {
             </button>
           </div>
         </div>
+      ) : null}
+
+      {showPlane && profile ? (
+        <PlaneGame
+          coins={profile.coinBalance}
+          stakes={[50, 100, 250, 500]}
+          onCharge={async (s) => { await chargePlaneStake(profile, s); return true; }}
+          onWin={async (p) => awardPlaneWin(profile, p)}
+          onClose={() => setShowPlane(false)}
+        />
+      ) : null}
+
+      {showMines && profile ? (
+        <MinesGame
+          coins={profile.coinBalance}
+          stakes={[50, 100, 250, 500]}
+          onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
+          onWin={async (p) => awardMinigameWin(profile, p)}
+          onClose={() => setShowMines(false)}
+        />
       ) : null}
     </>
   );

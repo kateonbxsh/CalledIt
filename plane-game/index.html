@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Sky Landing — Angle Launch</title>
+<style>
+  :root { --ink:#163d31; --mint:#2f7d63; --coral:#d8534f; --gold:#f2c879; --panel:#f7f5ee; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; font-family:'Segoe UI',system-ui,sans-serif; background:#8ecae6; }
+  #wrap { position:relative; width:100vw; height:100vh; touch-action:none; }
+  canvas { display:block; width:100%; height:100%; }
+
+  .hud { position:absolute; top:0; left:0; right:0; padding:12px 14px; display:flex; gap:10px;
+    align-items:flex-start; justify-content:space-between; pointer-events:none; font-weight:800; color:var(--ink); }
+  .chip { background:rgba(247,245,238,0.92); border-radius:12px; padding:8px 12px; box-shadow:0 4px 14px rgba(0,0,0,0.12); line-height:1.1; }
+  .chip small { display:block; font-size:10px; font-weight:700; color:#5b6b63; letter-spacing:.04em; text-transform:uppercase; }
+  .chip b { font-size:18px; }
+  .mult { text-align:center; } .mult b { font-size:28px; color:var(--mint); }
+
+  /* bottom aim panel */
+  .panel { position:absolute; left:0; right:0; bottom:0; padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg, rgba(247,245,238,0) 0%, rgba(247,245,238,0.95) 35%);
+    display:flex; flex-direction:column; gap:10px; }
+  .panel.hidden { display:none; }
+  .row { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; }
+  .bet-btn { border:2px solid #d8d3c4; background:#fff; color:var(--ink); border-radius:11px; padding:8px 0; width:70px; font-weight:800; font-size:15px; cursor:pointer; }
+  .bet-btn.active { border-color:var(--mint); background:rgba(47,125,99,0.12); color:var(--mint); }
+  .bet-btn:disabled { opacity:.4; }
+  .anglewrap { display:flex; align-items:center; gap:10px; width:min(440px,94vw); }
+  .anglewrap input[type=range] { flex:1; height:32px; accent-color:var(--mint); cursor:pointer; }
+  .angleval { font-weight:900; color:var(--ink); width:54px; text-align:right; }
+  .launch { width:min(440px,94vw); border:none; border-radius:14px; padding:15px; font-size:18px; font-weight:900; color:#fff;
+    background:var(--mint); cursor:pointer; box-shadow:0 8px 20px rgba(47,125,99,0.4); }
+  .launch:active { transform:scale(.98); } .launch:disabled { opacity:.45; }
+  .tip { text-align:center; font-size:12px; font-weight:700; color:#5b6b63; }
+
+  .overlay { position:absolute; inset:0; display:grid; place-items:center; padding:18px; background:rgba(22,61,49,0.34); backdrop-filter:blur(3px); }
+  .overlay.hidden { display:none; }
+  .card { width:min(420px,92vw); background:var(--panel); border-radius:20px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,0.3); text-align:center; animation:pop .25s ease; }
+  @keyframes pop { from{transform:scale(.92);opacity:0} to{transform:scale(1);opacity:1} }
+  .card h1 { margin:0 0 4px; font-size:24px; color:var(--ink); }
+  .card p { margin:6px 0 14px; color:#4a5a52; font-size:14px; line-height:1.5; }
+  .result-amt { font-size:40px; font-weight:900; margin:6px 0; }
+  .win { color:var(--mint); } .loss { color:var(--coral); }
+  .play { margin-top:8px; width:100%; border:none; border-radius:14px; padding:15px; font-size:17px; font-weight:900; color:#fff; background:var(--ink); cursor:pointer; }
+  .play:active { transform:scale(.97); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <div class="chip"><small>Credits</small><b id="hudCredits">1000</b></div>
+    <div class="chip mult"><small>Multiplier</small><b id="hudMult">1.00×</b></div>
+    <div class="chip" style="text-align:right"><small>Bet</small><b id="hudBet">100</b></div>
+  </div>
+
+  <!-- Aim / launch panel -->
+  <div class="panel" id="aimPanel">
+    <div class="tip" id="tip">Drag the sky to aim ✈️ — the dotted line shows the glide. Then Launch.</div>
+    <div class="row" id="betButtons"></div>
+    <div class="row">
+      <div class="anglewrap">
+        <span style="font-weight:800;color:#5b6b63">Angle</span>
+        <input type="range" id="angle" min="20" max="80" value="50" />
+        <span class="angleval" id="angleVal">48°</span>
+      </div>
+    </div>
+    <div class="row"><button class="launch" id="launchBtn">Launch ✈️</button></div>
+  </div>
+
+  <!-- Result -->
+  <div class="overlay hidden" id="resultOverlay">
+    <div class="card">
+      <h1 id="resultTitle">Landed!</h1>
+      <div class="result-amt" id="resultAmt">+0</div>
+      <p id="resultSub"></p>
+      <button class="play" id="againBtn">Play again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Assets ----------
+  const SRC = {
+    plane1:'assets/plane1.png', plane2:'assets/plane2.png', plane3:'assets/plane3.png',
+    sky:'assets/sky.png', puff:'assets/puff.png', star:'assets/star.png',
+    missile:'assets/missile.svg', boatSmall:'assets/boat-small.svg', boatLarge:'assets/boat-large.svg', boatLong:'assets/boat-long.svg',
+  };
+  const IMG = {};
+  Object.keys(SRC).forEach((k) => { const im=new Image(); im.src=SRC[k]; IMG[k]=im; });
+
+  // ---------- Canvas ----------
+  const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+  let W=0,H=0,DPR=1,waterLine=0,launchX=0,launchY=0;
+  function resize(){
+    DPR=Math.min(window.devicePixelRatio||1,2); W=innerWidth; H=innerHeight;
+    canvas.width=Math.floor(W*DPR); canvas.height=Math.floor(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    waterLine=H*0.78; launchX=0; launchY=H*0.34; // launch high so the glider can sail far while sinking slowly
+  }
+  addEventListener('resize',resize); resize();
+
+  // ---------- Tuning ----------
+  const V0=480;
+  // Glider physics: weak gravity + vertical drag => the plane eases into a gentle,
+  // near-constant slow sink (terminal ≈ GRAV/VDRAG) instead of dropping like a rock.
+  // Very light horizontal drag keeps its speed so it sails a long way across the sky.
+  const GRAV=120, VDRAG=1.8, HDRAG=0.015, DECEL=230, MAXVY=260;
+  const ANGLE_MIN=20, ANGLE_MAX=80;
+  const CAM_OFF=0.22;          // plane sits at 22% of screen width
+  const MULT_K=0.46, MULT_SCALE=520, STAR_MULT=0.06;
+  const STAR_BOOST=230, MISSILE_PUSH=230;
+  const FIRST_BOAT=340;        // world px to first boat (kept reachable on any screen)
+
+  // One glide step, shared by the live sim and the aim preview so they match.
+  function stepGlide(o, dt){
+    o.vy += GRAV*dt;
+    o.vy *= Math.max(0, 1 - VDRAG*dt);
+    o.vy = Math.min(MAXVY, o.vy);
+    o.vx *= Math.max(0, 1 - HDRAG*dt);
+    o.wx += o.vx*dt;
+    o.y += o.vy*dt;
+  }
+
+  // ---------- State ----------
+  const SAVE='skylanding_credits';
+  let credits=Number(localStorage.getItem(SAVE));
+  if(!Number.isFinite(credits)||credits<=0) credits=1000;
+  const BETS=[50,100,250,500];
+  let bet=100, angleDeg=50;
+  let state='aim';               // aim | flying | landing | falling | over
+  let mult=1, stars=0, camX=0;
+  const plane={wx:0,y:0,vx:0,vy:0,w:80,h:66,frame:0,frameT:0,ang:0};
+  let boatsArr=[], missilesArr=[], starsArr=[], puffs=[], pops=[];
+  let nextStarX=0,nextMissileX=0,nextBoatX=0,landBoat=null;
+
+  // ---------- DOM ----------
+  const el=(id)=>document.getElementById(id);
+  const hudCredits=el('hudCredits'),hudMult=el('hudMult'),hudBet=el('hudBet');
+  const aimPanel=el('aimPanel'),resultOverlay=el('resultOverlay'),angleInput=el('angle'),angleVal=el('angleVal');
+
+  function renderBetButtons(){
+    const box=el('betButtons'); box.innerHTML='';
+    BETS.forEach((b)=>{ const btn=document.createElement('button');
+      btn.className='bet-btn'+(b===bet?' active':''); btn.textContent=b; btn.disabled=b>credits;
+      btn.onclick=()=>{ bet=b; renderBetButtons(); syncHud(); }; box.appendChild(btn); });
+  }
+  function syncHud(){ hudCredits.textContent=Math.round(credits); hudBet.textContent=bet; hudMult.textContent=mult.toFixed(2)+'×'; }
+
+  // ---------- Audio ----------
+  let actx=null;
+  function beep(f,d,t='sine',v=0.05){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(),g=actx.createGain(); o.type=t; o.frequency.value=f; g.gain.value=v;
+    o.connect(g); g.connect(actx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+d); o.stop(actx.currentTime+d);}catch(e){} }
+
+  // ---------- Helpers ----------
+  const sx=(wx)=>wx-camX;
+  function boatDeckY(b){ const top=waterLine-b.h*0.62; return top+b.h*b.deckFrac; }
+  function curMult(){ const dist=Math.max(0,plane.wx-launchX); return 1 + MULT_K*Math.log(1+dist/MULT_SCALE) + stars*STAR_MULT; }
+
+  // ---------- Spawning (a busy sky: lots of powerups & missiles) ----------
+  function spawnAhead(){
+    const frontier=camX+W*1.9;
+    while(nextStarX<frontier){
+      starsArr.push({wx:nextStarX, y:H*0.14+Math.random()*(waterLine-H*0.14-120), w:38, t:Math.random()*6, got:false});
+      nextStarX += 150+Math.random()*150;
+    }
+    while(nextMissileX<frontier){
+      missilesArr.push({wx:nextMissileX, y:H*0.14+Math.random()*(waterLine-H*0.14-70), w:58, vx:-(70+Math.random()*120), hit:false});
+      nextMissileX += 130+Math.random()*150;
+    }
+    while(nextBoatX<frontier){
+      const r=Math.random(); let w,h,deckFrac,img;
+      if(r<0.12){ w=460; h=w*(150/460); deckFrac=0.52; img=IMG.boatLong; }      // rare long ship
+      else if(r<0.56){ w=330; h=w*(140/300); deckFrac=0.50; img=IMG.boatLarge; }
+      else { w=250; h=w*(120/200); deckFrac=0.47; img=IMG.boatSmall; }
+      boatsArr.push({wx:nextBoatX, w, h, deckFrac, img});
+      nextBoatX += w + (60+Math.random()*170);
+    }
+  }
+  function spawnPops(x,y,color,n){ for(let i=0;i<n;i++){ const a=Math.random()*6.28,s=40+Math.random()*170;
+    pops.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.5+Math.random()*.4,t:0,color,r:2+Math.random()*3}); } }
+
+  // ---------- Round flow ----------
+  function launch(){
+    if(bet>credits) return;
+    credits-=bet; mult=1; stars=0;
+    plane.wx=launchX; plane.y=launchY; plane.ang=0; plane.frame=0;
+    const a=angleDeg*Math.PI/180; plane.vx=V0*Math.cos(a); plane.vy=-V0*Math.sin(a);
+    boatsArr=[]; missilesArr=[]; starsArr=[]; puffs=[]; pops=[]; landBoat=null;
+    camX=plane.wx-W*CAM_OFF;
+    nextStarX=launchX+300; nextMissileX=launchX+360; nextBoatX=launchX+FIRST_BOAT;
+    spawnAhead();
+    state='flying';
+    aimPanel.classList.add('hidden'); resultOverlay.classList.add('hidden');
+    syncHud();
+  }
+  function endRound(win,title,sub,cls){
+    state='over'; credits=Math.max(0,credits); localStorage.setItem(SAVE,String(Math.round(credits)));
+    el('resultTitle').textContent=title;
+    const amt=el('resultAmt'); amt.textContent=(win>=0?'+':'')+Math.round(win); amt.className='result-amt '+cls;
+    el('resultSub').textContent=sub;
+    el('againBtn').textContent=credits<BETS[0]?'Reset & play':'Play again';
+    resultOverlay.classList.remove('hidden'); syncHud();
+  }
+  function cashOut(){ const win=bet*mult; credits+=win; spawnPops(sx(plane.wx),plane.y,'#2f7d63',16);
+    beep(660,.12); setTimeout(()=>beep(880,.16),90);
+    endRound(win,'🛬 Landed! '+mult.toFixed(2)+'×','Stopped safely on the deck. +'+Math.round(win)+' credits ('+stars+' ⭐).','win'); }
+  function lose(reason){ spawnPops(sx(plane.wx),plane.y,'#d8534f',18); beep(170,.3,'sawtooth',.07);
+    endRound(-bet,'💥 Crashed',reason+' Lost your '+bet+' bet.','loss'); }
+
+  // ---------- Update ----------
+  function update(dt){
+    plane.frameT+=dt; if(plane.frameT>0.05){ plane.frame=(plane.frame+1)%3; plane.frameT=0; }
+    puffs.forEach(p=>p.t+=dt); pops.forEach(p=>{p.t+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=220*dt;});
+    puffs=puffs.filter(p=>p.t<p.life); pops=pops.filter(p=>p.t<p.life);
+
+    if(state==='flying'){
+      // gentle glide — no player control after launch
+      stepGlide(plane, dt);
+      plane.ang=Math.atan2(plane.vy,plane.vx)*0.6; // ease the nose; gliders sit flatter
+      mult=curMult(); syncHud();
+      camX=plane.wx-W*CAM_OFF;
+      if(plane.y<H*0.05){ plane.y=H*0.05; if(plane.vy<0) plane.vy=0; }
+
+      // engine trail
+      if(Math.random()<0.6) puffs.push({x:sx(plane.wx)-Math.cos(plane.ang)*plane.w*0.45, y:plane.y-Math.sin(plane.ang)*plane.w*0.45, t:0, life:.55, s:10+Math.random()*8});
+
+      missilesArr.forEach(m=>{ m.wx+=m.vx*dt; if(Math.random()<0.7) puffs.push({x:sx(m.wx)+22,y:m.y,t:0,life:.4,s:8+Math.random()*6}); });
+      starsArr.forEach(s=>s.t+=dt);
+      spawnAhead();
+      // cull behind camera
+      missilesArr=missilesArr.filter(m=>m.wx>camX-80 && !m.hit);
+      starsArr=starsArr.filter(s=>s.wx>camX-80 && !s.got);
+      boatsArr=boatsArr.filter(b=>b.wx+b.w>camX-40);
+
+      const pr=plane.h*0.40;
+      // powerups: bump up + small multiplier
+      for(const s of starsArr){ if(s.got) continue;
+        if(Math.hypot(plane.wx-s.wx,plane.y-s.y)<pr+s.w*0.45){ s.got=true; stars++; mult=curMult();
+          plane.vy-=STAR_BOOST; if(plane.vy<-V0) plane.vy=-V0; spawnPops(sx(s.wx),s.y,'#ffd23f',10); beep(990,.1,'triangle',.05); } }
+      // missiles: bump down
+      for(const m of missilesArr){ if(m.hit) continue;
+        if(Math.hypot(plane.wx-m.wx,plane.y-m.y)<pr+m.w*0.34){ m.hit=true; plane.vy+=MISSILE_PUSH;
+          spawnPops(sx(m.wx),m.y,'#d8534f',8); beep(300,.12,'square',.05); } }
+      missilesArr=missilesArr.filter(m=>!m.hit);
+
+      // landing onto a deck (must be descending onto the top surface)
+      const planeBottom=plane.y+plane.h*0.34;
+      for(const b of boatsArr){
+        const deckY=boatDeckY(b), left=b.wx+b.w*0.08, right=b.wx+b.w*0.92;
+        if(plane.wx>left && plane.wx<right && plane.vy>=0 && planeBottom>=deckY-14 && planeBottom<=deckY+26){
+          landBoat=b; plane.y=deckY-plane.h*0.34; plane.vy=0; state='landing'; beep(520,.08); break;
+        }
+      }
+      if(state==='flying' && planeBottom>=waterLine+4) lose('You ditched into the sea!');
+    }
+    else if(state==='landing'){
+      // slide & brake along the deck; camera frozen so we watch it stop (or overshoot)
+      plane.vx-=DECEL*dt; if(plane.vx<0) plane.vx=0;
+      plane.wx+=plane.vx*dt;
+      plane.ang+=(0-plane.ang)*Math.min(1,dt*10);
+      plane.y=boatDeckY(landBoat)-plane.h*0.34;
+      const noseRight=plane.wx+plane.w*0.30, deckRight=landBoat.wx+landBoat.w*0.92;
+      if(noseRight>deckRight){ state='falling'; plane.vy=20; beep(260,.18,'sawtooth',.05); }   // ran off the edge
+      else if(plane.vx<=4){ cashOut(); }
+    }
+    else if(state==='falling'){
+      plane.vy+=GRAV*dt; plane.wx+=plane.vx*dt; plane.y+=plane.vy*dt;
+      plane.ang+=(1.2-plane.ang)*Math.min(1,dt*4);
+      if(plane.y+plane.h*0.34>=waterLine+4) lose('Slid off the edge and into the sea!');
+    }
+  }
+
+  // ---------- Draw ----------
+  function drawBackground(){
+    const g=ctx.createLinearGradient(0,0,0,waterLine); g.addColorStop(0,'#bfe6f3'); g.addColorStop(1,'#e8f6fb');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,waterLine);
+    if(IMG.sky.width){ const cw=820, ch=cw*(IMG.sky.height/IMG.sky.width), y=waterLine*0.26;
+      let off=-(((camX*0.3)%cw)+cw)%cw; for(let x=off-cw;x<W+cw;x+=cw) ctx.drawImage(IMG.sky,x,y,cw,ch); }
+    drawWater();
+  }
+  function drawWater(){
+    const g=ctx.createLinearGradient(0,waterLine,0,H); g.addColorStop(0,'#3fa3c7'); g.addColorStop(1,'#1f6f97');
+    ctx.fillStyle=g; ctx.fillRect(0,waterLine,W,H-waterLine);
+    const t=performance.now()/1000;
+    for(let layer=0;layer<2;layer++){ ctx.beginPath(); ctx.moveTo(0,waterLine);
+      const amp=layer?5:8,len=layer?70:120,sp=layer?1.4:0.8,yo=layer?2:8;
+      for(let x=0;x<=W;x+=8){ ctx.lineTo(x, waterLine+yo+Math.sin((x/len)+t*sp+layer+camX*0.002)*amp); }
+      ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+      ctx.fillStyle=layer?'rgba(255,255,255,0.10)':'rgba(255,255,255,0.16)'; ctx.fill(); }
+  }
+  function drawLauncher(){
+    const x=sx(launchX);
+    // compact launch ramp/cloud platform
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.ellipse(x, launchY+18, 52, 16, 0, 0, 6.28); ctx.fill();
+    ctx.fillStyle='#9aa760'; roundRect(x-40, launchY+4, 80, 12, 5); ctx.fill();
+    ctx.fillStyle='#7e8b80'; roundRect(x-40, launchY-2, 80, 8, 4); ctx.fill();
+  }
+  function drawBoats(){
+    for(const b of boatsArr){ const x=sx(b.wx), y=waterLine-b.h*0.62;
+      if(x>W+40||x+b.w<-40) continue;
+      if(b.img.width) ctx.drawImage(b.img,x,y,b.w,b.h);
+      const deckY=y+b.h*b.deckFrac;
+      ctx.save(); ctx.fillStyle='rgba(22,61,49,0.82)'; const label='DECK';
+      ctx.font='800 12px Segoe UI'; const tw=ctx.measureText(label).width+14;
+      roundRect(x+b.w/2-tw/2,deckY-28,tw,18,8); ctx.fill();
+      ctx.fillStyle='#f2c879'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(label,x+b.w/2,deckY-19); ctx.restore(); }
+  }
+  function drawStars(){ for(const s of starsArr){ if(s.got) continue; const x=sx(s.wx); if(x<-40||x>W+40) continue;
+    const bob=Math.sin(s.t*3)*4, sc=1+Math.sin(s.t*5)*0.06;
+    if(IMG.star.width) ctx.drawImage(IMG.star,x-s.w*sc/2,s.y+bob-s.w*sc/2,s.w*sc,s.w*sc); } }
+  function drawMissiles(){ for(const m of missilesArr){ const x=sx(m.wx); if(x<-60||x>W+60) continue;
+    const mw=m.w, mh=m.w*0.5; // svg is 120x56 (~2:1) and already points left
+    if(IMG.missile.width) ctx.drawImage(IMG.missile, x-mw/2, m.y-mh/2, mw, mh); } }
+  function drawPuffs(){ for(const p of puffs){ ctx.globalAlpha=(1-p.t/p.life)*0.5;
+    if(IMG.puff.width) ctx.drawImage(IMG.puff,p.x-p.s/2,p.y-p.s/2,p.s,p.s); } ctx.globalAlpha=1; }
+  function drawPops(){ for(const p of pops){ ctx.globalAlpha=Math.max(0,1-p.t/p.life); ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.28); ctx.fill(); } ctx.globalAlpha=1; }
+  function drawPlane(){
+    const f=IMG['plane'+(plane.frame+1)]; ctx.save(); ctx.translate(sx(plane.wx),plane.y); ctx.rotate(plane.ang);
+    if(f&&f.width) ctx.drawImage(f,-plane.w/2,-plane.h/2,plane.w,plane.h); ctx.restore();
+  }
+  function drawAimPreview(){
+    const a=angleDeg*Math.PI/180;
+    // trace the actual gliding path with fading dots (matches real flight)
+    const o={wx:launchX, y:launchY, vx:V0*Math.cos(a), vy:-V0*Math.sin(a)};
+    ctx.save(); let drawn=0;
+    for(let i=0;i<500;i++){ stepGlide(o,0.05);
+      if(o.y>waterLine) break; const X=sx(o.wx); if(X>W+30) break;
+      if(i%2===0){ const al=Math.max(0.10, 0.72 - drawn*0.010); const r=Math.max(2, 5 - drawn*0.05);
+        ctx.fillStyle='rgba(22,61,49,'+al+')'; ctx.beginPath(); ctx.arc(X,o.y,r,0,6.28); ctx.fill(); drawn++; } }
+    ctx.restore();
+  }
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    drawBackground();
+    drawLauncher();
+    drawBoats(); drawStars(); drawPuffs(); drawMissiles();
+    if(state==='aim') drawAimPreview();
+    drawPlane(); drawPops();
+    if(state==='flying'){ ctx.save(); ctx.textAlign='center'; ctx.font='900 56px Segoe UI';
+      ctx.fillStyle='rgba(47,125,99,0.26)'; ctx.fillText(mult.toFixed(2)+'×',W/2,H*0.24); ctx.restore(); }
+  }
+
+  // ---------- Loop ----------
+  let last=performance.now();
+  function loop(now){ let dt=(now-last)/1000; last=now; if(dt>0.05) dt=0.05; update(dt); draw(); requestAnimationFrame(loop); }
+  // set aim camera before first frame
+  plane.wx=launchX; plane.y=launchY; camX=launchX-W*CAM_OFF;
+  requestAnimationFrame(loop);
+
+  // ---------- Input ----------
+  // Grab anywhere in the sky and slide up/down to set the angle (relative drag —
+  // works the same wherever you touch, which is the most thumb-friendly on mobile).
+  let aiming=false, aimStartY=0, aimStartAngle=45;
+  function setAngle(a){ angleDeg=Math.round(Math.max(ANGLE_MIN,Math.min(ANGLE_MAX,a)));
+    angleInput.value=angleDeg; angleVal.textContent=angleDeg+'°'; }
+  canvas.addEventListener('pointerdown',(e)=>{ if(state==='aim'){ aiming=true; aimStartY=e.clientY; aimStartAngle=angleDeg; canvas.setPointerCapture?.(e.pointerId); } });
+  canvas.addEventListener('pointermove',(e)=>{ if(aiming&&state==='aim'){ setAngle(aimStartAngle + (aimStartY-e.clientY)*0.35); e.preventDefault(); } });
+  addEventListener('pointerup',()=>{ aiming=false; });
+
+  angleInput.addEventListener('input',()=>{ angleDeg=Number(angleInput.value); angleVal.textContent=angleDeg+'°'; });
+  el('launchBtn').onclick=launch;
+  el('againBtn').onclick=()=>{
+    if(credits<BETS[0]){ credits=1000; localStorage.setItem(SAVE,'1000'); }
+    if(bet>credits) bet=BETS[0];
+    resultOverlay.classList.add('hidden'); aimPanel.classList.remove('hidden');
+    state='aim'; plane.wx=launchX; plane.y=launchY; plane.ang=0; plane.vx=0; plane.vy=0; mult=1; stars=0;
+    // clear the previous round's powerups, missiles and effects
+    boatsArr=[]; missilesArr=[]; starsArr=[]; puffs=[]; pops=[]; landBoat=null;
+    camX=launchX-W*CAM_OFF; renderBetButtons(); syncHud();
+  };
+
+  angleVal.textContent=angleDeg+'°'; renderBetButtons(); syncHud();
+})();
+</script>
+</body>
+</html>

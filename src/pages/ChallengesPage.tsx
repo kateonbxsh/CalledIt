@@ -332,13 +332,27 @@ export function ChallengesPage() {
                 return (
                   <article key={activity.id} className="rounded-md border border-line bg-white p-4 shadow-soft">
                     <div className="relative mb-2">
-                      {/* Group badge aligned to far right */}
-                      {activity.groupId && groups.find(g => g.id === activity.groupId) && (
-                        <div className="absolute right-0 top-0 flex items-center gap-1.5 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/60">
-                          <Users size={12} />
-                          {groups.find(g => g.id === activity.groupId)?.name}
-                        </div>
-                      )}
+                      {/* Group badge + compact edit, aligned to far right */}
+                      <div className="absolute right-0 top-0 flex items-center gap-1.5">
+                        {activity.groupId && groups.find(g => g.id === activity.groupId) && (
+                          <div className="flex items-center gap-1.5 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/60">
+                            <Users size={12} />
+                            {groups.find(g => g.id === activity.groupId)?.name}
+                          </div>
+                        )}
+                        {canEditCompletion ? (
+                          <button
+                            type="button"
+                            onClick={() => openEdit(activity)}
+                            disabled={!!busy}
+                            aria-label="Edit completion"
+                            title="Edit completion"
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink/45 transition hover:bg-field hover:text-ink disabled:opacity-50"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        ) : null}
+                      </div>
                       {/* Left side badges and info */}
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-40">
                         <Link to={`/profile/${actorId}`} className="text-xs font-semibold text-ink/45 hover:text-ink hover:underline">
@@ -431,15 +445,6 @@ export function ChallengesPage() {
                           className="mt-3 inline-flex items-center gap-2 rounded-md border border-coral/30 px-4 py-2 text-sm font-bold text-coral disabled:opacity-50"
                         >
                           <XCircle size={16} /> Claim stake + 50%
-                        </button>
-                      ) : null}
-                      {canEditCompletion ? (
-                        <button
-                          onClick={() => openEdit(activity)}
-                          disabled={!!busy}
-                          className="mt-3 inline-flex items-center gap-2 rounded-md border border-line px-4 py-2 text-sm font-bold text-ink/70 transition hover:bg-field disabled:opacity-50"
-                        >
-                          <Pencil size={15} /> Edit completion
                         </button>
                       ) : null}
                     </div>

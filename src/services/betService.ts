@@ -28,6 +28,7 @@ import type {
   PredictionInput,
   UpdateBetMetadataInput,
   UserProfile,
+  UserStats,
 } from '../types';
 import {
   calculatePredictionChangeFee,
@@ -645,9 +646,163 @@ export async function lockExpiredBet(bet: Bet) {
   });
 }
 
+type CoinPayout = {
+  userId: string;
+  predictionId: string;
+  coinDelta: number;
+  isWinner: boolean;
+  stake: number;
+  poolProfit?: number;
+  mintedReward?: number;
+  timingMultiplier?: number;
+};
+
+type ResolutionComputation = {
+  closest: boolean;
+  winnerPredictionIds: string[];
+  coinPayouts: CoinPayout[];
+  scoreBonusResult: ScoreBonusResult;
+  finalResolution: BetResolution;
+};
+
+// Pure: given the (fresh) bet, its predictions and a chosen resolution, work out
+// the winners, per-prediction coin payouts and the canonical resolution object.
+// Shared by both the initial resolve and the amend so the two can never diverge.
+function computeResolutionOutcome(freshBet: Bet, predictions: Prediction[], resolution: BetResolution): ResolutionComputation {
+  const closest = isClosestType(freshBet.type);
+  let winnerPredictionIds: string[] = [];
+  let coinPayouts: CoinPayout[];
+  let scoreBonusResult: ScoreBonusResult = { bonusPool: 0, winners: [] };
+
+  if (closest) {
+    if (freshBet.type === 'closestNumber' && resolution.actualValue !== undefined) {
+      winnerPredictionIds = resolveClosestNumber(predictions, resolution.actualValue).winnerPredictionIds;
+    } else if (freshBet.type === 'closestDate' && resolution.actualDateValue) {
+      winnerPredictionIds = resolveClosestDate(predictions, resolution.actualDateValue).winnerPredictionIds;
+    }
+    coinPayouts = calculateClosestPayouts(predictions, winnerPredictionIds);
+  } else {
+    const winnerIds = winningOptionIds(resolution);
+    if (winnerIds.length === 0) throw new Error('Choose at least one winning option.');
+    if (
+      freshBet.type === 'sports' &&
+      resolution.actualHomeScore !== undefined &&
+      resolution.actualAwayScore !== undefined
+    ) {
+      const scoreError = scoreConsistencyError(winnerIds[0] ?? '', resolution.actualHomeScore, resolution.actualAwayScore);
+      if (scoreError) throw new Error(scoreError);
+    }
+    const primaryWinnerId = winnerIds[0] ?? '';
+    const losingStakeTotal = predictions
+      .filter((p) => !predictionOptionIds(p).some((id) => winnerIds.includes(id)))
+      .reduce((sum, p) => sum + p.stake, 0);
+
+    scoreBonusResult = freshBet.type === 'sports'
+      ? calculateSportsScoreBonus({
+          predictions,
+          winningOptionId: primaryWinnerId,
+          actualHomeScore: resolution.actualHomeScore,
+          actualAwayScore: resolution.actualAwayScore,
+          losingStakeTotal,
+        })
+      : { bonusPool: 0, winners: [] };
+
+    coinPayouts = calculatePredictionRewards({
+      predictions,
+      winningOptionId: winnerIds,
+      bonusPool: scoreBonusResult.bonusPool,
+      betCreatedAtMs: freshBet.createdAt?.toMillis?.(),
+      deadlineMs: freshBet.deadline?.toMillis?.() ?? null,
+      resolvedAtMs: Timestamp.now().toMillis(),
+    }).map((p) => ({
+      userId: p.userId,
+      predictionId: p.predictionId,
+      coinDelta: p.coinDelta + (scoreBonusResult.winners.find((w) => w.predictionId === p.predictionId)?.coinBonus ?? 0),
+      isWinner: p.isWinner,
+      stake: p.stake,
+      poolProfit: p.poolProfit,
+      mintedReward: p.mintedReward,
+      timingMultiplier: p.timingMultiplier,
+    }));
+  }
+
+  const finalResolution: BetResolution = { ...resolution };
+  if (closest) {
+    finalResolution.winnerPredictionIds = winnerPredictionIds;
+  } else {
+    const winnerIds = winningOptionIds(resolution);
+    finalResolution.winningOptionId = winnerIds[0] ?? resolution.winningOptionId;
+    finalResolution.winningOptionIds = winnerIds;
+  }
+  return { closest, winnerPredictionIds, coinPayouts, scoreBonusResult, finalResolution };
+}
+
+type PredictionOutcome = {
+  correct: boolean;
+  ratingDelta: number;
+  nextRating: number;
+  grossCoinDelta: number;
+  netCoinDelta: number;
+  totalSpicyBonus: number;
+  payout?: CoinPayout;
+  winningOptionIdStr: string;
+};
+
+// Pure: the per-predictor result, given the user's *current* rating and pending
+// spicy forecasts. `currentRating`/`pendingSpicyForecasts` are passed in so the
+// amend can supply the pre-resolution (restored) values instead of live ones.
+function computePredictionOutcome(params: {
+  prediction: Prediction;
+  computation: ResolutionComputation;
+  currentRating: number;
+  pendingSpicyForecasts: Array<{ bonus: number; claimedAt: Timestamp }>;
+}): PredictionOutcome {
+  const { prediction, computation, currentRating } = params;
+  const { closest, winnerPredictionIds, coinPayouts, scoreBonusResult, finalResolution } = computation;
+  const correct = closest
+    ? winnerPredictionIds.includes(prediction.id)
+    : predictionOptionIds(prediction).some((id) => winningOptionIds(finalResolution).includes(id));
+  const scoreBonus = scoreBonusResult.winners.find((w) => w.predictionId === prediction.id);
+  const payout = coinPayouts.find((p) => p.predictionId === prediction.id);
+  const totalSpicyBonus = correct ? params.pendingSpicyForecasts.reduce((sum, b) => sum + b.bonus, 0) : 0;
+  const ratingDelta = calculateRatingDelta({
+    displayedChanceAtBetTime: prediction.displayedChanceAtBetTime,
+    correct,
+    stake: prediction.stake,
+    userCoinBalanceAtBetTime: prediction.userBalanceAtBetTime,
+    currentRating,
+    timingMultiplier: payout?.timingMultiplier,
+    revisionCount: prediction.revisionCount ?? 0,
+  }) + (scoreBonus?.ratingBonus ?? 0);
+  const nextRating = applyRatingDelta(currentRating, ratingDelta);
+  const grossCoinDelta = (payout?.coinDelta ?? 0) + totalSpicyBonus;
+  const netCoinDelta = correct ? grossCoinDelta - prediction.stake : -prediction.stake;
+  const winningOptionIdStr = closest
+    ? (finalResolution.actualValue?.toString() ?? finalResolution.actualDateValue ?? '')
+    : (winningOptionIds(finalResolution)[0] ?? '');
+  return { correct, ratingDelta, nextRating, grossCoinDelta, netCoinDelta, totalSpicyBonus, payout, winningOptionIdStr };
+}
+
+// Inverse of buildStatsAfterResolution for one prediction, used when amending a
+// resolution. bestUpsetWin can't be recovered from a single record, so it is
+// left untouched (a harmless slight over-estimate at worst).
+function reverseStatsResolution(stats: UserStats, params: { correct: boolean; coinsDelta: number }): UserStats {
+  const totalBets = Math.max(0, stats.totalBets - 1);
+  const wins = Math.max(0, stats.wins - (params.correct ? 1 : 0));
+  const losses = Math.max(0, stats.losses - (params.correct ? 0 : 1));
+  return {
+    ...stats,
+    totalBets,
+    wins,
+    losses,
+    accuracy: totalBets > 0 ? Math.round((wins / totalBets) * 100) : 0,
+    coinsWon: Math.max(0, stats.coinsWon - Math.max(0, params.coinsDelta)),
+    coinsLost: Math.max(0, stats.coinsLost - Math.max(0, -params.coinsDelta)),
+  };
+}
+
 export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUid: string) {
   const betRef = doc(db, 'bets', bet.id);
-  const closest = isClosestType(bet.type);
   const predictionSnap = await getDocs(
     query(collection(db, 'predictions'), where('betId', '==', bet.id)),
   );
@@ -701,83 +856,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
     }
 
     // --- Determine winners and payouts ---
-    let winnerPredictionIds: string[] = [];
-    let coinPayouts: Array<{
-      userId: string;
-      predictionId: string;
-      coinDelta: number;
-      isWinner: boolean;
-      stake: number;
-      poolProfit?: number;
-      mintedReward?: number;
-      timingMultiplier?: number;
-    }>;
-    let scoreBonusResult: ScoreBonusResult = { bonusPool: 0, winners: [] };
-
-    if (closest) {
-      if (bet.type === 'closestNumber' && resolution.actualValue !== undefined) {
-        winnerPredictionIds = resolveClosestNumber(predictions, resolution.actualValue).winnerPredictionIds;
-      } else if (bet.type === 'closestDate' && resolution.actualDateValue) {
-        winnerPredictionIds = resolveClosestDate(predictions, resolution.actualDateValue).winnerPredictionIds;
-      }
-      coinPayouts = calculateClosestPayouts(predictions, winnerPredictionIds);
-    } else {
-      const winnerIds = winningOptionIds(resolution);
-      if (winnerIds.length === 0) throw new Error('Choose at least one winning option.');
-      if (
-        freshBet.type === 'sports' &&
-        resolution.actualHomeScore !== undefined &&
-        resolution.actualAwayScore !== undefined
-      ) {
-        const scoreError = scoreConsistencyError(
-          winnerIds[0] ?? '',
-          resolution.actualHomeScore,
-          resolution.actualAwayScore,
-        );
-        if (scoreError) throw new Error(scoreError);
-      }
-      const primaryWinnerId = winnerIds[0] ?? '';
-      const losingStakeTotal = predictions
-        .filter((p) => !predictionOptionIds(p).some((id) => winnerIds.includes(id)))
-        .reduce((sum, p) => sum + p.stake, 0);
-
-      scoreBonusResult = freshBet.type === 'sports'
-        ? calculateSportsScoreBonus({
-            predictions,
-            winningOptionId: primaryWinnerId,
-            actualHomeScore: resolution.actualHomeScore,
-            actualAwayScore: resolution.actualAwayScore,
-            losingStakeTotal,
-          })
-        : { bonusPool: 0, winners: [] };
-
-      coinPayouts = calculatePredictionRewards({
-        predictions,
-        winningOptionId: winnerIds,
-        bonusPool: scoreBonusResult.bonusPool,
-        betCreatedAtMs: freshBet.createdAt?.toMillis?.(),
-        deadlineMs: freshBet.deadline?.toMillis?.() ?? null,
-        resolvedAtMs: Timestamp.now().toMillis(),
-      }).map((p) => ({
-        userId: p.userId,
-        predictionId: p.predictionId,
-        coinDelta: p.coinDelta + (scoreBonusResult.winners.find((w) => w.predictionId === p.predictionId)?.coinBonus ?? 0),
-        isWinner: p.isWinner,
-        stake: p.stake,
-        poolProfit: p.poolProfit,
-        mintedReward: p.mintedReward,
-        timingMultiplier: p.timingMultiplier,
-      }));
-    }
-
-    const finalResolution: BetResolution = { ...resolution };
-    if (closest) {
-      finalResolution.winnerPredictionIds = winnerPredictionIds;
-    } else {
-      const winnerIds = winningOptionIds(resolution);
-      finalResolution.winningOptionId = winnerIds[0] ?? resolution.winningOptionId;
-      finalResolution.winningOptionIds = winnerIds;
-    }
+    const computation = computeResolutionOutcome(freshBet, predictions, resolution);
 
     // --- Apply results to each predictor ---
     for (const prediction of predictions) {
@@ -785,62 +864,46 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       const user = usersById.get(prediction.userId);
       if (!user) continue;
 
-      const correct = closest
-        ? winnerPredictionIds.includes(prediction.id)
-        : predictionOptionIds(prediction).some((id) => winningOptionIds(finalResolution).includes(id));
-
-      const scoreBonus = scoreBonusResult.winners.find((w) => w.predictionId === prediction.id);
-      const payout = coinPayouts.find((p) => p.predictionId === prediction.id);
       const pendingBonuses = user.pendingSpicyForecasts ?? [];
-      const totalSpicyBonus = correct ? pendingBonuses.reduce((sum, b) => sum + b.bonus, 0) : 0;
-      const ratingDelta = calculateRatingDelta({
-        displayedChanceAtBetTime: prediction.displayedChanceAtBetTime,
-        correct,
-        stake: prediction.stake,
-        userCoinBalanceAtBetTime: prediction.userBalanceAtBetTime,
+      const outcome = computePredictionOutcome({
+        prediction,
+        computation,
         currentRating: user.rating,
-        timingMultiplier: payout?.timingMultiplier,
-        revisionCount: prediction.revisionCount ?? 0,
-      }) + (scoreBonus?.ratingBonus ?? 0);
-
-      const nextRating = applyRatingDelta(user.rating, ratingDelta);
-      ratingChanges.push({ uid: prediction.userId, oldRating: user.rating, newRating: nextRating });
-      const coinDelta = (payout?.coinDelta ?? 0) + totalSpicyBonus;
-      const netCoinDelta = correct ? coinDelta - prediction.stake : -prediction.stake;
+        pendingSpicyForecasts: pendingBonuses,
+      });
+      ratingChanges.push({ uid: prediction.userId, oldRating: user.rating, newRating: outcome.nextRating });
 
       transaction.update(userRef, {
-        coinBalance: increment(coinDelta),
-        rating: nextRating,
-        rank: rankForRating(nextRating),
+        coinBalance: increment(outcome.grossCoinDelta),
+        rating: outcome.nextRating,
+        rank: rankForRating(outcome.nextRating),
         ...(pendingBonuses.length > 0 ? { pendingSpicyForecasts: [] } : {}),
         stats: buildStatsAfterResolution({
           stats: user.stats,
-          correct,
-          coinsDelta: netCoinDelta,
+          correct: outcome.correct,
+          coinsDelta: outcome.netCoinDelta,
           chosenChance: prediction.displayedChanceAtBetTime,
         }),
         updatedAt: serverTimestamp(),
       });
 
       transaction.update(doc(db, 'predictions', prediction.id), {
-        status: correct ? 'won' : 'lost',
-        correct,
-        coinDelta: netCoinDelta,
-        ratingDelta,
-        poolCoinProfit: payout?.poolProfit ?? 0,
-        mintedCoinReward: payout?.mintedReward ?? 0,
-        timingMultiplier: payout?.timingMultiplier ?? 1,
-        spicyForecastBonus: totalSpicyBonus,
+        status: outcome.correct ? 'won' : 'lost',
+        correct: outcome.correct,
+        coinDelta: outcome.netCoinDelta,
+        ratingDelta: outcome.ratingDelta,
+        poolCoinProfit: outcome.payout?.poolProfit ?? 0,
+        mintedCoinReward: outcome.payout?.mintedReward ?? 0,
+        timingMultiplier: outcome.payout?.timingMultiplier ?? 1,
+        spicyForecastBonus: outcome.totalSpicyBonus,
         resolvedAt: serverTimestamp(),
-        winningOptionId: closest
-          ? (resolution.actualValue?.toString() ?? resolution.actualDateValue ?? '')
-          : (winningOptionIds(finalResolution)[0] ?? ''),
+        winningOptionId: outcome.winningOptionIdStr,
       });
     }
 
     transaction.update(betRef, {
       status: 'resolved',
-      resolution: finalResolution,
+      resolution: computation.finalResolution,
       resolvedBy: resolverUid,
       resolvedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -858,6 +921,169 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       targetUids: await usersWhoCanSeeBet(bet.id),
       title: `🎯 "${bet.title}" just got resolved!`,
       body: 'Check the results and see if you won.',
+      url: `/#/bets/${bet.id}`,
+    });
+    await notifyLeaderboardMoves(resolver, ratingChanges).catch(() => {});
+  }
+}
+
+// Re-resolve an already-resolved bet with a corrected outcome. The prior
+// resolution's effects are reversed per predictor (using the deltas stored on
+// each prediction) and the new resolution is applied on top of the restored
+// state — all in one transaction, so balances/ratings/stats end up exactly as if
+// the new outcome had been the original. Each user has exactly one prediction per
+// bet (prediction id = `${betId}_${uid}`), which keeps the reversal 1:1.
+export async function amendBetResolution(bet: Bet, newResolution: BetResolution, resolverUid: string) {
+  const betRef = doc(db, 'bets', bet.id);
+  const predictionSnap = await getDocs(
+    query(collection(db, 'predictions'), where('betId', '==', bet.id)),
+  );
+  const predictions = predictionSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
+
+  let ratingChanges: Array<{ uid: string; oldRating: number; newRating: number }> = [];
+
+  await runTransaction(db, async (transaction) => {
+    ratingChanges = [];
+    const userRefs = [...new Set(predictions.map((prediction) => prediction.userId))]
+      .map((userId) => doc(db, 'users', userId));
+    const [betSnap, ...userSnaps] = await Promise.all([
+      transaction.get(betRef),
+      ...userRefs.map((userRef) => transaction.get(userRef)),
+    ]);
+    if (!betSnap.exists()) throw new Error('Bet not found.');
+    const freshBet = { id: betSnap.id, ...betSnap.data() } as Bet;
+    if (freshBet.status !== 'resolved') throw new Error('Only a resolved bet can be amended.');
+
+    const usersById = new Map(
+      userSnaps
+        .filter((snap) => snap.exists())
+        .map((snap) => [snap.id, snap.data() as UserProfile]),
+    );
+
+    const refundNow = newResolution.eventDidNotHappen === true;
+    // Only compute winners/payouts when the new outcome isn't a blanket refund.
+    const computation = refundNow ? null : computeResolutionOutcome(freshBet, predictions, newResolution);
+
+    for (const prediction of predictions) {
+      const user = usersById.get(prediction.userId);
+      if (!user) continue;
+      const userRef = doc(db, 'users', prediction.userId);
+
+      // --- Reverse the prior resolution for this prediction ---
+      const oldStatus = prediction.status;
+      const oldNet = prediction.coinDelta ?? 0;
+      const oldRatingDelta = prediction.ratingDelta ?? 0;
+      const oldSpicy = prediction.spicyForecastBonus ?? 0;
+      const oldStatsApplied = oldStatus === 'won' || oldStatus === 'lost';
+      // Gross coins that were added to the balance: winners got net + their stake
+      // back, refunds got their stake, losers got nothing (stake was already spent).
+      const oldGross = oldStatus === 'won'
+        ? oldNet + prediction.stake
+        : oldStatus === 'refunded'
+          ? oldNet
+          : 0;
+
+      const restoredRating = user.rating - oldRatingDelta;
+      const restoredStats = oldStatsApplied
+        ? reverseStatsResolution(user.stats, { correct: oldStatus === 'won', coinsDelta: oldNet })
+        : user.stats;
+      // Spicy bonuses consumed by a prior win are returned to the pending pool so
+      // the re-application can grant them again (or keep them if the pick now loses).
+      const restoredPending = [
+        ...(user.pendingSpicyForecasts ?? []),
+        ...(oldSpicy > 0 ? [{ bonus: oldSpicy, claimedAt: Timestamp.now() }] : []),
+      ];
+
+      // --- Apply the new resolution on the restored state ---
+      const result = (refundNow || !computation)
+        ? {
+            newGross: prediction.stake,
+            finalRating: restoredRating,
+            finalStats: restoredStats,
+            finalPending: restoredPending,
+            status: 'refunded' as const,
+            correct: false,
+            coinDelta: prediction.stake,
+            ratingDelta: 0,
+            poolCoinProfit: 0,
+            mintedCoinReward: 0,
+            timingMultiplier: 1,
+            spicyForecastBonus: 0,
+            winningOptionId: '',
+          }
+        : (() => {
+            const outcome = computePredictionOutcome({
+              prediction,
+              computation,
+              currentRating: restoredRating,
+              pendingSpicyForecasts: restoredPending,
+            });
+            return {
+              newGross: outcome.grossCoinDelta,
+              finalRating: outcome.nextRating,
+              finalStats: buildStatsAfterResolution({
+                stats: restoredStats,
+                correct: outcome.correct,
+                coinsDelta: outcome.netCoinDelta,
+                chosenChance: prediction.displayedChanceAtBetTime,
+              }),
+              finalPending: outcome.correct ? [] : restoredPending,
+              status: (outcome.correct ? 'won' : 'lost') as 'won' | 'lost',
+              correct: outcome.correct,
+              coinDelta: outcome.netCoinDelta,
+              ratingDelta: outcome.ratingDelta,
+              poolCoinProfit: outcome.payout?.poolProfit ?? 0,
+              mintedCoinReward: outcome.payout?.mintedReward ?? 0,
+              timingMultiplier: outcome.payout?.timingMultiplier ?? 1,
+              spicyForecastBonus: outcome.totalSpicyBonus,
+              winningOptionId: outcome.winningOptionIdStr,
+            };
+          })();
+
+      ratingChanges.push({ uid: prediction.userId, oldRating: user.rating, newRating: result.finalRating });
+
+      transaction.update(userRef, {
+        coinBalance: increment(result.newGross - oldGross),
+        rating: result.finalRating,
+        rank: rankForRating(result.finalRating),
+        pendingSpicyForecasts: result.finalPending,
+        stats: result.finalStats,
+        updatedAt: serverTimestamp(),
+      });
+      transaction.update(doc(db, 'predictions', prediction.id), {
+        status: result.status,
+        correct: result.correct,
+        coinDelta: result.coinDelta,
+        ratingDelta: result.ratingDelta,
+        poolCoinProfit: result.poolCoinProfit,
+        mintedCoinReward: result.mintedCoinReward,
+        timingMultiplier: result.timingMultiplier,
+        spicyForecastBonus: result.spicyForecastBonus,
+        resolvedAt: serverTimestamp(),
+        winningOptionId: result.winningOptionId,
+      });
+    }
+
+    transaction.update(betRef, {
+      status: 'resolved',
+      resolution: refundNow
+        ? { ...newResolution, eventDidNotHappen: true }
+        : (computation?.finalResolution ?? newResolution),
+      resolvedBy: resolverUid,
+      resolvedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  const resolverSnap = await getDoc(doc(db, 'users', resolverUid));
+  const resolver = resolverSnap.exists() ? (resolverSnap.data() as UserProfile) : null;
+  if (resolver) {
+    await createNotification({
+      type: 'bet_resolved',
+      actor: resolver,
+      targetUids: await usersWhoCanSeeBet(bet.id),
+      title: `🔄 "${bet.title}" resolution was updated`,
+      body: 'The result changed — check your payout and rating again.',
       url: `/#/bets/${bet.id}`,
     });
     await notifyLeaderboardMoves(resolver, ratingChanges).catch(() => {});

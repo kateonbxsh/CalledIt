@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import {
   addBetComment,
+  amendBetResolution,
   deleteBet,
   deleteBetComment,
   listChanceSnapshots,
@@ -139,6 +140,7 @@ export function BetDetailPage() {
   const [actualDateValue, setActualDateValue] = useState('');
   const [resolutionNote, setResolutionNote] = useState('');
   const [resolveAsDidNotHappen, setResolveAsDidNotHappen] = useState(false);
+  const [amending, setAmending] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -384,14 +386,42 @@ export function BetDetailPage() {
     setBusy(true);
     setError('');
     try {
-      await resolveBet(bet, buildResolution(), profile.uid);
+      if (amending) {
+        await amendBetResolution(bet, buildResolution(), profile.uid);
+      } else {
+        await resolveBet(bet, buildResolution(), profile.uid);
+      }
       setConfirmingResolution(false);
+      setAmending(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not resolve bet.');
+      setError(err instanceof Error ? err.message : `Could not ${amending ? 'amend' : 'resolve'} bet.`);
     } finally {
       setBusy(false);
     }
+  }
+
+  // Open the resolve form on an already-resolved bet, pre-filled with the
+  // existing resolution so the resolver can correct a mistake.
+  function startAmend() {
+    if (!bet) return;
+    const resolution = bet.resolution;
+    setResolveAsDidNotHappen(Boolean(resolution?.eventDidNotHappen));
+    setActualValue(resolution?.actualValue !== undefined ? String(resolution.actualValue) : '');
+    setActualDateValue(resolution?.actualDateValue ?? '');
+    setActualHomeScore(resolution?.actualHomeScore !== undefined ? String(resolution.actualHomeScore) : '');
+    setActualAwayScore(resolution?.actualAwayScore !== undefined ? String(resolution.actualAwayScore) : '');
+    setResolutionNote(resolution?.note ?? '');
+    const winners = resolvedWinnerIds(bet);
+    setWinningOptionIds(winners);
+    setWinningOptionId(winners[0] ?? bet.options[0]?.id ?? '');
+    setError('');
+    setAmending(true);
+  }
+
+  function cancelAmend() {
+    setAmending(false);
+    setError('');
   }
 
   async function onReopen() {
@@ -1132,9 +1162,11 @@ export function BetDetailPage() {
             <h2 className="mb-3 font-bold">Resolve</h2>
             {!canResolve ? (
               <p className="text-sm text-ink/60">Sign in to resolve this bet.</p>
-            ) : bet.status === 'resolved' ? (
+            ) : bet.status === 'resolved' && !amending ? (
               <div className="text-sm text-ink/70">
-                {closest ? (
+                {bet.resolution?.eventDidNotHappen ? (
+                  <p className="font-black text-ink/70">Event did not happen — everyone was refunded.</p>
+                ) : closest ? (
                   <>
                     <p className="font-bold text-ink/55">Actual value</p>
                     <p className="mt-1 font-black">
@@ -1157,6 +1189,17 @@ export function BetDetailPage() {
                     </div>
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={startAmend}
+                  disabled={busy}
+                  className="mt-4 w-full rounded-md border border-line px-4 py-2 text-sm font-bold text-ink/70 transition hover:bg-field disabled:opacity-50"
+                >
+                  Amend resolution
+                </button>
+                <p className="mt-2 text-xs text-ink/45">
+                  Correcting the outcome reverses the previous payouts and ratings, then applies the new result.
+                </p>
               </div>
             ) : (
               <form className="space-y-3" onSubmit={requestResolution}>
@@ -1237,8 +1280,18 @@ export function BetDetailPage() {
 
                 <textarea className="min-h-20 w-full rounded-md border border-line bg-field px-3 py-2" placeholder="Resolution note (optional)" value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)} />
                 <button disabled={busy} className="w-full rounded-md bg-coral px-4 py-3 font-semibold text-white disabled:opacity-60">
-                  Resolve bet
+                  {amending ? 'Save amended resolution' : 'Resolve bet'}
                 </button>
+                {amending ? (
+                  <button
+                    type="button"
+                    onClick={cancelAmend}
+                    disabled={busy}
+                    className="w-full rounded-md border border-line px-4 py-2 text-sm font-bold text-ink/70 transition hover:bg-field disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
               </form>
             )}
           </section>
@@ -1495,9 +1548,11 @@ export function BetDetailPage() {
       {confirmingResolution ? (
         <div className="fixed inset-0 z-40 grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
-            <h2 className="text-lg font-black">Resolve this bet?</h2>
+            <h2 className="text-lg font-black">{amending ? 'Amend this resolution?' : 'Resolve this bet?'}</h2>
             <p className="mt-2 text-sm leading-6 text-ink/65">
-              This will close the bet, mark predictions as won or lost, and apply ELO and coin changes.
+              {amending
+                ? 'This reverses the previous payouts, ELO and coin changes, then re-applies them for the corrected outcome.'
+                : 'This will close the bet, mark predictions as won or lost, and apply ELO and coin changes.'}
             </p>
             <div className="mt-4 rounded-md bg-field p-3 text-sm">
               {closest ? (
@@ -1523,7 +1578,7 @@ export function BetDetailPage() {
                 Cancel
               </button>
               <button type="button" onClick={confirmResolution} disabled={busy} className="flex-1 rounded-md bg-coral px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
-                {busy ? 'Resolving…' : 'Yes, resolve'}
+                {busy ? (amending ? 'Amending…' : 'Resolving…') : (amending ? 'Yes, amend' : 'Yes, resolve')}
               </button>
             </div>
           </div>

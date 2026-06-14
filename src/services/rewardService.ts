@@ -27,6 +27,7 @@ import type {
 import { ALL_ENABLED_TARGET_UID, createNotification, uidsForUsernames } from './notificationService';
 import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
+import { rankForRating } from '../utils/ranks';
 
 // Global buff applied to coin rewards across forecasts, chests, weekly
 // challenges and wager bonuses so the whole economy pays out more generously.
@@ -438,6 +439,52 @@ export async function spinWheel(user: UserProfile) {
   });
 
   return reward.amount;
+}
+
+export interface MinigameWinResult {
+  payout: number;
+  ratingDelta: number;
+}
+
+// Arcade games share one settlement path so their balance and rare ELO rewards
+// behave consistently.
+export async function chargeMinigameStake(user: UserProfile, stake: number) {
+  if (stake <= 0) throw new Error('Invalid stake.');
+  const userRef = doc(db, 'users', user.uid);
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+    const current = snap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
+    if (current.coinBalance < stake) throw new Error('Not enough coins for that stake.');
+    transaction.update(userRef, { coinBalance: current.coinBalance - stake, updatedAt: serverTimestamp() });
+  });
+}
+
+export async function awardMinigameWin(user: UserProfile, amount: number): Promise<MinigameWinResult> {
+  const payout = Math.max(0, Math.round(amount));
+  if (payout === 0) return { payout: 0, ratingDelta: 0 };
+  const ratingDelta = Math.random() < 0.1 ? 1 + Math.floor(Math.random() * 2) : 0;
+  const userRef = doc(db, 'users', user.uid);
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+    const current = snap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
+    const nextRating = current.rating + ratingDelta;
+    transaction.update(userRef, {
+      coinBalance: current.coinBalance + payout,
+      ...(ratingDelta > 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
+      updatedAt: serverTimestamp(),
+    });
+  });
+  return { payout, ratingDelta };
+}
+
+export async function chargePlaneStake(user: UserProfile, stake: number) {
+  return chargeMinigameStake(user, stake);
+}
+
+export async function awardPlaneWin(user: UserProfile, amount: number) {
+  return awardMinigameWin(user, amount);
 }
 
 export async function listChallengeActivities(user: UserProfile, groups: FriendGroup[] = []) {

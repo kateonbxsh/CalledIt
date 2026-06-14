@@ -17,6 +17,9 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
 import { useAuth } from '../contexts/AuthContext';
+import { listFeedBets } from '../services/betService';
+import { getChestDefinitions, listChallengeActivities } from '../services/rewardService';
+import { canClaimSixHourReward } from '../utils/coins';
 import { isMobileBrowser, isStandaloneApp } from '../utils/device';
 
 const navItems = [
@@ -30,13 +33,21 @@ const navItems = [
   { to: '/how-to-play', label: 'How to Play', icon: HelpCircle },
 ];
 
-function NavItem({ to, label, icon: Icon }: (typeof navItems)[number]) {
+function AttentionDot() {
+  return (
+    <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full border-2 border-[#f8faf4] bg-coral px-0.5 text-[9px] font-black leading-none text-white">
+      !
+    </span>
+  );
+}
+
+function NavItem({ to, label, icon: Icon, attention = false }: (typeof navItems)[number] & { attention?: boolean }) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-150 ${
+        `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-150 ${
           isActive
             ? 'bg-ink text-white shadow-sm'
             : 'text-ink/60 hover:bg-white hover:text-ink hover:shadow-sm'
@@ -47,19 +58,20 @@ function NavItem({ to, label, icon: Icon }: (typeof navItems)[number]) {
         <>
           <Icon size={17} className={isActive ? 'text-white' : 'text-ink/50 group-hover:text-ink'} />
           <span className="hidden lg:inline">{label}</span>
+          {attention ? <AttentionDot /> : null}
         </>
       )}
     </NavLink>
   );
 }
 
-function BottomNavLink({ to, label, icon: Icon }: (typeof navItems)[number]) {
+function BottomNavLink({ to, label, icon: Icon, attention = false }: (typeof navItems)[number] & { attention?: boolean }) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `flex items-center justify-center rounded-2xl py-2 px-1 transition-colors ${
+        `relative flex items-center justify-center rounded-2xl py-2 px-1 transition-colors ${
           isActive ? 'bg-ink text-white shadow-soft' : 'text-ink/50 active:bg-field'
         }`
       }
@@ -68,7 +80,10 @@ function BottomNavLink({ to, label, icon: Icon }: (typeof navItems)[number]) {
       style={{ backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' } as React.CSSProperties}
     >
       {() => (
-        <Icon size={21} strokeWidth={2.4} style={{ WebkitFontSmoothing: 'antialiased', transform: 'translateZ(0)' } as React.CSSProperties} />
+        <>
+          <Icon size={21} strokeWidth={2.4} style={{ WebkitFontSmoothing: 'antialiased', transform: 'translateZ(0)' } as React.CSSProperties} />
+          {attention ? <AttentionDot /> : null}
+        </>
       )}
     </NavLink>
   );
@@ -82,12 +97,90 @@ export function Layout() {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
+  const [attention, setAttention] = useState({ bets: false, wagers: false, games: false });
   const lastScrollYRef = useRef(0);
   const scrollIntentRef = useRef(0);
+  const attentionCheckedAtRef = useRef(0);
+
+  const seenKey = (kind: 'bets' | 'wagers' | 'games') => `called-it:seen:${kind}:${profile?.uid ?? 'guest'}`;
+
+  async function refreshAttention(force = false) {
+    if (!profile) return;
+    const now = Date.now();
+    if (!force && now - attentionCheckedAtRef.current < 5 * 60_000) return;
+    attentionCheckedAtRef.current = now;
+    try {
+      const [publicBets, privateBets, activities, chests] = await Promise.all([
+        listFeedBets('public', profile),
+        listFeedBets('private', profile),
+        listChallengeActivities(profile),
+        getChestDefinitions(profile),
+      ]);
+      const seenBetsAt = Number(localStorage.getItem(seenKey('bets')) ?? 0);
+      const seenWagersAt = Number(localStorage.getItem(seenKey('wagers')) ?? 0);
+      const unseenBet = [...publicBets, ...privateBets].some((bet) =>
+        bet.creatorId !== profile.uid && (bet.createdAt?.toMillis?.() ?? 0) > seenBetsAt);
+      const unseenWager = activities.some((activity) =>
+        activity.type === 'wager'
+        && activity.creatorId !== profile.uid
+        && (activity.createdAt?.toMillis?.() ?? 0) > seenWagersAt);
+
+      const availableRewards = [
+        canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) ? `forecast:${Math.floor(now / 21_600_000)}` : '',
+        canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) ? `wheel:${Math.floor(now / 21_600_000)}` : '',
+        ...chests.filter((chest) => chest.unlocked && !chest.claimed).map((chest) => `chest:${chest.id}`),
+      ].filter(Boolean).sort();
+      const gamesSignature = availableRewards.join('|');
+      const seenGamesSignature = localStorage.getItem(seenKey('games')) ?? '';
+
+      setAttention({
+        bets: location.pathname === '/' ? false : unseenBet,
+        wagers: location.pathname.startsWith('/challenges') ? false : unseenWager,
+        games: location.pathname.startsWith('/minigames') ? false : !!gamesSignature && gamesSignature !== seenGamesSignature,
+      });
+    } catch {
+      // Navigation should stay quiet when an attention check is unavailable.
+    }
+  }
 
   useEffect(() => {
     setShowInstallNav(isMobileBrowser() && !isStandaloneApp());
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const now = Date.now();
+    if (location.pathname === '/') {
+      localStorage.setItem(seenKey('bets'), String(now));
+      setAttention((current) => ({ ...current, bets: false }));
+    }
+    if (location.pathname.startsWith('/challenges')) {
+      localStorage.setItem(seenKey('wagers'), String(now));
+      setAttention((current) => ({ ...current, wagers: false }));
+    }
+    if (location.pathname.startsWith('/minigames')) {
+      void getChestDefinitions(profile).then((chests) => {
+        const signature = [
+          canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) ? `forecast:${Math.floor(now / 21_600_000)}` : '',
+          canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) ? `wheel:${Math.floor(now / 21_600_000)}` : '',
+          ...chests.filter((chest) => chest.unlocked && !chest.claimed).map((chest) => `chest:${chest.id}`),
+        ].filter(Boolean).sort().join('|');
+        localStorage.setItem(seenKey('games'), signature);
+        setAttention((current) => ({ ...current, games: false }));
+      }).catch(() => {});
+    }
+    void refreshAttention();
+  // The profile timestamps intentionally retrigger this when a reward is claimed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, profile?.uid, profile?.lastDailyForecastAt, profile?.lastWheelSpinAt]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const onFocus = () => void refreshAttention();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.uid]);
 
   useEffect(() => {
     setActionMenuOpen(false);
@@ -163,7 +256,11 @@ export function Layout() {
 
         <nav className="flex-1 space-y-0.5">
           {navItems.map((item) => (
-            <NavItem key={item.to} {...item} />
+            <NavItem
+              key={item.to}
+              {...item}
+              attention={item.to === '/' ? attention.bets : item.to === '/challenges' ? attention.wagers : item.to === '/minigames' ? attention.games : false}
+            />
           ))}
           <div className="relative pt-2 hidden lg:block">
             <button
@@ -271,6 +368,10 @@ export function Layout() {
 
       {profileMenuOpen ? (
         <div className="fixed bottom-24 right-4 z-40 w-56 animate-soft-enter rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden">
+          <div className="mb-1 flex items-center justify-between gap-2 rounded-xl bg-field px-3 py-2">
+            <CoinAmount amount={profile?.coinBalance ?? 0} className="text-sm" />
+            <span className="text-xs font-bold text-ink/55">{profile?.rating ?? 1000} ELO</span>
+          </div>
           <Link to="/me" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
             Profile
           </Link>
@@ -300,8 +401,8 @@ export function Layout() {
         }`}
         style={{ paddingBottom: `max(1.5rem, calc(env(safe-area-inset-bottom) + 1.5rem))` }}
       >
-        <BottomNavLink to="/" label="Bets" icon={Home} />
-        <BottomNavLink to="/challenges" label="Challenges" icon={Trophy} />
+        <BottomNavLink to="/" label="Bets" icon={Home} attention={attention.bets} />
+        <BottomNavLink to="/challenges" label="Challenges" icon={Trophy} attention={attention.wagers} />
         <BottomNavLink to="/groups" label="Groups" icon={Users} />
         <button
           type="button"
@@ -317,7 +418,7 @@ export function Layout() {
         >
           <CirclePlus size={30} />
         </button>
-        <BottomNavLink to="/minigames" label="Games" icon={Gamepad2} />
+        <BottomNavLink to="/minigames" label="Games" icon={Gamepad2} attention={attention.games} />
         <BottomNavLink to="/leaderboard" label="Ranks" icon={Medal} />
         <button
           type="button"

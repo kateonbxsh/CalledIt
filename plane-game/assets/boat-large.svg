@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 140" width="300" height="140">
+  <!-- Larger ship: wider flat deck (y≈70) = easier, lower-multiplier landing pad. -->
+  <!-- masts + flags -->
+  <rect x="96" y="18" width="6" height="54" rx="3" fill="#6b7b8c"/>
+  <path d="M102 20 L138 30 L102 40 Z" fill="#3b75af"/>
+  <rect x="196" y="26" width="6" height="46" rx="3" fill="#6b7b8c"/>
+  <path d="M202 28 L232 36 L202 44 Z" fill="#d8534f"/>
+  <!-- cabin / bridge -->
+  <rect x="78" y="42" width="150" height="30" rx="6" fill="#8ecae6" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="98" cy="57" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="124" cy="57" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="150" cy="57" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="176" cy="57" r="6.5" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <!-- deck (landing surface) -->
+  <rect x="34" y="68" width="232" height="12" rx="4" fill="#f2c879"/>
+  <!-- hull -->
+  <path d="M28 78 L272 78 L238 122 L62 122 Z" fill="#3b75af"/>
+  <path d="M28 78 L272 78 L264 89 L36 89 Z" fill="#2f5d8c"/>
+  <!-- trim stripe + portholes -->
+  <rect x="54" y="98" width="192" height="7" rx="3" fill="#f7f5ee" opacity="0.85"/>
+  <circle cx="90" cy="101" r="4" fill="#3b75af"/>
+  <circle cx="150" cy="101" r="4" fill="#3b75af"/>
+  <circle cx="210" cy="101" r="4" fill="#3b75af"/>
+</svg>

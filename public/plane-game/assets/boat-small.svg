@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">
+  <!-- Flat side-view boat matching Tappy Plane palette. The flat deck (y≈58) is the landing zone. -->
+  <!-- mast + flag -->
+  <rect x="96" y="14" width="5" height="46" rx="2" fill="#6b7b8c"/>
+  <path d="M101 16 L131 24 L101 32 Z" fill="#d8534f"/>
+  <!-- cabin -->
+  <rect x="66" y="34" width="64" height="26" rx="5" fill="#8ecae6" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="82" cy="47" r="6" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <circle cx="104" cy="47" r="6" fill="#e9f6fb" stroke="#5f9fbf" stroke-width="2"/>
+  <!-- deck (landing surface) -->
+  <rect x="30" y="56" width="140" height="10" rx="3" fill="#f2c879"/>
+  <!-- hull -->
+  <path d="M26 64 L174 64 L150 100 L50 100 Z" fill="#d8534f"/>
+  <path d="M26 64 L174 64 L168 73 L32 73 Z" fill="#b8413d"/>
+  <!-- trim stripe -->
+  <rect x="44" y="80" width="112" height="6" rx="3" fill="#f7f5ee" opacity="0.85"/>
+</svg>
