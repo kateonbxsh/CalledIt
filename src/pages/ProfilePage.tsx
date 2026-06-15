@@ -84,7 +84,6 @@ export function ProfilePage() {
       <section className="rounded-md border border-line bg-white p-4 shadow-soft sm:p-5">
         <div className="mb-2">
           <h2 className="font-black">Balance progress</h2>
-          <p className="text-sm text-ink/50">Coin balance after each win, reward, stake, and payout.</p>
         </div>
         <BalanceHistoryChart user={user} snapshots={history} />
       </section>

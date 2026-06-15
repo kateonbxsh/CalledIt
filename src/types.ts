@@ -259,6 +259,7 @@ export interface PredictionInput {
 export interface FriendGroup {
   id: string;
   name: string;
+  photoURL?: string | null;
   creatorId: string;
   creatorUsername: string;
   memberUsernames: string[];

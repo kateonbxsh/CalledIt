@@ -442,6 +442,12 @@ service cloud.firestore {
           isGroupMember(groupId)
           && request.resource.data.diff(resource.data).changedKeys()
               .hasOnly(['lastMessageAt', 'lastMessagePreview', 'lastMessageSenderId', 'updatedAt'])
+        ) ||
+        (
+          // Any member can set the group's photo.
+          isGroupMember(groupId)
+          && request.resource.data.diff(resource.data).changedKeys()
+              .hasOnly(['photoURL', 'updatedAt'])
         )
       );
       allow delete: if signedIn()

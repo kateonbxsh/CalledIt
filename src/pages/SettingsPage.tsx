@@ -2,10 +2,13 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, Camera, LogOut, Pencil, Save, UserRound, X } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { BalanceHistoryChart } from '../components/BalanceHistoryChart';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
 import { RankBadge } from '../components/RankBadge';
 import { useAuth } from '../contexts/AuthContext';
+import { listBalanceHistory } from '../services/balanceService';
+import type { BalanceSnapshot } from '../types';
 import { updateProfile, updateUsername } from '../services/userService';
 import {
   createTestPushNotification,
@@ -30,6 +33,7 @@ export function SettingsPage() {
   const [pushState, setPushState] = useState<DevicePushState | null>(null);
   const [imageBusy, setImageBusy] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
+  const [history, setHistory] = useState<BalanceSnapshot[]>([]);
   const progress = useMemo(() => rankProgress(profile?.rating ?? 1000), [profile?.rating]);
 
   useEffect(() => {
@@ -44,6 +48,11 @@ export function SettingsPage() {
     if (!profile) return;
     getCurrentDevicePushState(profile).then(setPushState).catch(() => setPushState(null));
   }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    listBalanceHistory(profile.uid).then(setHistory).catch(() => setHistory([]));
+  }, [profile?.uid]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -137,7 +146,6 @@ export function SettingsPage() {
               <UserRound size={18} className="text-mint" />
               <h2 className="font-black">Identity</h2>
             </div>
-            <p className="mt-1 text-sm text-ink/50">How friends see you across bets, groups, and challenges.</p>
           </div>
 
           <div className="space-y-5 p-4 sm:p-5">
@@ -305,6 +313,13 @@ export function SettingsPage() {
           </button>
         </aside>
       </div>
+
+      {profile ? (
+        <section className="mt-4 rounded-md border border-line bg-white p-4 shadow-soft sm:p-5">
+          <h2 className="mb-2 font-black">Balance progress</h2>
+          <BalanceHistoryChart user={profile} snapshots={history} />
+        </section>
+      ) : null}
     </>
   );
 }

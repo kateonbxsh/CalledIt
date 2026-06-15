@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MessageCircle, Pencil, Plus, Send, Trash2, Users, X } from 'lucide-react';
 import { Timestamp, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { Avatar } from '../components/Avatar';
 import { PageHeader } from '../components/PageHeader';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,14 +14,16 @@ import {
   listMyFriendGroups,
   markGroupRead,
   sendGroupMessage,
+  setGroupPhoto,
   updateFriendGroup,
 } from '../services/friendGroupService';
 import type { FriendGroup, GroupMessage, GroupReadState } from '../types';
 import { relativeTime } from '../utils/format';
+import { downscaleProfileImage } from '../utils/image';
 
-type EditingState = { groupId: string | null; name: string; members: string[] };
+type EditingState = { groupId: string | null; name: string; members: string[]; photoURL?: string | null };
 
-const EMPTY_EDITING: EditingState = { groupId: null, name: '', members: [] };
+const EMPTY_EDITING: EditingState = { groupId: null, name: '', members: [], photoURL: null };
 
 export function FriendGroupsPage() {
   const { profile } = useAuth();
@@ -40,6 +43,43 @@ export function FriendGroupsPage() {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatScrollModeRef = useRef<'bottom' | 'preserve'>('bottom');
   const previousChatViewportRef = useRef({ scrollHeight: 0, scrollTop: 0 });
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+
+  async function onGroupPhotoChange(file?: File) {
+    const groupId = editing?.groupId;
+    if (!file || !groupId) return;
+    setPhotoBusy(true);
+    setError('');
+    try {
+      const dataUrl = await downscaleProfileImage(file);
+      await setGroupPhoto(groupId, dataUrl);
+      setEditing((current) => (current ? { ...current, photoURL: dataUrl } : current));
+      setGroups((current) => current.map((group) => (group.id === groupId ? { ...group, photoURL: dataUrl } : group)));
+      setChatGroup((current) => (current && current.id === groupId ? { ...current, photoURL: dataUrl } : current));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update group photo.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removeGroupPhoto() {
+    const groupId = editing?.groupId;
+    if (!groupId) return;
+    setPhotoBusy(true);
+    setError('');
+    try {
+      await setGroupPhoto(groupId, null);
+      setEditing((current) => (current ? { ...current, photoURL: null } : current));
+      setGroups((current) => current.map((group) => (group.id === groupId ? { ...group, photoURL: null } : group)));
+      setChatGroup((current) => (current && current.id === groupId ? { ...current, photoURL: null } : current));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove group photo.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   useLayoutEffect(() => {
     const panel = chatScrollRef.current;
@@ -87,6 +127,7 @@ export function FriendGroupsPage() {
       groupId: group.id,
       name: group.name,
       members: group.memberUsernames,
+      photoURL: group.photoURL ?? null,
     });
     setError('');
   }
@@ -101,7 +142,12 @@ export function FriendGroupsPage() {
     setError('');
     try {
       if (editing.groupId) {
-        await updateFriendGroup(editing.groupId, name, members, profile);
+        // Only the owner can change name/members; members can still edit the photo
+        // (applied immediately when picked), so just close for them.
+        const editGroup = groups.find((group) => group.id === editing.groupId);
+        if (editGroup && editGroup.creatorId === profile.uid) {
+          await updateFriendGroup(editing.groupId, name, members, profile);
+        }
       } else {
         await createFriendGroup(name, members, profile);
       }
@@ -194,6 +240,9 @@ export function FriendGroupsPage() {
     }
   }
 
+  const editGroup = editing?.groupId ? groups.find((group) => group.id === editing.groupId) : null;
+  const editIsOwner = !editing?.groupId || editGroup?.creatorId === profile?.uid;
+
   return (
     <>
       <PageHeader
@@ -210,52 +259,112 @@ export function FriendGroupsPage() {
 
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
 
-      {/* Create / Edit form */}
+      {/* Create / Edit modal */}
       {editing !== null ? (
-        <div className="mb-5 rounded-md border border-line bg-white p-4 animate-soft-enter">
-          <h2 className="mb-4 font-bold">{editing.groupId ? 'Edit group' : 'New group'}</h2>
-          <form onSubmit={onSave} className="space-y-3">
-            <label className="block text-sm font-medium">
-              Group name
-              <input
-                className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
-                value={editing.name}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                placeholder="Weekend crew, Footy group…"
-                required
-              />
-            </label>
-            <div className="block text-sm font-medium">
-              Members
-              <div className="mt-1">
-                <UsernamePicker
-                  value={editing.members}
-                  onChange={(members) => setEditing({ ...editing, members })}
-                  exclude={profile?.username ? [profile.username] : []}
-                  placeholder="Search usernames"
-                />
-              </div>
-              <span className="mt-1 block text-xs text-ink/50">
-                Your own username is always included automatically
-              </span>
-            </div>
-            <div className="flex gap-2">
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+          <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-white p-5 shadow-lift animate-soft-enter sm:max-w-lg sm:rounded-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="font-black">{editing.groupId ? 'Edit group' : 'New group'}</h2>
               <button
                 type="button"
                 onClick={() => setEditing(null)}
-                className="rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold text-ink/70"
+                className="grid h-9 w-9 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95"
+                aria-label="Close"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="btn-special rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
-              >
-                {busy ? 'Saving…' : 'Save'}
+                <X size={17} />
               </button>
             </div>
-          </form>
+            <form onSubmit={onSave} className="space-y-4">
+              {editing.groupId ? (
+                <div className="flex items-center gap-3">
+                  {editing.photoURL ? (
+                    <img src={editing.photoURL} alt="" className="h-16 w-16 shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <span className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-mint/12 text-xl font-black text-mint">
+                      {editing.name.slice(0, 1).toUpperCase() || <Users size={22} />}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      disabled={photoBusy}
+                      className="rounded-md border border-line bg-white px-3 py-2 text-sm font-bold text-ink/70 transition hover:bg-field disabled:opacity-50"
+                    >
+                      {photoBusy ? 'Updating…' : editing.photoURL ? 'Change photo' : 'Add group photo'}
+                    </button>
+                    {editing.photoURL ? (
+                      <button
+                        type="button"
+                        onClick={() => void removeGroupPhoto()}
+                        className="ml-2 text-xs font-semibold text-coral/70"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                    <p className="mt-1 text-xs text-ink/45">Any member can change the group photo.</p>
+                  </div>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => { void onGroupPhotoChange(event.target.files?.[0]); event.target.value = ''; }}
+                  />
+                </div>
+              ) : null}
+
+              <label className="block text-sm font-medium">
+                Group name
+                <input
+                  className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 disabled:opacity-60"
+                  value={editing.name}
+                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  placeholder="Weekend crew, Footy group…"
+                  disabled={!editIsOwner}
+                  required
+                />
+              </label>
+              <div className="block text-sm font-medium">
+                Members
+                <div className="mt-1">
+                  <UsernamePicker
+                    value={editIsOwner
+                      ? editing.members
+                      : (editGroup ? [editGroup.creatorUsername, ...editGroup.memberUsernames] : editing.members)
+                          .filter((username) => username !== profile?.username)}
+                    onChange={(members) => setEditing({ ...editing, members })}
+                    exclude={profile?.username ? [profile.username] : []}
+                    placeholder="Search usernames"
+                    disabled={!editIsOwner}
+                  />
+                </div>
+                <span className="mt-1 block text-xs text-ink/50">
+                  {editIsOwner
+                    ? 'Your own username is always included automatically'
+                    : 'Only the group owner can change the name and members.'}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 text-sm font-bold text-ink/70"
+                >
+                  {editIsOwner ? 'Cancel' : 'Done'}
+                </button>
+                {editIsOwner ? (
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="btn-special flex-1 rounded-md px-4 py-2.5 text-sm font-bold disabled:opacity-60"
+                  >
+                    {busy ? 'Saving…' : 'Save'}
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </div>
         </div>
       ) : null}
 
@@ -272,65 +381,66 @@ export function FriendGroupsPage() {
           <p className="mt-1 text-sm text-ink/45">Create one to quickly invite everyone when making a private bet.</p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
           {groups.map((group) => {
             const isCreator = group.creatorId === profile?.uid;
             const unread = profile ? groupHasUnread(group, readStates, profile.uid) : false;
+            const members = [group.creatorUsername, ...group.memberUsernames];
             return (
-              <div key={group.id} className={`relative rounded-md border bg-white p-4 ${unread ? 'border-coral/40 shadow-soft' : 'border-line'}`}>
-                {unread ? (
-                  <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full border-2 border-[#edf0e8] bg-coral px-1 text-[10px] font-black text-white">!</span>
-                ) : null}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-black">{group.name}</p>
-                    <p className="mt-0.5 text-xs text-ink/50">
-                      {isCreator ? 'You' : group.creatorUsername} · {group.memberUsernames.length + 1} members
-                    </p>
-                  </div>
-                  {isCreator ? (
-                    <div className="flex shrink-0 gap-1">
-                      <button
-                        onClick={() => openEdit(group)}
-                        className="grid h-8 w-8 place-items-center rounded-md border border-line text-ink/60 hover:bg-field"
-                        title="Edit"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(group.id)}
-                        className="grid h-8 w-8 place-items-center rounded-md border border-line text-coral/70 hover:bg-coral/10"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1">
-                  <span className="rounded-full bg-mint/10 px-2 py-0.5 text-xs font-semibold text-mint">
-                    {group.creatorUsername}
-                  </span>
-                  {group.memberUsernames.slice(0, 8).map((u) => (
-                    <span key={u} className="rounded-full bg-field px-2 py-0.5 text-xs font-medium text-ink/65">
-                      {u}
-                    </span>
-                  ))}
-                  {group.memberUsernames.length > 8 ? (
-                    <span className="rounded-full bg-field px-2 py-0.5 text-xs text-ink/45">
-                      +{group.memberUsernames.length - 8} more
-                    </span>
-                  ) : null}
-                </div>
+              <div key={group.id} className="flex items-center gap-3 px-3 py-3 transition hover:bg-field/60">
                 <button
                   type="button"
                   onClick={() => void openChat(group)}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-line bg-field px-3 py-2.5 text-sm font-bold text-ink/70 transition hover:bg-white"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  <MessageCircle size={16} />
-                  Open chat
-                  {group.lastMessagePreview ? <span className="max-w-40 truncate font-normal text-ink/40">· {group.lastMessagePreview}</span> : null}
+                  <span className="relative shrink-0">
+                    {group.photoURL ? (
+                      <img src={group.photoURL} alt="" className="h-12 w-12 rounded-full object-cover" />
+                    ) : (
+                      <span className="grid h-12 w-12 place-items-center rounded-full bg-mint/12 text-base font-black text-mint">
+                        {group.name.slice(0, 1).toUpperCase() || <Users size={20} />}
+                      </span>
+                    )}
+                    {unread ? (
+                      <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full border-2 border-white bg-coral px-0.5 text-[9px] font-black text-white">!</span>
+                    ) : null}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="truncate font-black">{group.name}</span>
+                      <span className="shrink-0 text-[11px] font-semibold text-ink/35">
+                        {group.lastMessageAt ? relativeTime(group.lastMessageAt) : ''}
+                      </span>
+                    </span>
+                    <span className={`mt-0.5 flex items-center gap-1 truncate text-sm ${unread ? 'font-semibold text-ink/75' : 'text-ink/45'}`}>
+                      <MessageCircle size={13} className="shrink-0 text-ink/30" />
+                      <span className="truncate">{group.lastMessagePreview || 'No messages yet — say hi 👋'}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-ink/40">
+                      {members.length} members
+                    </span>
+                  </span>
                 </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    onClick={() => openEdit(group)}
+                    className="grid h-9 w-9 place-items-center rounded-full text-ink/55 transition hover:bg-white hover:text-ink"
+                    title={isCreator ? 'Edit group' : 'Group photo'}
+                    aria-label={isCreator ? 'Edit group' : 'Group photo'}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  {isCreator ? (
+                    <button
+                      onClick={() => setConfirmDelete(group.id)}
+                      className="grid h-9 w-9 place-items-center rounded-full text-coral/70 transition hover:bg-coral/10 hover:text-coral"
+                      title="Delete group"
+                      aria-label="Delete group"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             );
           })}
@@ -367,13 +477,20 @@ export function FriendGroupsPage() {
 
       {chatGroup ? (
         <div className="fixed inset-0 z-[70] flex animate-fade-in items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="flex h-[min(92dvh,760px)] w-full animate-soft-enter flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:h-[min(82dvh,760px)] sm:max-w-4xl sm:rounded-2xl">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-3">
-              <div className="min-w-0">
+          <div className="flex h-[min(92dvh,760px)] w-full animate-soft-enter flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:h-[min(82dvh,760px)] sm:w-[min(94vw,1100px)] sm:max-w-none sm:rounded-2xl">
+            <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3">
+              {chatGroup.photoURL ? (
+                <img src={chatGroup.photoURL} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+              ) : (
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-mint/12 text-base font-black text-mint">
+                  {chatGroup.name.slice(0, 1).toUpperCase() || <Users size={18} />}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
                 <h2 className="truncate font-black">{chatGroup.name}</h2>
                 <p className="text-xs font-semibold text-ink/40">{chatGroup.memberUsernames.length + 1} members</p>
               </div>
-              <button type="button" onClick={() => setChatGroup(null)} className="grid h-9 w-9 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95" aria-label="Close chat">
+              <button type="button" onClick={() => setChatGroup(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95" aria-label="Close chat">
                 <X size={17} />
               </button>
             </div>
@@ -416,7 +533,7 @@ export function FriendGroupsPage() {
                 value={messageBody}
                 onChange={(event) => setMessageBody(event.target.value)}
                 maxLength={1000}
-                placeholder="Message the group"
+                placeholder={`Message ${chatGroup.name}…`}
                 className="min-w-0 flex-1 rounded-md border border-line bg-field px-3 py-2.5 text-sm"
               />
               <button type="submit" disabled={!messageBody.trim() || busy} className="grid h-10 w-10 place-items-center rounded-md bg-ink text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40" aria-label="Send message">

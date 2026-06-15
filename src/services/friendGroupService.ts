@@ -140,6 +140,14 @@ export async function deleteFriendGroup(groupId: string) {
   await deleteDoc(doc(db, 'friendGroups', groupId));
 }
 
+// Any group member can set the shared group picture.
+export async function setGroupPhoto(groupId: string, photoURL: string | null) {
+  await updateDoc(doc(db, 'friendGroups', groupId), {
+    photoURL: photoURL || null,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export type GroupMessagePage = {
   messages: GroupMessage[];
   cursor: QueryDocumentSnapshot<DocumentData> | null;

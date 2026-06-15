@@ -2,7 +2,8 @@ import { CheckCircle2, Lock, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CoinAmount } from './CoinAmount';
 import type { Bet, Prediction } from '../types';
-import { betTypeMeta, betTypeLabel } from '../utils/betTypes';
+import { betTypeMeta, betTypeLabel, isClosestType } from '../utils/betTypes';
+import { closestDateGuessLabel } from '../utils/closestGuess';
 import { percent, relativeTime } from '../utils/format';
 import { displayChanceSummary } from '../utils/probability';
 
@@ -25,7 +26,7 @@ function statusLabel(bet: Bet) {
   return bet.status === 'open' ? 'Open' : 'Resolved';
 }
 
-export function BetCard({ bet, prediction, groupName }: { bet: Bet; prediction?: Prediction; groupName?: string }) {
+export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Bet; prediction?: Prediction; groupName?: string; groupPhotoURL?: string }) {
   const isOpen = bet.status === 'open';
   const meta = betTypeMeta[bet.type];
   const TypeIcon = meta.icon;
@@ -80,7 +81,13 @@ export function BetCard({ bet, prediction, groupName }: { bet: Bet; prediction?:
 
         {/* Options / chances */}
         <div className="mt-3">
-          {winnerIds.length > 0 ? (
+          {bet.status === 'resolved' && isClosestType(bet.type) ? (
+            <span className="inline-flex rounded-xl bg-mint/10 px-2.5 py-2 text-xs font-black text-mint">
+              Answer: {bet.type === 'closestNumber'
+                ? (bet.resolution?.actualValue ?? '—')
+                : closestDateGuessLabel(bet.resolution?.actualDateValue)}
+            </span>
+          ) : winnerIds.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {winnerIds.slice(0, 4).map((id) => (
                 <span key={id} className="rounded-xl bg-mint/10 px-2.5 py-2 text-xs font-black text-mint">
@@ -121,8 +128,8 @@ export function BetCard({ bet, prediction, groupName }: { bet: Bet; prediction?:
           </span>
           <CoinAmount amount={bet.totalCoinsStaked} className="text-xs" />
           {bet.groupId ? (
-            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-field px-2 py-1 text-[11px] font-semibold text-ink/45">
-              <Users size={11} />
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-field py-1 pl-1 pr-2 text-[11px] font-semibold text-ink/45">
+              {groupPhotoURL ? <img src={groupPhotoURL} alt="" className="h-4 w-4 rounded-full object-cover" /> : <Users size={11} className="ml-0.5" />}
               <span className="truncate">{groupName ?? 'Group'}</span>
             </span>
           ) : null}

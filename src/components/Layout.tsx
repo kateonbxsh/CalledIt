@@ -37,7 +37,7 @@ const navItems = [
 function AttentionDot({ desktop = false }: { desktop?: boolean }) {
   return (
     <span className={desktop
-      ? 'absolute -left-2 top-1/2 grid h-5 min-w-5 -translate-y-1/2 place-items-center rounded-full border-2 border-[#f8faf4] bg-coral px-1 text-[10px] font-black leading-none text-white'
+      ? 'absolute -right-1.5 top-1/2 grid h-5 min-w-5 -translate-y-1/2 place-items-center rounded-full border-2 border-[#f8faf4] bg-coral px-1 text-[10px] font-black leading-none text-white'
       : 'absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full border-2 border-[#f8faf4] bg-coral px-0.5 text-[9px] font-black leading-none text-white'
     }>
       !
@@ -378,7 +378,7 @@ export function Layout() {
       {actionMenuOpen && !window.matchMedia('(min-width: 1024px)').matches ? (
         <div
           className="fixed left-4 right-4 z-[60] grid animate-soft-enter gap-2 rounded-2xl border border-line bg-white p-3 shadow-lift"
-          style={{ bottom: `${mobileNavHeight + 8}px` }}
+          style={{ bottom: `${mobileNavHeight + 18}px` }}
         >
           <Link
             to="/create"
@@ -400,7 +400,7 @@ export function Layout() {
       {profileMenuOpen ? (
         <div
           className="fixed right-4 z-[60] w-56 animate-soft-enter rounded-2xl border border-line bg-white p-2 shadow-lift lg:hidden"
-          style={{ bottom: `${mobileNavHeight + 8}px` }}
+          style={{ bottom: `${mobileNavHeight + 18}px` }}
         >
           <div className="mb-1 flex items-center justify-between gap-2 rounded-xl bg-field px-3 py-2">
             <CoinAmount amount={profile?.coinBalance ?? 0} className="text-sm" />

@@ -24,7 +24,7 @@ import { listenForForegroundNotifications, refreshPushTokenIfEnabled, registerAp
 
 function LoadingScreen() {
   return (
-    <div className="grid min-h-screen place-items-center bg-[#edf0e8] text-ink">
+    <div className="fixed inset-0 grid min-h-[100dvh] place-items-center bg-[#edf0e8] text-ink">
       <div className="grid place-items-center gap-3">
         <img src="./pwa-icon.svg" alt="" className="h-28 w-28 animate-soft-enter rounded-[28px] shadow-lift" />
         <p className="text-sm font-black">Called it</p>

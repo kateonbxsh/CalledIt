@@ -58,6 +58,7 @@ export function FeedPage() {
 
   const predictionByBet = new Map(predictions.map((prediction) => [prediction.betId, prediction]));
   const groupNameById = new Map(groups.map((group) => [group.id, group.name]));
+  const groupById = new Map(groups.map((group) => [group.id, group]));
 
   const tabFilteredBets = bets.filter((bet) => {
     if (activeTab === 'all') return true;
@@ -74,10 +75,10 @@ export function FeedPage() {
       .includes(normalized);
   });
 
-  const tabs = [
+  const tabs: { id: string; label: string; group?: FriendGroup }[] = [
     { id: 'all', label: 'All' },
     { id: 'private', label: 'Private' },
-    ...groups.map((group) => ({ id: group.id, label: group.name })),
+    ...groups.map((group) => ({ id: group.id, label: group.name, group })),
   ];
 
   return (
@@ -99,10 +100,11 @@ export function FeedPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full py-1.5 text-sm font-semibold transition ${tab.group?.photoURL ? 'pl-1.5 pr-3.5' : 'px-4'} ${
                 activeTab === tab.id ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
               }`}
             >
+              {tab.group?.photoURL ? <img src={tab.group.photoURL} alt="" className="h-5 w-5 rounded-full object-cover" /> : null}
               {tab.label}
             </button>
         ))}
@@ -126,7 +128,7 @@ export function FeedPage() {
       ) : (
         <div className="grid gap-3">
           {visibleBets.map((bet) => (
-            <BetCard key={bet.id} bet={bet} prediction={predictionByBet.get(bet.id)} groupName={bet.groupId ? groupNameById.get(bet.groupId) : undefined} />
+            <BetCard key={bet.id} bet={bet} prediction={predictionByBet.get(bet.id)} groupName={bet.groupId ? groupNameById.get(bet.groupId) : undefined} groupPhotoURL={bet.groupId ? groupById.get(bet.groupId)?.photoURL ?? undefined : undefined} />
           ))}
         </div>
       )}

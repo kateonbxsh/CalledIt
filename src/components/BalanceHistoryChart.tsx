@@ -32,6 +32,7 @@ export function BalanceHistoryChart({
         balance: snapshot.balance,
         reason: snapshot.reason,
         date: snapshot.createdAt.toDate(),
+        t: snapshot.createdAt.toMillis(),
       }));
 
     if (points.length === 0) {
@@ -42,12 +43,14 @@ export function BalanceHistoryChart({
           balance: user.coinBalance,
           reason: 'Balance tracking starts here',
           date: createdAt,
+          t: createdAt.getTime(),
         },
         {
           id: 'current',
           balance: user.coinBalance,
           reason: 'Current balance',
           date: new Date(),
+          t: Date.now(),
         },
       ];
     }
@@ -59,16 +62,18 @@ export function BalanceHistoryChart({
         balance: Math.max(0, firstSnapshot.balance - firstSnapshot.delta),
         reason: 'Balance before tracking',
         date: new Date(firstSnapshot.createdAt.toMillis() - 1),
+        t: firstSnapshot.createdAt.toMillis() - 1,
       });
     }
 
-    const latest = points.at(-1);
+    const latest = points[points.length - 1];
     if (!latest || latest.balance !== user.coinBalance) {
       points.push({
         id: 'current',
         balance: user.coinBalance,
         reason: 'Current balance',
         date: new Date(),
+        t: Date.now(),
       });
     }
     return points;
@@ -88,7 +93,10 @@ export function BalanceHistoryChart({
         <AreaChart data={data} margin={{ top: 12, right: 10, bottom: 0, left: 2 }}>
           <CartesianGrid vertical={false} stroke="#e5e8e1" strokeDasharray="3 4" />
           <XAxis
-            dataKey="date"
+            dataKey="t"
+            type="number"
+            scale="time"
+            domain={['dataMin', 'dataMax']}
             tickFormatter={(value) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(value))}
             minTickGap={34}
             tick={{ fill: '#6b716c', fontSize: 11, fontWeight: 600 }}

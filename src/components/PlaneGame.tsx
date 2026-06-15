@@ -30,12 +30,13 @@ interface Puff { x: number; y: number; t: number; life: number; s: number; }
 interface Pop { x: number; y: number; vx: number; vy: number; life: number; t: number; color: string; r: number; }
 
 export function PlaneGame({
-  coins, stakes, onCharge, onWin, onClose,
+  coins, stakes, onCharge, onWin, onLose, onClose,
 }: {
   coins: number;
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
   onWin: (payout: number) => Promise<MinigameWinResult>;
+  onLose: (stake: number) => Promise<void> | void;
   onClose: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,6 +51,7 @@ export function PlaneGame({
   const angleRef = useRef(angle); angleRef.current = angle;
   const stakeRef = useRef(stake); stakeRef.current = stake;
   const onWinRef = useRef(onWin); onWinRef.current = onWin;
+  const onLoseRef = useRef(onLose); onLoseRef.current = onLose;
   const api = useRef<{ launch: () => void; playAgain: () => void } | null>(null);
 
   const canPlay = stake <= coins && stake >= 10;
@@ -155,6 +157,8 @@ export function PlaneGame({
         onWinRef.current(payout)
           .then((settled) => setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current))
           .catch(() => {});
+      } else if (!won) {
+        Promise.resolve(onLoseRef.current(stakeRef.current)).catch(() => {});
       }
     }
     api.current = { launch, playAgain: toAim };
@@ -373,7 +377,7 @@ export function PlaneGame({
             </p>
             {result.ratingDelta ? (
               <p className="mb-4 rounded-xl bg-plum/20 px-3 py-2 text-sm font-black text-purple-200">
-                Lucky flight: +{result.ratingDelta} ELO
++{result.ratingDelta} ELO
               </p>
             ) : null}
             <div className="flex gap-2">

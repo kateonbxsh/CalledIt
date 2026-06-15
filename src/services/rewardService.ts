@@ -463,14 +463,36 @@ export async function chargeMinigameStake(user: UserProfile, stake: number) {
     const current = snap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
     if (current.coinBalance < stake) throw new Error('Not enough coins for that stake.');
-    setBalanceInTransaction(transaction, userRef, current, current.coinBalance - stake, 'Minigame stake');
+    // Deduct the stake but DON'T record a balance-history entry yet — the round's
+    // outcome is logged once: as a net win, or (only if we lose) as the lost stake.
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance - stake, 'Minigame stake', {}, false);
+  });
+}
+
+// Records the lost stake as a single balance-history entry (the stake was already
+// deducted at charge time without a history entry).
+export async function recordMinigameLoss(user: UserProfile, stake: number) {
+  if (stake <= 0) return;
+  const userRef = doc(db, 'users', user.uid);
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+    const current = snap.data() as UserProfile | undefined;
+    if (!current) return;
+    transaction.set(doc(collection(userRef, 'balanceHistory')), {
+      userId: user.uid,
+      balance: current.coinBalance,
+      delta: -stake,
+      reason: 'Minigame loss',
+      createdAt: serverTimestamp(),
+    });
   });
 }
 
 export async function awardMinigameWin(user: UserProfile, amount: number): Promise<MinigameWinResult> {
   const payout = Math.max(0, Math.round(amount));
   if (payout === 0) return { payout: 0, ratingDelta: 0 };
-  const ratingDelta = Math.random() < 0.1 ? 1 + Math.floor(Math.random() * 2) : 0;
+  // Every win grants 1-3 ELO with equal probability.
+  const ratingDelta = 1 + Math.floor(Math.random() * 3);
   const userRef = doc(db, 'users', user.uid);
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(userRef);

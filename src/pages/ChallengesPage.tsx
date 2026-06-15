@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CheckCircle2, Clock3, ImagePlus, MessageCircle, Pencil, Send, Target, Trash2, Trophy, Users, X, XCircle } from 'lucide-react';
-import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
+import { doc, getDoc, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
@@ -44,6 +45,16 @@ function statusStyle(status: ChallengeActivity['status']) {
 
 export function ChallengesPage() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
+
+  async function openProfileByUsername(username: string) {
+    try {
+      const snap = await getDoc(doc(db, 'usernames', username.trim().toLowerCase()));
+      if (snap.exists()) navigate(`/profile/${(snap.data() as { uid: string }).uid}`);
+    } catch {
+      // ignore — just don't navigate if the username can't be resolved
+    }
+  }
   const [activities, setActivities] = useState<ChallengeActivity[]>([]);
   const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [topTab, setTopTab] = useState<'wagers' | 'activity'>('wagers');
@@ -85,10 +96,10 @@ export function ChallengesPage() {
     [profile, weekKey],
   );
   const activeWeekly = weekly.find((challenge) => challenge.id === activeWeeklyId) ?? weekly[0];
-  const tabs = [
+  const tabs: { id: string; label: string; group?: FriendGroup }[] = [
     { id: 'all', label: 'All' },
     { id: 'private', label: 'Private' },
-    ...groups.map((group) => ({ id: group.id, label: group.name })),
+    ...groups.map((group) => ({ id: group.id, label: group.name, group })),
   ];
   const completedWeeklyIds = useMemo(
     () => new Set(
@@ -456,10 +467,11 @@ export function ChallengesPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full py-1.5 text-sm font-semibold transition ${tab.group?.photoURL ? 'pl-1.5 pr-3.5' : 'px-4'} ${
               activeTab === tab.id ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
             }`}
           >
+            {tab.group?.photoURL ? <img src={tab.group.photoURL} alt="" className="h-5 w-5 rounded-full object-cover" /> : null}
             {tab.label}
           </button>
         ))}
@@ -518,8 +530,8 @@ export function ChallengesPage() {
                               <span className="font-semibold text-ink/35">@{activity.creatorUsername}</span>
                               <span className="font-semibold text-ink/35">{activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}</span>
                               {group ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-field px-2 py-0.5 font-bold text-ink/50">
-                                  <Users size={11} /> {group.name}
+                                <span className="inline-flex items-center gap-1 rounded-full bg-field py-0.5 pl-0.5 pr-2 font-bold text-ink/50">
+                                  {group.photoURL ? <img src={group.photoURL} alt="" className="h-4 w-4 rounded-full object-cover" /> : <Users size={11} className="ml-1" />} {group.name}
                                 </span>
                               ) : null}
                             </div>
@@ -549,7 +561,17 @@ export function ChallengesPage() {
                       <div className="grid gap-px bg-line sm:grid-cols-3">
                         <div className="bg-field/65 px-4 py-3">
                           <p className="text-xs font-bold text-ink/40">Target</p>
-                          <p className="mt-1 text-sm font-black">@{activity.targetUsername || 'anyone invited'}</p>
+                          {activity.targetUsername ? (
+                            <button
+                              type="button"
+                              onClick={() => void openProfileByUsername(activity.targetUsername!)}
+                              className="mt-1 text-sm font-black text-ink hover:underline"
+                            >
+                              @{activity.targetUsername}
+                            </button>
+                          ) : (
+                            <p className="mt-1 text-sm font-black">anyone invited</p>
+                          )}
                         </div>
                         <div className="bg-field/65 px-4 py-3">
                           <p className="text-xs font-bold text-ink/40">Reward if completed</p>
@@ -674,8 +696,8 @@ export function ChallengesPage() {
                             <span className="font-semibold text-ink/35">@{actorUsername}</span>
                             <span className="font-semibold text-ink/35">{activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}</span>
                             {completionGroup ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-field px-2 py-0.5 font-bold text-ink/50">
-                                <Users size={11} /> {completionGroup.name}
+                              <span className="inline-flex items-center gap-1 rounded-full bg-field py-0.5 pl-0.5 pr-2 font-bold text-ink/50">
+                                {completionGroup.photoURL ? <img src={completionGroup.photoURL} alt="" className="h-4 w-4 rounded-full object-cover" /> : <Users size={11} className="ml-1" />} {completionGroup.name}
                               </span>
                             ) : null}
                           </div>
@@ -1079,7 +1101,7 @@ export function ChallengesPage() {
 
       {commentChallenge ? (
         <div className="fixed inset-0 z-[70] flex animate-fade-in items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift animate-soft-enter sm:h-[72dvh] sm:max-h-[760px] sm:max-w-5xl sm:rounded-2xl">
+          <div className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift animate-soft-enter sm:h-[72dvh] sm:max-h-[760px] sm:w-[min(94vw,1100px)] sm:max-w-none sm:rounded-2xl">
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 py-4 sm:px-6">
               <div className="min-w-0">
                 <h2 className="text-lg font-black">Comments</h2>

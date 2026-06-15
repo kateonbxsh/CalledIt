@@ -19,6 +19,7 @@ export function setBalanceInTransaction(
   nextBalanceValue: number,
   reason: string,
   extraUpdates: Record<string, unknown> = {},
+  recordHistory = true,
 ) {
   const nextBalance = Math.max(0, Math.round(nextBalanceValue));
   const previousMaximum = user.stats.maxBalance ?? user.coinBalance;
@@ -36,7 +37,7 @@ export function setBalanceInTransaction(
     updatedAt: serverTimestamp(),
   });
 
-  if (nextBalance !== user.coinBalance) {
+  if (recordHistory && nextBalance !== user.coinBalance) {
     transaction.set(doc(collection(userRef, 'balanceHistory')), {
       userId: user.uid,
       balance: nextBalance,

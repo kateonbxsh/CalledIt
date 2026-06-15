@@ -8,10 +8,10 @@ export function Avatar({
 }: {
   name: string;
   src?: string;
-  size?: 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg';
   round?: boolean;
 }) {
-  const dim = size === 'lg' ? 'h-20 w-20 text-xl' : 'h-10 w-10 text-sm';
+  const dim = size === 'lg' ? 'h-20 w-20 text-xl' : size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-10 w-10 text-sm';
   const shape = round ? 'rounded-full' : 'rounded-xl';
 
   if (src) {

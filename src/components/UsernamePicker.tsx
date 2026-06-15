@@ -11,6 +11,7 @@ export function UsernamePicker({
   allowed,
   placeholder = 'Search usernames',
   maxSelections,
+  disabled = false,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
@@ -18,6 +19,7 @@ export function UsernamePicker({
   allowed?: string[];
   placeholder?: string;
   maxSelections?: number;
+  disabled?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserProfile[]>([]);
@@ -74,30 +76,34 @@ export function UsernamePicker({
 
   return (
     <div>
-      <div className="flex flex-wrap gap-1.5 rounded-md border border-line bg-field p-2">
+      <div className={`flex flex-wrap gap-1.5 rounded-md border border-line bg-field p-2 ${disabled ? 'opacity-60' : ''}`}>
         {normalizedValue.map((username) => (
           <span key={username} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-xs font-bold text-ink/70">
             @{username}
-            <button type="button" onClick={() => remove(username)} className="text-ink/35 hover:text-coral" title={`Remove ${username}`}>
-              <X size={12} />
-            </button>
+            {disabled ? null : (
+              <button type="button" onClick={() => remove(username)} className="text-ink/35 hover:text-coral" title={`Remove ${username}`}>
+                <X size={12} />
+              </button>
+            )}
           </span>
         ))}
-        <input
-          className="min-w-32 flex-1 bg-transparent px-1 py-1 text-sm outline-none"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          disabled={maxSelections !== undefined && normalizedValue.length >= maxSelections}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              if (results[0]) add(results[0].username);
-            }
-          }}
-          placeholder={maxSelections !== undefined && normalizedValue.length >= maxSelections ? '' : normalizedValue.length ? 'Add another' : placeholder}
-        />
+        {disabled ? null : (
+          <input
+            className="min-w-32 flex-1 bg-transparent px-1 py-1 text-sm outline-none"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            disabled={maxSelections !== undefined && normalizedValue.length >= maxSelections}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                if (results[0]) add(results[0].username);
+              }
+            }}
+            placeholder={maxSelections !== undefined && normalizedValue.length >= maxSelections ? '' : normalizedValue.length ? 'Add another' : placeholder}
+          />
+        )}
       </div>
-      {results.length > 0 ? (
+      {!disabled && results.length > 0 ? (
         <div className="relative z-50 mt-1 overflow-hidden rounded-md border border-line bg-white shadow-soft">
           {results.map((user) => (
             <button

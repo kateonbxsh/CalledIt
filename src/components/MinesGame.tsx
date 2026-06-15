@@ -29,12 +29,14 @@ export function MinesGame({
   stakes,
   onCharge,
   onWin,
+  onLose,
   onClose,
 }: {
   coins: number;
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
   onWin: (payout: number) => Promise<MinigameWinResult>;
+  onLose: (stake: number) => Promise<void> | void;
   onClose: () => void;
 }) {
   const [size, setSize] = useState<3 | 5>(5);
@@ -92,6 +94,7 @@ export function MinesGame({
       setLastCashout(Math.round(stake * payoutMultiplier(total, bombCount, revealed.size)));
       setRevealed(new Set([...revealed, index]));
       setPhase('lost');
+      void onLose(stake);
       return;
     }
 
@@ -331,7 +334,7 @@ export function MinesGame({
             ) : null}
             {settlement?.ratingDelta ? (
               <p className="mt-3 rounded-xl bg-plum/20 px-3 py-2 text-sm font-black text-purple-200">
-                Lucky board: +{settlement.ratingDelta} ELO
++{settlement.ratingDelta} ELO
               </p>
             ) : null}
             {error ? <p className="mt-3 text-sm font-bold text-coral">{error}</p> : null}

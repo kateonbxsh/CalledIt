@@ -29,6 +29,7 @@ import {
   awardMinigameWin,
   chargeMinigameStake,
   chargePlaneStake,
+  recordMinigameLoss,
   claimChest,
   claimDailyForecast,
   getChestDefinitions,
@@ -282,7 +283,7 @@ export function MinigamesPage() {
             <p className="text-xs font-black uppercase text-ink/40">Replayable</p>
             <h2 className="text-xl font-black">Arcade</h2>
           </div>
-          <p className="hidden text-xs font-semibold text-ink/45 sm:block">Wins have a small chance to award 1-2 ELO.</p>
+          <p className="hidden text-xs font-semibold text-ink/45 sm:block">Every win also grants 1-3 ELO.</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <button
@@ -657,7 +658,7 @@ export function MinigamesPage() {
       ) : null}
 
       {rewardPopup ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-reward-pop rounded-md border border-line bg-white p-6 text-center shadow-lift">
             {rewardPopup.variant === 'chest' ? (
               <RewardChest open className="mx-auto mb-3 h-32 w-40" />
@@ -690,6 +691,7 @@ export function MinigamesPage() {
           stakes={[50, 100, 250, 500]}
           onCharge={async (s) => { await chargePlaneStake(profile, s); return true; }}
           onWin={async (p) => awardPlaneWin(profile, p)}
+          onLose={async (s) => { await recordMinigameLoss(profile, s); }}
           onClose={() => setShowPlane(false)}
         />
       ) : null}
@@ -700,6 +702,7 @@ export function MinigamesPage() {
           stakes={[50, 100, 250, 500]}
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
           onWin={async (p) => awardMinigameWin(profile, p)}
+          onLose={async (s) => { await recordMinigameLoss(profile, s); }}
           onClose={() => setShowMines(false)}
         />
       ) : null}
