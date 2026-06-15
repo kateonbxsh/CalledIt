@@ -287,7 +287,7 @@ export function MinigamesPage() {
             <p className="text-xs font-black uppercase text-ink/40">Replayable</p>
             <h2 className="text-xl font-black">Arcade</h2>
           </div>
-          <p className="hidden text-xs font-semibold text-ink/45 sm:block">Every win also grants 1-3 ELO.</p>
+          <p className="hidden text-xs font-semibold text-ink/45 sm:block">High-risk wins can spike ELO. Losses cost a little.</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <button
@@ -708,7 +708,7 @@ export function MinigamesPage() {
           stakes={[50, 100, 250, 500]}
           onCharge={async (s) => { await chargePlaneStake(profile, s); return true; }}
           onWin={async (p) => awardPlaneWin(profile, p)}
-          onLose={async (s) => { await recordMinigameLoss(profile, s); }}
+          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'plane', stake: s, ...context })}
           onClose={() => setShowPlane(false)}
         />
       ) : null}
@@ -718,8 +718,8 @@ export function MinigamesPage() {
           coins={profile.coinBalance}
           stakes={[50, 100, 250, 500]}
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
-          onWin={async (p) => awardMinigameWin(profile, p)}
-          onLose={async (s) => { await recordMinigameLoss(profile, s); }}
+          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context })}
+          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context })}
           onClose={() => setShowMines(false)}
         />
       ) : null}

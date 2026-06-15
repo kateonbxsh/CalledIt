@@ -1593,7 +1593,7 @@ export function BetDetailPage() {
       </div>
 
       {editingBet ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
           <form onSubmit={submitBetEdit} className="max-h-[90vh] w-full max-w-lg animate-soft-enter overflow-y-auto rounded-md border border-line bg-white p-5 shadow-lift">
             <h2 className="text-lg font-black">Edit bet</h2>
             <div className="mt-4 space-y-3">
@@ -1774,7 +1774,7 @@ export function BetDetailPage() {
 
       {/* Resolution confirm modal */}
       {confirmingResolution ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
             <h2 className="text-lg font-black">{amending ? 'Amend this resolution?' : 'Resolve this bet?'}</h2>
             <p className="mt-2 text-sm leading-6 text-ink/65">
@@ -1815,7 +1815,7 @@ export function BetDetailPage() {
 
       {/* Delete confirm modal */}
       {confirmingDelete ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
             <h2 className="text-lg font-black">Delete this bet?</h2>
             <p className="mt-2 text-sm text-ink/65">

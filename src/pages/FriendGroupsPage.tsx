@@ -429,6 +429,17 @@ export function FriendGroupsPage() {
                 </span>
               </div>
               <div className="flex gap-2">
+                {editIsOwner && editing.groupId ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(editing.groupId)}
+                    className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-md border border-coral/20 bg-coral/5 text-coral transition hover:bg-coral/10"
+                    aria-label="Delete group"
+                    title="Delete group"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setEditing(null)}
@@ -513,16 +524,6 @@ export function FriendGroupsPage() {
                   >
                     <Pencil size={16} />
                   </button>
-                  {isCreator ? (
-                    <button
-                      onClick={() => setConfirmDelete(group.id)}
-                      className="grid h-9 w-9 place-items-center rounded-full text-coral/70 transition hover:bg-coral/10 hover:text-coral"
-                      title="Delete group"
-                      aria-label="Delete group"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  ) : null}
                 </div>
               </div>
             );

@@ -35,8 +35,8 @@ export function MinesGame({
   coins: number;
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
-  onWin: (payout: number) => Promise<MinigameWinResult>;
-  onLose: (stake: number) => Promise<void> | void;
+  onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
+  onLose: (stake: number, context: { riskLevel: number; blunder: boolean }) => Promise<MinigameWinResult | void> | void;
   onClose: () => void;
 }) {
   const [size, setSize] = useState<3 | 5>(5);
@@ -80,7 +80,10 @@ export function MinesGame({
     setBusy(true);
     setPhase('won');
     try {
-      setSettlement(await onWin(finalPayout));
+      setSettlement(await onWin(finalPayout, {
+        stake,
+        riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + revealed.size / Math.max(1, safeTotal * 1.4)),
+      }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The win could not be credited.');
     } finally {
@@ -94,7 +97,12 @@ export function MinesGame({
       setLastCashout(Math.round(stake * payoutMultiplier(total, bombCount, revealed.size)));
       setRevealed(new Set([...revealed, index]));
       setPhase('lost');
-      void onLose(stake);
+      Promise.resolve(onLose(stake, {
+        riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + revealed.size / Math.max(1, safeTotal * 1.4)),
+        blunder: revealed.size <= 1,
+      })).then((result) => {
+        if (result) setSettlement(result);
+      }).catch(() => {});
       return;
     }
 
@@ -332,9 +340,11 @@ export function MinesGame({
                 Last available cashout: <CoinAmount amount={lastCashout} className="ml-1 text-sm" />
               </p>
             ) : null}
-            {settlement?.ratingDelta ? (
-              <p className="mt-3 rounded-xl bg-plum/20 px-3 py-2 text-sm font-black text-purple-200">
-+{settlement.ratingDelta} ELO
+            {settlement && settlement.ratingDelta !== 0 ? (
+              <p className={`mt-3 rounded-xl px-3 py-2 text-sm font-black ${
+                settlement.ratingDelta > 0 ? 'bg-plum/20 text-purple-200' : 'bg-coral/15 text-coral'
+              }`}>
+                {settlement.ratingDelta > 0 ? '+' : ''}{settlement.ratingDelta} ELO
               </p>
             ) : null}
             {error ? <p className="mt-3 text-sm font-bold text-coral">{error}</p> : null}

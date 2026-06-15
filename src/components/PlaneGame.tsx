@@ -36,7 +36,7 @@ export function PlaneGame({
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
   onWin: (payout: number) => Promise<MinigameWinResult>;
-  onLose: (stake: number) => Promise<void> | void;
+  onLose: (stake: number, context: { riskLevel: number; blunder: boolean }) => Promise<MinigameWinResult | void> | void;
   onClose: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -158,7 +158,16 @@ export function PlaneGame({
           .then((settled) => setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current))
           .catch(() => {});
       } else if (!won) {
-        Promise.resolve(onLoseRef.current(stakeRef.current)).catch(() => {});
+        Promise.resolve(onLoseRef.current(stakeRef.current, {
+          riskLevel: Math.min(1, Math.max(0.2, mult / 4.2 + starCount * 0.08)),
+          blunder: mult < 1.12 && starCount === 0,
+        }))
+          .then((settled) => {
+            if (settled) {
+              setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current);
+            }
+          })
+          .catch(() => {});
       }
     }
     api.current = { launch, playAgain: toAim };
@@ -376,8 +385,10 @@ export function PlaneGame({
                 : 'Into the sea. Try a different angle next time.'}
             </p>
             {result.ratingDelta ? (
-              <p className="mb-4 rounded-xl bg-plum/20 px-3 py-2 text-sm font-black text-purple-200">
-+{result.ratingDelta} ELO
+              <p className={`mb-4 rounded-xl px-3 py-2 text-sm font-black ${
+                result.ratingDelta > 0 ? 'bg-plum/20 text-purple-200' : 'bg-coral/15 text-coral'
+              }`}>
+                {result.ratingDelta > 0 ? '+' : ''}{result.ratingDelta} ELO
               </p>
             ) : null}
             <div className="flex gap-2">

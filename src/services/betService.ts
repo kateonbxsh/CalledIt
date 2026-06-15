@@ -1247,8 +1247,73 @@ export async function reopenBet(bet: Bet) {
 }
 
 export async function deleteBet(bet: Bet) {
-  if (bet.status === 'open' && bet.predictionCount > 0) {
-    throw new Error('Cannot delete an open bet that already has predictions. Resolve it first.');
-  }
-  await deleteDoc(doc(db, 'bets', bet.id));
+  const betRef = doc(db, 'bets', bet.id);
+  const [predictionSnap, commentSnap, chanceSnapSnap, eventSnap] = await Promise.all([
+    getDocs(query(collection(db, 'predictions'), where('betId', '==', bet.id))),
+    getDocs(query(collection(db, 'comments'), where('betId', '==', bet.id))),
+    getDocs(query(collection(db, 'chanceSnapshots'), where('betId', '==', bet.id))),
+    getDocs(query(collection(db, 'predictionEvents'), where('betId', '==', bet.id))),
+  ]);
+  const predictions = predictionSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
+
+  await runTransaction(db, async (transaction) => {
+    const [betSnap, ...userSnaps] = await Promise.all([
+      transaction.get(betRef),
+      ...[...new Set(predictions.map((prediction) => prediction.userId))]
+        .map((userId) => transaction.get(doc(db, 'users', userId))),
+    ]);
+    if (!betSnap.exists()) throw new Error('Bet not found.');
+    const freshBet = { id: betSnap.id, ...betSnap.data() } as Bet;
+
+    const usersById = new Map(
+      userSnaps
+        .filter((snap) => snap.exists())
+        .map((snap) => [snap.id, snap.data() as UserProfile]),
+    );
+
+    for (const prediction of predictions) {
+      const user = usersById.get(prediction.userId);
+      if (!user) continue;
+      const userRef = doc(db, 'users', prediction.userId);
+      const oldStatus = prediction.status;
+      const oldNet = prediction.coinDelta ?? 0;
+      const oldRatingDelta = prediction.ratingDelta ?? 0;
+      const oldSpicy = prediction.spicyForecastBonus ?? 0;
+      const oldStatsApplied = oldStatus === 'won' || oldStatus === 'lost';
+      const oldGross = oldStatus === 'won'
+        ? oldNet + prediction.stake
+        : oldStatus === 'refunded'
+          ? oldNet
+          : 0;
+
+      const restoredRating = user.rating - oldRatingDelta;
+      const restoredStats = oldStatsApplied
+        ? reverseStatsResolution(user.stats, { correct: oldStatus === 'won', coinsDelta: oldNet })
+        : user.stats;
+      const restoredPending = [
+        ...(user.pendingSpicyForecasts ?? []),
+        ...(oldSpicy > 0 ? [{ bonus: oldSpicy, claimedAt: Timestamp.now() }] : []),
+      ];
+
+      setBalanceInTransaction(
+        transaction,
+        userRef,
+        user,
+        user.coinBalance + prediction.stake - oldGross,
+        `Bet deleted and refunded: ${freshBet.title}`,
+        {
+          rating: restoredRating,
+          rank: rankForRating(restoredRating),
+          pendingSpicyForecasts: restoredPending,
+          stats: restoredStats,
+        },
+      );
+      transaction.delete(doc(db, 'predictions', prediction.id));
+    }
+
+    commentSnap.docs.forEach((item) => transaction.delete(doc(db, 'comments', item.id)));
+    chanceSnapSnap.docs.forEach((item) => transaction.delete(doc(db, 'chanceSnapshots', item.id)));
+    eventSnap.docs.forEach((item) => transaction.delete(doc(db, 'predictionEvents', item.id)));
+    transaction.delete(betRef);
+  });
 }

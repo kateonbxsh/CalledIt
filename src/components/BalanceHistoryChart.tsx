@@ -30,7 +30,6 @@ export function BalanceHistoryChart({
       .map((snapshot) => ({
         id: snapshot.id,
         balance: snapshot.balance,
-        reason: snapshot.reason,
         date: snapshot.createdAt.toDate(),
         t: snapshot.createdAt.toMillis(),
       }));
@@ -41,14 +40,12 @@ export function BalanceHistoryChart({
         {
           id: 'starting',
           balance: user.coinBalance,
-          reason: 'Balance tracking starts here',
           date: createdAt,
           t: createdAt.getTime(),
         },
         {
           id: 'current',
           balance: user.coinBalance,
-          reason: 'Current balance',
           date: new Date(),
           t: Date.now(),
         },
@@ -60,7 +57,6 @@ export function BalanceHistoryChart({
       points.unshift({
         id: 'starting',
         balance: Math.max(0, firstSnapshot.balance - firstSnapshot.delta),
-        reason: 'Balance before tracking',
         date: new Date(firstSnapshot.createdAt.toMillis() - 1),
         t: firstSnapshot.createdAt.toMillis() - 1,
       });
@@ -71,12 +67,14 @@ export function BalanceHistoryChart({
       points.push({
         id: 'current',
         balance: user.coinBalance,
-        reason: 'Current balance',
         date: new Date(),
         t: Date.now(),
       });
     }
-    return points;
+    if (points.length <= 60) return points;
+    const stride = Math.ceil(points.length / 60);
+    const compacted = points.filter((_, index) => index === 0 || index === points.length - 1 || index % stride === 0);
+    return compacted;
   }, [snapshots, user]);
 
   const domain = useMemo(() => {
@@ -122,7 +120,6 @@ export function BalanceHistoryChart({
                     {new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(point.date)}
                   </p>
                   <p className="mt-1 text-base font-black text-mint">{point.balance.toLocaleString()} coins</p>
-                  <p className="max-w-52 text-xs text-ink/55">{point.reason}</p>
                 </div>
               );
             }}

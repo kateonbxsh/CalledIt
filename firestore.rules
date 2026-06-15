@@ -83,6 +83,15 @@ service cloud.firestore {
         );
     }
 
+    function isBetOwnerById(betId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/bets/$(betId))
+        && (
+          get(/databases/$(database)/documents/bets/$(betId)).data.creatorId == request.auth.uid ||
+          isAdmin()
+        );
+    }
+
     function isGroupMember(groupId) {
       return signedIn()
         && exists(/databases/$(database)/documents/friendGroups/$(groupId))
@@ -229,6 +238,44 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time;
         allow update, delete: if false;
       }
+
+      match /incomingGifts/{giftId} {
+        allow read: if signedIn() && request.auth.uid == userId;
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly([
+            'senderUid',
+            'senderUsername',
+            'senderDisplayName',
+            'recipientUid',
+            'recipientUsername',
+            'amount',
+            'note',
+            'status',
+            'createdAt',
+            'claimedAt'
+          ])
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.recipientUid == userId
+          && request.resource.data.senderUsername == username()
+          && request.resource.data.senderDisplayName == me().data.displayName
+          && request.resource.data.amount is number
+          && request.resource.data.amount >= 10
+          && (
+            !request.resource.data.keys().hasAny(['note']) ||
+            request.resource.data.note == null ||
+            request.resource.data.note is string
+          )
+          && request.resource.data.status == 'pending'
+          && request.resource.data.claimedAt == null
+          && request.resource.data.createdAt == request.time;
+        allow update: if signedIn()
+          && request.auth.uid == userId
+          && resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'claimedAt'])
+          && request.resource.data.status == 'claimed'
+          && request.resource.data.claimedAt == request.time;
+        allow delete: if false;
+      }
       allow delete: if false;
     }
 
@@ -322,13 +369,15 @@ service cloud.firestore {
     match /predictionEvents/{eventId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isBetOwnerById(resource.data.betId);
     }
 
     match /chanceSnapshots/{snapshotId} {
       allow read: if signedIn();
       allow create: if signedIn();
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isBetOwnerById(resource.data.betId);
     }
 
     match /comments/{commentId} {
@@ -384,7 +433,8 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow delete: if signedIn() && (
         resource.data.userId == request.auth.uid ||
-        isAdmin()
+        isAdmin() ||
+        isBetOwnerById(resource.data.betId)
       );
     }
 

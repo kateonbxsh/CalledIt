@@ -3,6 +3,7 @@ import {
   CirclePlus,
   Download,
   Gamepad2,
+  Gift,
   HelpCircle,
   History,
   Home,
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/challenges', label: 'Challenges', icon: Trophy },
   { to: '/minigames', label: 'Minigames', icon: Gamepad2 },
   { to: '/groups', label: 'Groups', icon: Users },
+  { to: '/gifts', label: 'Gifts', icon: Gift },
   { to: '/mine', label: 'My Bets', icon: BarChart3 },
   { to: '/history', label: 'History', icon: History },
   { to: '/leaderboard', label: 'Leaderboard', icon: Medal },
@@ -414,6 +416,9 @@ export function Layout() {
           </Link>
           <Link to="/mine" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
             My bets
+          </Link>
+          <Link to="/gifts" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
+            Gifts
           </Link>
           <Link to="/how-to-play" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
             How to Play

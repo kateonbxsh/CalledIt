@@ -67,6 +67,20 @@ export interface BalanceSnapshot {
   createdAt: Timestamp;
 }
 
+export interface CoinGift {
+  id: string;
+  senderUid: string;
+  senderUsername: string;
+  senderDisplayName: string;
+  recipientUid: string;
+  recipientUsername: string;
+  amount: number;
+  note?: string | null;
+  status: 'pending' | 'claimed' | 'cancelled';
+  createdAt: Timestamp;
+  claimedAt?: Timestamp | null;
+}
+
 export interface BetOption {
   id: string;
   label: string;
@@ -399,6 +413,7 @@ export type NotificationEventType =
   | 'challenge_commented'
   | 'reward_available'
   | 'leaderboard_moved'
+  | 'coins_received'
   | 'test_push';
 
 export interface AppNotification {

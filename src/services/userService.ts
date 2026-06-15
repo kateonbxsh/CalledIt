@@ -19,6 +19,8 @@ import { canClaimDailyRefill } from '../utils/coins';
 import { rankForRating } from '../utils/ranks';
 import { setBalanceInTransaction } from './balanceService';
 
+const userCache = new Map<string, UserProfile>();
+
 export const emptyStats: UserStats = {
   totalBets: 0,
   wins: 0,
@@ -161,16 +163,32 @@ export async function findUsersByUsernamePrefix(prefix: string) {
   return snap.docs.map((item) => item.data() as UserProfile);
 }
 
+export async function getUserByUsername(username: string) {
+  const normalized = username.trim().toLowerCase();
+  if (!normalized) return null;
+  const usernameSnap = await getDoc(doc(db, 'usernames', normalized));
+  if (!usernameSnap.exists()) return null;
+  const userSnap = await getDoc(doc(db, 'users', (usernameSnap.data() as { uid: string }).uid));
+  if (!userSnap.exists()) return null;
+  const user = userSnap.data() as UserProfile;
+  userCache.set(user.uid, user);
+  return user;
+}
+
 export async function getUsersByIds(ids: string[]) {
   const uniqueIds = [...new Set(ids)].filter(Boolean);
-  const snaps = await Promise.all(uniqueIds.map((uid) => getDoc(doc(db, 'users', uid))));
+  const missingIds = uniqueIds.filter((uid) => !userCache.has(uid));
+  const snaps = await Promise.all(missingIds.map((uid) => getDoc(doc(db, 'users', uid))));
+  for (const snap of snaps) {
+    if (!snap.exists()) continue;
+    const user = snap.data() as UserProfile;
+    userCache.set(user.uid, user);
+  }
   return new Map(
-    snaps
-      .filter((snap) => snap.exists())
-      .map((snap) => {
-        const user = snap.data() as UserProfile;
-        return [user.uid, user] as const;
-      }),
+    uniqueIds
+      .map((uid) => userCache.get(uid))
+      .filter((user): user is UserProfile => Boolean(user))
+      .map((user) => [user.uid, user] as const),
   );
 }
 

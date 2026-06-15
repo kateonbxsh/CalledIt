@@ -4,24 +4,23 @@ import { Avatar } from './Avatar';
 import { useAuth } from '../contexts/AuthContext';
 import { rankRanges } from '../utils/ranks';
 
+const rankBoundaries = [
+  { elo: 0, label: '0' },
+  { elo: 250, label: '250' },
+  { elo: 700, label: '700' },
+  { elo: 1100, label: '1100' },
+  { elo: 1450, label: '1450' },
+  { elo: 2100, label: '2100' },
+  { elo: 2700, label: '2700' },
+  { elo: 3500, label: '3500+' },
+];
+
 export function RankLegend() {
   const [showPopup, setShowPopup] = useState(false);
   const { profile } = useAuth();
 
-  // ELO boundaries
-  const boundaries = [
-    { elo: 0, label: '0' },
-    { elo: 250, label: '250' },
-    { elo: 700, label: '700' },
-    { elo: 1100, label: '1100' },
-    { elo: 1450, label: '1450' },
-    { elo: 1750, label: '1750' },
-    { elo: 2000, label: '2000' },
-    { elo: 2250, label: '2250+' },
-  ];
-
   const minElo = 0;
-  const maxElo = 2250;
+  const maxElo = 4200;
   const totalRange = maxElo - minElo;
   const scaleHeight = 480; // Fixed scale height for precise calculations
 
@@ -41,11 +40,11 @@ export function RankLegend() {
         <>
           {/* Blurred backdrop */}
           <button
-            className="fixed inset-0 z-40 backdrop-blur-sm"
+            className="fixed inset-0 z-[90] backdrop-blur-sm"
             onClick={() => setShowPopup(false)}
             aria-label="Close"
           />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="w-full max-w-2xl rounded-2xl border border-line bg-white p-8 shadow-lift animate-soft-enter">
               <h2 className="mb-8 text-lg font-black">Rank Ranges</h2>
 
@@ -90,8 +89,8 @@ export function RankLegend() {
                     const colorMatch = rank.className.match(/#[0-9a-f]+/i);
                     const rankColor = colorMatch ? colorMatch[0] : '#121417';
 
-                    const startElos = [0, 250, 700, 1100, 1450, 1750, 2000, 2250];
-                    const endElos = [249, 699, 1099, 1449, 1749, 1999, 2249, 2250];
+                    const startElos = [0, 250, 700, 1100, 1450, 2100, 2700, 3500];
+                    const endElos = [249, 699, 1099, 1449, 2099, 2699, 3499, 4200];
 
                     const rangeSize = endElos[idx] - startElos[idx] + 1;
                     const heightPercent = (rangeSize / totalRange) * 100;
@@ -110,7 +109,7 @@ export function RankLegend() {
                   })}
 
                   {/* Boundary points */}
-                  {boundaries.map((b, idx) => {
+                  {rankBoundaries.map((b, idx) => {
                     const posPercent = ((b.elo - minElo) / totalRange) * 100;
                     const rankIndex = idx;
                     const colorMatch = rankRanges[rankIndex].className.match(/#[0-9a-f]+/i);
@@ -132,7 +131,7 @@ export function RankLegend() {
 
                 {/* Right: Rank information - positioned to align with boundary points */}
                 <div className="flex-1 relative" style={{ height: `${scaleHeight}px` }}>
-                  {boundaries.map((b, idx) => {
+                  {rankBoundaries.map((b, idx) => {
                     const rank = rankRanges[idx];
                     const colorMatch = rank.className.match(/#[0-9a-f]+/i);
                     const rankColor = colorMatch ? colorMatch[0] : '#121417';

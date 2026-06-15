@@ -12,6 +12,7 @@ import { CreateBetPage } from './pages/CreateBetPage';
 import { CreateWagerPage } from './pages/CreateWagerPage';
 import { FeedPage } from './pages/FeedPage';
 import { FriendGroupsPage } from './pages/FriendGroupsPage';
+import { GiftsPage } from './pages/GiftsPage';
 import { HowToPlayPage } from './pages/HowToPlayPage';
 import { InstallAppPage } from './pages/InstallAppPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
@@ -93,6 +94,7 @@ export function App() {
           <Route path="mine" element={<MyBetsPage />} />
           <Route path="history" element={<PredictionHistoryPage />} />
           <Route path="groups" element={<FriendGroupsPage />} />
+          <Route path="gifts" element={<GiftsPage />} />
           <Route path="challenges" element={<ChallengesPage />} />
           <Route path="minigames" element={<MinigamesPage />} />
           <Route path="create" element={<CreateBetPage />} />
@@ -109,7 +111,7 @@ export function App() {
       {notificationToast ? (
         <a
           href={notificationToast.url}
-          className="fixed bottom-4 right-4 z-50 block max-w-sm rounded-md border border-line bg-white p-4 text-sm shadow-lift"
+          className="fixed bottom-4 right-4 z-[80] block max-w-sm rounded-md border border-line bg-white p-4 text-sm shadow-lift"
         >
           <span className="block font-black">{notificationToast.title}</span>
           <span className="mt-1 block text-ink/65">{notificationToast.body}</span>

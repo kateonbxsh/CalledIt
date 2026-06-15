@@ -34,6 +34,7 @@ import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
 import { rankForRating } from '../utils/ranks';
 import { setBalanceInTransaction } from './balanceService';
+import { getLeaderboard } from './userService';
 
 // Global buff applied to coin rewards across forecasts, chests, weekly
 // challenges and wager bonuses so the whole economy pays out more generously.
@@ -454,6 +455,75 @@ export interface MinigameWinResult {
   ratingDelta: number;
 }
 
+export type MinigameOutcomeContext = {
+  game: 'mines' | 'plane';
+  stake: number;
+  payout?: number;
+  riskLevel?: number;
+  blunder?: boolean;
+};
+
+async function notifyLeaderboardMoveForUser(user: UserProfile, nextRating: number) {
+  const before = await getLeaderboard();
+  const nextSelf = { ...user, rating: nextRating, rank: rankForRating(nextRating) };
+  const after = [...before.filter((entry) => entry.uid !== user.uid), nextSelf]
+    .sort((a, b) => {
+      if (b.rating !== a.rating) return b.rating - a.rating;
+      return b.coinBalance - a.coinBalance;
+    })
+    .slice(0, 50);
+
+  const previousIndex = before.findIndex((entry) => entry.uid === user.uid);
+  const nextIndex = after.findIndex((entry) => entry.uid === user.uid);
+  if (previousIndex === nextIndex) return;
+
+  if (previousIndex !== -1 && nextIndex === -1) {
+    await createNotification({
+      type: 'leaderboard_moved',
+      actor: user,
+      targetUids: [user.uid],
+      includeActor: true,
+      title: 'Leaderboard drop',
+      body: `You slipped out of the top 50 from #${previousIndex + 1}.`,
+      url: '/#/leaderboard',
+    });
+    return;
+  }
+  if (nextIndex === -1) return;
+
+  const previousRank = previousIndex === -1 ? null : previousIndex + 1;
+  const currentRank = nextIndex + 1;
+  const direction = previousRank === null || currentRank < previousRank ? 'up' : 'down';
+
+  await createNotification({
+    type: 'leaderboard_moved',
+    actor: user,
+    targetUids: [user.uid],
+    includeActor: true,
+    title: direction === 'up' ? 'Leaderboard climb' : 'Leaderboard drop',
+    body: previousRank === null
+      ? `You entered the top 50 at #${currentRank}.`
+      : `You moved from #${previousRank} to #${currentRank}.`,
+    url: '/#/leaderboard',
+  });
+}
+
+function minigameWinDelta(context: MinigameOutcomeContext) {
+  const stakeWeight = Math.min(1, context.stake / 900);
+  const payoutWeight = Math.min(1, Math.max(context.payout ?? context.stake, context.stake) / Math.max(context.stake, 1) / 4.5);
+  const riskWeight = Math.min(1, Math.max(0, context.riskLevel ?? 0.35));
+  const score = stakeWeight * 0.42 + payoutWeight * 0.33 + riskWeight * 0.25;
+  if (score < 0.5) return 1;
+  if (score < 0.82) return 2;
+  if (score < 0.965) return 3;
+  return Math.random() < 0.16 ? 4 : 3;
+}
+
+function minigameLossDelta(context: MinigameOutcomeContext) {
+  if (!context.blunder) return -1;
+  return Math.random() < 0.18 ? -2 : -1;
+}
+
 // Arcade games share one settlement path so their balance and rare ELO rewards
 // behave consistently.
 export async function chargeMinigameStake(user: UserProfile, stake: number) {
@@ -472,28 +542,43 @@ export async function chargeMinigameStake(user: UserProfile, stake: number) {
 
 // Records the lost stake as a single balance-history entry (the stake was already
 // deducted at charge time without a history entry).
-export async function recordMinigameLoss(user: UserProfile, stake: number) {
-  if (stake <= 0) return;
+export async function recordMinigameLoss(
+  user: UserProfile,
+  context: MinigameOutcomeContext,
+): Promise<MinigameWinResult> {
+  if (context.stake <= 0) return { payout: 0, ratingDelta: 0 };
+  const ratingDelta = minigameLossDelta(context);
   const userRef = doc(db, 'users', user.uid);
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(userRef);
     const current = snap.data() as UserProfile | undefined;
     if (!current) return;
+    const nextRating = Math.max(0, current.rating + ratingDelta);
+    transaction.update(userRef, {
+      rating: nextRating,
+      rank: rankForRating(nextRating),
+      updatedAt: serverTimestamp(),
+    });
     transaction.set(doc(collection(userRef, 'balanceHistory')), {
       userId: user.uid,
       balance: current.coinBalance,
-      delta: -stake,
+      delta: -context.stake,
       reason: 'Minigame loss',
       createdAt: serverTimestamp(),
     });
   });
+  await notifyLeaderboardMoveForUser(user, Math.max(0, user.rating + ratingDelta));
+  return { payout: 0, ratingDelta };
 }
 
-export async function awardMinigameWin(user: UserProfile, amount: number): Promise<MinigameWinResult> {
+export async function awardMinigameWin(
+  user: UserProfile,
+  amount: number,
+  context: Omit<MinigameOutcomeContext, 'payout'>,
+): Promise<MinigameWinResult> {
   const payout = Math.max(0, Math.round(amount));
   if (payout === 0) return { payout: 0, ratingDelta: 0 };
-  // Every win grants 1-3 ELO with equal probability.
-  const ratingDelta = 1 + Math.floor(Math.random() * 3);
+  const ratingDelta = minigameWinDelta({ ...context, payout });
   const userRef = doc(db, 'users', user.uid);
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(userRef);
@@ -504,6 +589,7 @@ export async function awardMinigameWin(user: UserProfile, amount: number): Promi
       ...(ratingDelta > 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
     });
   });
+  await notifyLeaderboardMoveForUser(user, user.rating + ratingDelta);
   return { payout, ratingDelta };
 }
 
@@ -512,7 +598,11 @@ export async function chargePlaneStake(user: UserProfile, stake: number) {
 }
 
 export async function awardPlaneWin(user: UserProfile, amount: number) {
-  return awardMinigameWin(user, amount);
+  return awardMinigameWin(user, amount, {
+    game: 'plane',
+    stake: Math.max(10, Math.round(amount / 2.7)),
+    riskLevel: 0.72,
+  });
 }
 
 export async function listChallengeActivities(user: UserProfile, groups: FriendGroup[] = []) {
