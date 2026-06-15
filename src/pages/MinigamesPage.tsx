@@ -24,6 +24,7 @@ import { PageHeader } from '../components/PageHeader';
 import { PlaneGame } from '../components/PlaneGame';
 import { RewardChest } from '../components/RewardChest';
 import { useAuth } from '../contexts/AuthContext';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import {
   awardPlaneWin,
   awardMinigameWin,
@@ -147,6 +148,9 @@ export function MinigamesPage() {
   const [testPushSending, setTestPushSending] = useState(false);
   const [showPlane, setShowPlane] = useState(false);
   const [showMines, setShowMines] = useState(false);
+  const forecastSheet = useSwipeToDismiss(() => setForecastOpen(false));
+  const chestsSheet = useSwipeToDismiss(() => setChestsOpen(false));
+  const wheelSheet = useSwipeToDismiss(() => setWheelOpen(false));
   const forecastAvailable = profile ? canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
   const wheelAvailable = profile ? canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
   const openableChests = chests.filter((chest) => chest.unlocked && !chest.claimed).length;
@@ -444,7 +448,12 @@ export function MinigamesPage() {
 
       {forecastOpen ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lift sm:max-w-2xl sm:rounded-2xl sm:p-5">
+          <div
+            {...forecastSheet.sheetProps}
+            data-sheet-scroll
+            className="max-h-[90dvh] w-full touch-pan-y overflow-y-auto rounded-t-2xl border border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lift sm:max-w-2xl sm:rounded-2xl sm:p-5"
+          >
+            {forecastSheet.dragHandle}
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-black">Choose a forecast</h2>
@@ -505,7 +514,11 @@ export function MinigamesPage() {
 
       {chestsOpen ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:max-w-2xl sm:rounded-2xl">
+          <div
+            {...chestsSheet.sheetProps}
+            className="flex max-h-[88dvh] w-full touch-pan-y flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:max-w-2xl sm:rounded-2xl"
+          >
+            <div className="shrink-0 pt-2 sm:hidden">{chestsSheet.dragHandle}</div>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 pb-4 pt-4 sm:px-5 sm:pt-5">
               <div>
                 <h2 className="text-xl font-black">Reward chests</h2>
@@ -520,7 +533,7 @@ export function MinigamesPage() {
                 <X size={18} />
               </button>
             </div>
-            <div className="grid min-h-0 gap-3 overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:grid-cols-2 sm:px-5 sm:pb-5">
+            <div data-sheet-scroll className="grid min-h-0 gap-3 overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:grid-cols-2 sm:px-5 sm:pb-5">
               {chests.length === 0 ? (
                 <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
                   <div>
@@ -564,7 +577,11 @@ export function MinigamesPage() {
 
       {wheelOpen ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/65 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="w-full overflow-hidden rounded-t-2xl border border-white/10 bg-[#141b26] text-white shadow-lift sm:max-w-lg sm:rounded-2xl">
+          <div
+            {...wheelSheet.sheetProps}
+            className="w-full touch-pan-y overflow-hidden rounded-t-2xl border border-white/10 bg-[#141b26] text-white shadow-lift sm:max-w-lg sm:rounded-2xl"
+          >
+            <div className="pt-2 sm:hidden">{wheelSheet.dragHandle}</div>
             <div className="flex items-start justify-between gap-3 px-5 pt-5">
               <div>
                 <p className="text-2xs font-black uppercase text-white/40">One spin every 6 hours</p>

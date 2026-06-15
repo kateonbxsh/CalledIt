@@ -108,6 +108,7 @@ function normalizeSummary(summary: ChanceOptionSummary[], optionCount: number) {
 export function projectChanceSummaryOverTime(params: {
   options: BetOption[];
   summary: ChanceOptionSummary[];
+  initialSummary?: ChanceOptionSummary[];
   updatedAt?: TimeLike;
   now?: TimeLike;
   status?: string;
@@ -117,6 +118,17 @@ export function projectChanceSummaryOverTime(params: {
   if (params.status === 'resolved') return params.summary;
 
   const neutral = 1 / optionCount;
+  const baseline = normalizeSummary(
+    params.initialSummary?.length
+      ? params.initialSummary
+      : params.options.map((option) => ({
+          optionId: option.id,
+          users: 0,
+          coins: 0,
+          chance: neutral,
+        })),
+    optionCount,
+  );
   const updatedAtMs = timeMs(params.updatedAt);
   const nowMs = timeMs(params.now);
   const daysElapsed = Math.max(0, Math.floor((nowMs - updatedAtMs) / ONE_DAY_MS));
@@ -130,9 +142,10 @@ export function projectChanceSummaryOverTime(params: {
       coins: 0,
       chance: neutral,
     };
+    const initial = baseline.find((item) => item.optionId === option.id)?.chance ?? neutral;
     return {
       ...stored,
-      chance: neutral + (stored.chance - neutral) * (1 + lift),
+      chance: initial + (stored.chance - initial) * (1 + lift),
     };
   });
 
@@ -159,10 +172,11 @@ function deadlineProgress(createdAtMs: number, deadlineMs: number | null | undef
 //    and smoothly converge to the crowd chance as the deadline approaches.
 //  - 'date' (Before / After a target date): the "before" side decays toward 0
 //    as the date approaches, and is exactly 0 once the date has passed.
-//  - bets with no deadline: just show the crowd chance.
+//  - bets with no deadline: converge over a deterministic 30-day window.
 export function displayChanceSummary(params: {
   options: BetOption[];
   summary: ChanceOptionSummary[];
+  initialSummary?: ChanceOptionSummary[];
   type: BetType;
   createdAtMs: number;
   deadlineMs?: number | null;
@@ -181,6 +195,12 @@ export function displayChanceSummary(params: {
     ? params.summary
     : options.map((option) => ({ optionId: option.id, users: 0, coins: 0, chance: neutral }));
   const crowd = normalizeSummary(baseSummary, optionCount);
+  const baseline = normalizeSummary(
+    params.initialSummary?.length
+      ? params.initialSummary
+      : options.map((option) => ({ optionId: option.id, users: 0, coins: 0, chance: neutral })),
+    optionCount,
+  );
   if (params.status === 'resolved') return crowd;
 
   const progress = deadlineProgress(params.createdAtMs, params.deadlineMs, nowMs);
@@ -190,10 +210,18 @@ export function displayChanceSummary(params: {
   if (params.type === 'date') {
     const dateMs = params.targetDateMs ?? params.deadlineMs ?? null;
     const dateProgress = deadlineProgress(params.createdAtMs, dateMs, nowMs);
+    const linearConvergence = progress ?? dateProgress ?? clamp(
+      (nowMs - params.createdAtMs) / (30 * ONE_DAY_MS),
+      0,
+      1,
+    );
+    const convergence = linearConvergence * linearConvergence * (3 - 2 * linearConvergence);
+    const baselineBefore = baseline.find((item) => item.optionId === 'before')?.chance ?? neutral;
     const crowdBefore = crowd.find((item) => item.optionId === 'before')?.chance ?? neutral;
+    const informedBefore = baselineBefore + (crowdBefore - baselineBefore) * convergence;
     const past = dateMs ? nowMs >= dateMs : false;
     const ease = dateProgress ?? 0;
-    const beforeChance = past ? 0 : crowdBefore * (1 - ease);
+    const beforeChance = past ? 0 : informedBefore * (1 - ease);
     return options.map((option) => {
       const stored = crowd.find((item) => item.optionId === option.id) ?? { optionId: option.id, users: 0, coins: 0, chance: neutral };
       const chance = option.id === 'before' ? beforeChance : 1 - beforeChance;
@@ -201,13 +229,26 @@ export function displayChanceSummary(params: {
     });
   }
 
-  // Generic deadline bets: blend neutral -> crowd chance as the deadline nears.
+  // Generic deadline bets: blend the creator's baseline -> crowd chance.
   if (progress !== null) {
-    const blended = crowd.map((item) => ({ ...item, chance: neutral + (item.chance - neutral) * progress }));
+    const convergence = progress * progress * (3 - 2 * progress);
+    const blended = crowd.map((item) => {
+      const initial = baseline.find((candidate) => candidate.optionId === item.optionId)?.chance ?? neutral;
+      return { ...item, chance: initial + (item.chance - initial) * convergence };
+    });
     return normalizeSummary(blended, optionCount);
   }
 
-  return crowd;
+  const fallbackProgress = clamp(
+    (nowMs - params.createdAtMs) / (30 * ONE_DAY_MS),
+    0,
+    1,
+  );
+  const convergence = fallbackProgress * fallbackProgress * (3 - 2 * fallbackProgress);
+  return normalizeSummary(crowd.map((item) => {
+    const initial = baseline.find((candidate) => candidate.optionId === item.optionId)?.chance ?? neutral;
+    return { ...item, chance: initial + (item.chance - initial) * convergence };
+  }), optionCount);
 }
 
 export interface ClosestGuessChance {

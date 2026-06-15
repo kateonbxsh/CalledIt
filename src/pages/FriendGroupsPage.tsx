@@ -1,10 +1,11 @@
-import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { MessageCircle, Pencil, Plus, Send, Trash2, Users, X } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { MessageCircle, Pencil, Plus, Reply, Send, Trash2, Users, X } from 'lucide-react';
 import { Timestamp, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { Avatar } from '../components/Avatar';
 import { PageHeader } from '../components/PageHeader';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import {
   createFriendGroup,
   deleteFriendGroup,
@@ -15,9 +16,12 @@ import {
   markGroupRead,
   sendGroupMessage,
   setGroupPhoto,
+  sortFriendGroupsByLatestMessage,
+  subscribeToGroupMessages,
   updateFriendGroup,
 } from '../services/friendGroupService';
-import type { FriendGroup, GroupMessage, GroupReadState } from '../types';
+import { getUsersByIds } from '../services/userService';
+import type { FriendGroup, GroupMessage, GroupMessageReplyPreview, GroupReadState, UserProfile } from '../types';
 import { relativeTime } from '../utils/format';
 import { downscaleProfileImage } from '../utils/image';
 
@@ -35,16 +39,41 @@ export function FriendGroupsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [readStates, setReadStates] = useState<Map<string, GroupReadState>>(new Map());
   const [chatGroup, setChatGroup] = useState<FriendGroup | null>(null);
-  const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [liveMessages, setLiveMessages] = useState<GroupMessage[]>([]);
+  const [olderMessages, setOlderMessages] = useState<GroupMessage[]>([]);
   const [messageCursor, setMessageCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [messagesHaveMore, setMessagesHaveMore] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messageBody, setMessageBody] = useState('');
+  const [replyingTo, setReplyingTo] = useState<GroupMessageReplyPreview | null>(null);
+  const [chatProfiles, setChatProfiles] = useState<Map<string, UserProfile>>(new Map());
+  const [replySwipe, setReplySwipe] = useState<{ id: string; offset: number; dragging: boolean } | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatScrollModeRef = useRef<'bottom' | 'preserve'>('bottom');
   const previousChatViewportRef = useRef({ scrollHeight: 0, scrollTop: 0 });
+  const shouldStickToBottomRef = useRef(true);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const replySwipeStartRef = useRef<{ id: string; x: number; y: number; horizontal: boolean } | null>(null);
+  const replySwipeOffsetRef = useRef(0);
+  const lastMarkedMessageRef = useRef('');
+  const olderMessagesRef = useRef<GroupMessage[]>([]);
+
+  const messages = useMemo(() => {
+    const unique = new Map<string, GroupMessage>();
+    [...olderMessages, ...liveMessages].forEach((message) => unique.set(message.id, message));
+    return [...unique.values()].sort(
+      (left, right) => (left.createdAt?.toMillis?.() ?? 0) - (right.createdAt?.toMillis?.() ?? 0),
+    );
+  }, [liveMessages, olderMessages]);
+
+  function closeChat() {
+    setChatGroup(null);
+    setReplyingTo(null);
+  }
+
+  const chatSheet = useSwipeToDismiss(closeChat);
+  const editSheet = useSwipeToDismiss(() => setEditing(null));
 
   async function onGroupPhotoChange(file?: File) {
     const groupId = editing?.groupId;
@@ -92,7 +121,7 @@ export function FriendGroupsPage() {
       return;
     }
 
-    panel.scrollTop = panel.scrollHeight;
+    if (shouldStickToBottomRef.current) panel.scrollTop = panel.scrollHeight;
   }, [chatGroup, messages]);
 
   const load = useCallback(async () => {
@@ -177,27 +206,75 @@ export function FriendGroupsPage() {
   async function openChat(group: FriendGroup) {
     if (!profile) return;
     chatScrollModeRef.current = 'bottom';
+    shouldStickToBottomRef.current = true;
     setChatGroup(group);
-    setMessages([]);
+    setLiveMessages([]);
+    setOlderMessages([]);
+    olderMessagesRef.current = [];
     setMessageCursor(null);
     setMessagesHaveMore(false);
     setMessagesLoading(true);
-    try {
-      const page = await listGroupMessages(group.id);
-      setMessages(page.messages);
-      setMessageCursor(page.cursor);
-      setMessagesHaveMore(page.hasMore);
-      await markGroupRead(group.id, profile.uid);
-      setReadStates((current) => new Map(current).set(group.id, {
-        groupId: group.id,
-        lastReadAt: group.lastMessageAt ?? page.messages.at(-1)?.createdAt ?? Timestamp.now(),
-      }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load chat.');
-    } finally {
-      setMessagesLoading(false);
-    }
+    setReplyingTo(null);
+    lastMarkedMessageRef.current = '';
   }
+
+  useEffect(() => {
+    if (!chatGroup || !profile) return;
+    return subscribeToGroupMessages(
+      chatGroup.id,
+      (page) => {
+        setLiveMessages(page.messages);
+        setMessagesLoading(false);
+        if (olderMessagesRef.current.length === 0) {
+          setMessageCursor(page.cursor);
+          setMessagesHaveMore(page.hasMore);
+        }
+        const latest = page.messages.at(-1);
+        if (latest) {
+          setGroups((current) => sortFriendGroupsByLatestMessage(current.map((group) => (
+            group.id === chatGroup.id
+              ? {
+                  ...group,
+                  lastMessageAt: latest.createdAt,
+                  lastMessagePreview: latest.body.slice(0, 160),
+                  lastMessageSenderId: latest.authorId,
+                }
+              : group
+          ))));
+        }
+        if (latest && latest.authorId !== profile.uid && latest.id !== lastMarkedMessageRef.current) {
+          lastMarkedMessageRef.current = latest.id;
+          void markGroupRead(chatGroup.id, profile.uid).catch(() => {});
+          setReadStates((current) => new Map(current).set(chatGroup.id, {
+            groupId: chatGroup.id,
+            lastReadAt: latest.createdAt ?? Timestamp.now(),
+          }));
+        }
+      },
+      (err) => {
+        setError(err.message || 'Could not load chat.');
+        setMessagesLoading(false);
+      },
+    );
+  }, [chatGroup, profile]);
+
+  useEffect(() => {
+    if (!chatGroup) {
+      setChatProfiles(new Map());
+      return;
+    }
+    let cancelled = false;
+    void getUsersByIds([chatGroup.creatorId, ...chatGroup.memberUids])
+      .then((profiles) => {
+        if (!cancelled) setChatProfiles(profiles);
+      })
+      .catch(() => {
+        if (!cancelled) setChatProfiles(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatGroup]);
 
   async function loadOlderMessages() {
     if (!chatGroup || !messageCursor || messagesLoading) return;
@@ -212,7 +289,11 @@ export function FriendGroupsPage() {
     setMessagesLoading(true);
     try {
       const page = await listGroupMessages(chatGroup.id, messageCursor);
-      setMessages((current) => [...page.messages, ...current]);
+      setOlderMessages((current) => {
+        const next = [...page.messages, ...current];
+        olderMessagesRef.current = next;
+        return next;
+      });
       setMessageCursor(page.cursor);
       setMessagesHaveMore(page.hasMore);
     } finally {
@@ -224,15 +305,12 @@ export function FriendGroupsPage() {
     event.preventDefault();
     if (!profile || !chatGroup || !messageBody.trim()) return;
     chatScrollModeRef.current = 'bottom';
+    shouldStickToBottomRef.current = true;
     setBusy(true);
     try {
-      await sendGroupMessage(chatGroup, profile, messageBody);
+      await sendGroupMessage(chatGroup, profile, messageBody, replyingTo);
       setMessageBody('');
-      const page = await listGroupMessages(chatGroup.id);
-      setMessages(page.messages);
-      setMessageCursor(page.cursor);
-      setMessagesHaveMore(page.hasMore);
-      await load();
+      setReplyingTo(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send message.');
     } finally {
@@ -262,7 +340,12 @@ export function FriendGroupsPage() {
       {/* Create / Edit modal */}
       {editing !== null ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-white p-5 shadow-lift animate-soft-enter sm:max-w-lg sm:rounded-2xl">
+          <div
+            {...editSheet.sheetProps}
+            data-sheet-scroll
+            className="max-h-[92dvh] w-full touch-pan-y overflow-y-auto rounded-t-2xl border border-line bg-white p-5 shadow-lift animate-soft-enter sm:max-w-lg sm:rounded-2xl"
+          >
+            {editSheet.dragHandle}
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="font-black">{editing.groupId ? 'Edit group' : 'New group'}</h2>
               <button
@@ -477,7 +560,11 @@ export function FriendGroupsPage() {
 
       {chatGroup ? (
         <div className="fixed inset-0 z-[70] flex animate-fade-in items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="flex h-[min(92dvh,760px)] w-full animate-soft-enter flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:h-[min(82dvh,760px)] sm:w-[min(94vw,1100px)] sm:max-w-none sm:rounded-2xl">
+          <div
+            {...chatSheet.sheetProps}
+            className="flex h-[min(92dvh,760px)] w-full animate-soft-enter touch-pan-y flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:h-[min(82dvh,760px)] sm:w-[min(94vw,1100px)] sm:max-w-none sm:rounded-2xl"
+          >
+            <div className="shrink-0 pt-2 sm:hidden">{chatSheet.dragHandle}</div>
             <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3">
               {chatGroup.photoURL ? (
                 <img src={chatGroup.photoURL} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
@@ -490,12 +577,20 @@ export function FriendGroupsPage() {
                 <h2 className="truncate font-black">{chatGroup.name}</h2>
                 <p className="text-xs font-semibold text-ink/40">{chatGroup.memberUsernames.length + 1} members</p>
               </div>
-              <button type="button" onClick={() => setChatGroup(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95" aria-label="Close chat">
+              <button type="button" onClick={closeChat} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95" aria-label="Close chat">
                 <X size={17} />
               </button>
             </div>
-            <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-field/60 p-4">
-              <div className="flex min-h-full flex-col justify-end gap-3">
+            <div
+              ref={chatScrollRef}
+              data-sheet-scroll
+              onScroll={(event) => {
+                const panel = event.currentTarget;
+                shouldStickToBottomRef.current = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 72;
+              }}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-field/60 px-3 py-4 sm:px-6"
+            >
+              <div className="flex min-h-full flex-col justify-end">
                 {messagesHaveMore ? (
                   <button onClick={loadOlderMessages} disabled={messagesLoading} className="mx-auto block rounded-md bg-white px-3 py-2 text-xs font-bold text-ink/55 shadow-soft">
                     {messagesLoading ? 'Loading...' : 'Load older messages'}
@@ -510,35 +605,162 @@ export function FriendGroupsPage() {
                   </div>
                 ) : messages.map((message, messageIndex) => {
                   const mine = message.authorId === profile?.uid;
+                  const previous = messages[messageIndex - 1];
+                  const next = messages[messageIndex + 1];
+                  const createdAt = message.createdAt?.toMillis?.() ?? 0;
+                  const sameAsPrevious = previous?.authorId === message.authorId
+                    && createdAt - (previous.createdAt?.toMillis?.() ?? 0) < 5 * 60 * 1000;
+                  const sameAsNext = next?.authorId === message.authorId
+                    && (next.createdAt?.toMillis?.() ?? 0) - createdAt < 5 * 60 * 1000;
+                  const replyPreview: GroupMessageReplyPreview = {
+                    id: message.id,
+                    authorId: message.authorId,
+                    authorUsername: message.authorUsername,
+                    authorDisplayName: message.authorDisplayName,
+                    body: message.body,
+                  };
+                  const messageProfile = chatProfiles.get(message.authorId);
+                  const messageTime = message.createdAt?.toDate?.();
+                  const shortTime = messageTime?.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }) ?? 'Sending...';
+                  const swipeOffset = replySwipe?.id === message.id ? replySwipe.offset : 0;
                   return (
                     <div
                       key={message.id}
-                      className={`animate-comment-enter flex ${mine ? 'justify-end' : 'justify-start'}`}
+                      className={`group/message animate-comment-enter flex ${mine ? 'justify-end' : 'justify-start'} ${sameAsPrevious ? 'mt-0.5' : 'mt-3'}`}
                       style={{ animationDelay: `${Math.min(messageIndex, 10) * 25}ms` }}
+                      onTouchStart={(event) => {
+                        const touch = event.touches[0];
+                        replySwipeStartRef.current = {
+                          id: message.id,
+                          x: touch.clientX,
+                          y: touch.clientY,
+                          horizontal: false,
+                        };
+                        replySwipeOffsetRef.current = 0;
+                        setReplySwipe({ id: message.id, offset: 0, dragging: true });
+                      }}
+                      onTouchMove={(event) => {
+                        const start = replySwipeStartRef.current;
+                        if (!start || start.id !== message.id) return;
+                        const touch = event.touches[0];
+                        const dx = touch.clientX - start.x;
+                        const dy = touch.clientY - start.y;
+                        if (!start.horizontal && Math.abs(dx) > 8) {
+                          if (Math.abs(dx) <= Math.abs(dy)) return;
+                          start.horizontal = true;
+                        }
+                        if (!start.horizontal) return;
+                        const offset = Math.max(0, Math.min(76, dx));
+                        replySwipeOffsetRef.current = offset;
+                        setReplySwipe({ id: message.id, offset, dragging: true });
+                      }}
+                      onTouchEnd={() => {
+                        const start = replySwipeStartRef.current;
+                        const offset = replySwipeOffsetRef.current;
+                        replySwipeStartRef.current = null;
+                        replySwipeOffsetRef.current = 0;
+                        setReplySwipe({ id: message.id, offset: 0, dragging: false });
+                        if (start?.id === message.id && start.horizontal && offset > 52) {
+                          setReplyingTo(replyPreview);
+                        }
+                      }}
+                      onTouchCancel={() => {
+                        replySwipeStartRef.current = null;
+                        replySwipeOffsetRef.current = 0;
+                        setReplySwipe({ id: message.id, offset: 0, dragging: false });
+                      }}
                     >
-                      <div className={`max-w-[82%] rounded-2xl px-3 py-2 sm:max-w-[70%] ${mine ? 'rounded-br-md bg-ink text-white' : 'rounded-bl-md bg-white text-ink shadow-soft'}`}>
-                        {!mine ? <p className="text-xs font-black opacity-55">{message.authorDisplayName || message.authorUsername}</p> : null}
-                        <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-5">{message.body}</p>
-                        <p className={`mt-1 text-[10px] ${mine ? 'text-white/45' : 'text-ink/35'}`}>
-                          {message.createdAt ? relativeTime(message.createdAt) : 'just now'}
-                        </p>
+                      <div
+                        className="flex max-w-full items-end"
+                        style={{
+                          transform: `translateX(${swipeOffset}px)`,
+                          transition: replySwipe?.id === message.id && replySwipe.dragging
+                            ? 'none'
+                            : 'transform 180ms cubic-bezier(.2,.8,.2,1)',
+                        }}
+                      >
+                        {mine ? (
+                          <time
+                            title={messageTime?.toLocaleString() ?? 'Sending...'}
+                            className="mr-2 whitespace-nowrap text-[10px] font-semibold text-ink/35 opacity-100 transition sm:opacity-0 sm:group-hover/message:opacity-100"
+                          >
+                            {shortTime}
+                          </time>
+                        ) : null}
+                        {!mine ? (
+                          <div className="mr-2 h-8 w-8 shrink-0">
+                            {!sameAsNext ? (
+                              <Avatar
+                                name={messageProfile?.displayName || message.authorDisplayName || message.authorUsername}
+                                src={messageProfile?.photoURL || undefined}
+                                size="chat"
+                                round
+                              />
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setReplyingTo(replyPreview)}
+                          className={`mr-1 hidden h-8 w-8 shrink-0 place-items-center rounded-full text-ink/35 transition hover:bg-white hover:text-ink sm:group-hover/message:grid ${mine ? '' : 'order-last ml-1 mr-0'}`}
+                          aria-label="Reply to message"
+                        >
+                          <Reply size={14} />
+                        </button>
+                        <div
+                          className={`max-w-[72vw] rounded-2xl px-3 py-2 sm:max-w-[62vw] ${mine ? 'bg-ink text-white' : 'bg-white text-ink shadow-soft'} ${sameAsNext ? '' : mine ? 'rounded-br-md' : 'rounded-bl-md'}`}
+                        >
+                          {!mine && !sameAsPrevious ? <p className="mb-0.5 text-xs font-black opacity-55">{messageProfile?.displayName || message.authorDisplayName || message.authorUsername}</p> : null}
+                          {message.replyTo ? (
+                            <div className={`mb-1.5 rounded-lg border-l-2 px-2 py-1 text-xs ${mine ? 'border-white/45 bg-white/10 text-white/70' : 'border-mint bg-field text-ink/60'}`}>
+                              <p className="font-black">{message.replyTo.authorDisplayName || message.replyTo.authorUsername}</p>
+                              <p className="truncate">{message.replyTo.body}</p>
+                            </div>
+                          ) : null}
+                          <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-5">{message.body}</p>
+                        </div>
+                        {!mine ? (
+                          <time
+                            title={messageTime?.toLocaleString() ?? 'Sending...'}
+                            className="ml-2 whitespace-nowrap text-[10px] font-semibold text-ink/35 opacity-100 transition sm:opacity-0 sm:group-hover/message:opacity-100"
+                          >
+                            {shortTime}
+                          </time>
+                        ) : null}
                       </div>
                     </div>
                   );
                 })}
               </div>
             </div>
-            <form onSubmit={submitMessage} className="flex shrink-0 gap-2 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              <input
+            <form onSubmit={submitMessage} className="shrink-0 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {replyingTo ? (
+                <div className="mb-2 flex items-center gap-2 rounded-lg bg-field px-3 py-2 text-xs">
+                  <Reply size={13} className="shrink-0 text-mint" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black">Replying to {replyingTo.authorDisplayName || replyingTo.authorUsername}</p>
+                    <p className="truncate text-ink/50">{replyingTo.body}</p>
+                  </div>
+                  <button type="button" onClick={() => setReplyingTo(null)} className="grid h-7 w-7 place-items-center rounded-full hover:bg-white" aria-label="Cancel reply">
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="flex gap-2">
+                <input
                 value={messageBody}
                 onChange={(event) => setMessageBody(event.target.value)}
                 maxLength={1000}
                 placeholder={`Message ${chatGroup.name}…`}
                 className="min-w-0 flex-1 rounded-md border border-line bg-field px-3 py-2.5 text-sm"
-              />
-              <button type="submit" disabled={!messageBody.trim() || busy} className="grid h-10 w-10 place-items-center rounded-md bg-ink text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40" aria-label="Send message">
-                <Send size={17} />
-              </button>
+                />
+                <button type="submit" disabled={!messageBody.trim() || busy} className="grid h-10 w-10 place-items-center rounded-md bg-ink text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40" aria-label="Send message">
+                  <Send size={17} />
+                </button>
+              </div>
             </form>
           </div>
         </div>

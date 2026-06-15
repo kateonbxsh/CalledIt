@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { Check, ChevronLeft, Pencil, RotateCcw, Trash2, Users } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, Pencil, Reply, RotateCcw, Trash2, Users, X } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { ChanceChart } from '../components/ChanceChart';
 import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
@@ -28,7 +28,7 @@ import {
   updateBetMetadata,
 } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
-import type { Bet, BetComment, BetResolution, BetVisibility, ChanceSnapshot, FriendGroup, Prediction } from '../types';
+import type { Bet, BetComment, BetResolution, BetVisibility, ChanceSnapshot, CommentReplyPreview, FriendGroup, Prediction } from '../types';
 import { isClosestType } from '../utils/betTypes';
 import {
   closestDateDistance,
@@ -36,6 +36,7 @@ import {
   closestNumberDistance,
   closestNumberGuessLabel,
 } from '../utils/closestGuess';
+import { buildCommentThreads } from '../utils/commentThreads';
 import { percent, relativeTime } from '../utils/format';
 import { downscaleBetImage } from '../utils/image';
 import { chanceForOption, displayChanceSummary } from '../utils/probability';
@@ -127,6 +128,11 @@ export function BetDetailPage() {
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [stake, setStake] = useState(10);
   const [commentBody, setCommentBody] = useState('');
+  const [replyingToComment, setReplyingToComment] = useState<{
+    preview: CommentReplyPreview;
+    parentCommentId: string;
+  } | null>(null);
+  const [expandedCommentThreads, setExpandedCommentThreads] = useState<Set<string>>(new Set());
   const [homeScore, setHomeScore] = useState('');
   const [awayScore, setAwayScore] = useState('');
   const [numericGuess, setNumericGuess] = useState('');
@@ -256,6 +262,7 @@ export function BetDetailPage() {
     ? displayChanceSummary({
         options: bet.options,
         summary: bet.chanceSummary,
+        initialSummary: bet.initialChanceSummary,
         type: bet.type,
         createdAtMs: bet.createdAt?.toMillis?.() ?? Date.now(),
         deadlineMs: bet.deadline?.toMillis?.() ?? null,
@@ -518,8 +525,15 @@ export function BetDetailPage() {
     setCommentBusy(true);
     setError('');
     try {
-      await addBetComment(bet.id, profile, commentBody);
+      await addBetComment(
+        bet.id,
+        profile,
+        commentBody,
+        replyingToComment?.preview,
+        replyingToComment?.parentCommentId,
+      );
       setCommentBody('');
+      setReplyingToComment(null);
       setComments(await listCommentsForBet(bet.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add comment.');
@@ -559,6 +573,122 @@ export function BetDetailPage() {
     } finally {
       setCommentBusy(false);
     }
+  }
+
+  const commentThreads = useMemo(() => buildCommentThreads(comments), [comments]);
+
+  function renderBetComment(comment: BetComment, rootCommentId: string, commentIndex: number, isReply = false) {
+    const canDeleteComment = profile?.uid === comment.userId || profile?.isAdmin;
+    const canEditComment = profile?.uid === comment.userId;
+    const isEditingComment = editingCommentId === comment.id;
+    return (
+      <article
+        key={comment.id}
+        className={`animate-comment-enter flex gap-3 rounded-md p-3 transition hover:bg-line/45 ${isReply ? 'bg-white' : 'bg-field'}`}
+        style={{ animationDelay: `${Math.min(commentIndex, 10) * 35}ms` }}
+      >
+        <Avatar
+          name={comment.displayName || comment.username}
+          src={comment.photoURL}
+          size={isReply ? 'chat' : undefined}
+          round
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <Link to={`/profile/${comment.userId}`} className="font-bold text-ink hover:underline">
+              {comment.displayName || comment.username}
+            </Link>
+            <span className="text-xs font-semibold text-ink/45">@{comment.username}</span>
+            <span className="text-xs text-ink/35">{relativeTime(comment.createdAt)}</span>
+          </div>
+          {isEditingComment ? (
+            <div className="animate-action-reveal mt-2">
+              <textarea
+                value={editingCommentBody}
+                onChange={(event) => setEditingCommentBody(event.target.value)}
+                maxLength={1000}
+                className="min-h-20 w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-mint"
+              />
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingCommentId('');
+                    setEditingCommentBody('');
+                  }}
+                  className="rounded-md px-3 py-1.5 text-xs font-bold text-ink/55 hover:bg-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onUpdateComment(comment)}
+                  disabled={commentBusy || !editingCommentBody.trim()}
+                  className="rounded-md bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-ink/75">
+              {isReply && comment.replyTo ? (
+                <span className="mr-1 font-bold text-mint">@{comment.replyTo.authorUsername}</span>
+              ) : null}
+              {comment.body}
+              {comment.updatedAt && comment.updatedAt.toMillis() > comment.createdAt.toMillis() + 1000 ? (
+                <span className="ml-2 text-xs font-semibold text-ink/35">edited</span>
+              ) : null}
+            </p>
+          )}
+        </div>
+        {!isEditingComment ? (
+          <div className="flex shrink-0">
+            <button
+              type="button"
+              onClick={() => setReplyingToComment({
+                parentCommentId: rootCommentId,
+                preview: {
+                  id: comment.id,
+                  authorId: comment.userId,
+                  authorUsername: comment.username,
+                  authorDisplayName: comment.displayName,
+                  body: comment.body,
+                },
+              })}
+              className="grid h-8 w-8 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-ink"
+              aria-label="Reply to comment"
+            >
+              <Reply size={15} />
+            </button>
+            {canEditComment ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCommentId(comment.id);
+                  setEditingCommentBody(comment.body);
+                }}
+                className="grid h-8 w-8 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-ink"
+                aria-label="Edit comment"
+              >
+                <Pencil size={15} />
+              </button>
+            ) : null}
+            {canDeleteComment ? (
+              <button
+                type="button"
+                onClick={() => onDeleteComment(comment)}
+                disabled={deletingCommentId === comment.id}
+                className="grid h-8 w-8 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-coral disabled:opacity-40"
+                aria-label="Delete comment"
+              >
+                <Trash2 size={15} />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+    );
   }
 
   function toggleWinningOption(optionId: string) {
@@ -1327,6 +1457,18 @@ export function BetDetailPage() {
           </div>
 
           <form onSubmit={submitComment} className="mb-4 space-y-2">
+            {replyingToComment ? (
+              <div className="flex items-center gap-2 rounded-md border-l-2 border-mint bg-field px-3 py-2 text-xs">
+                <Reply size={13} className="shrink-0 text-mint" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-black">Replying to {replyingToComment.preview.authorDisplayName || replyingToComment.preview.authorUsername}</p>
+                  <p className="truncate text-ink/50">{replyingToComment.preview.body}</p>
+                </div>
+                <button type="button" onClick={() => setReplyingToComment(null)} className="grid h-7 w-7 place-items-center rounded-full hover:bg-white" aria-label="Cancel reply">
+                  <X size={14} />
+                </button>
+              </div>
+            ) : null}
             <textarea
               className="min-h-24 w-full resize-y rounded-md border border-line bg-field px-3 py-2 text-sm outline-none focus:border-mint"
               value={commentBody}
@@ -1348,97 +1490,47 @@ export function BetDetailPage() {
           {comments.length === 0 ? (
             <p className="rounded-md bg-field px-3 py-3 text-sm text-ink/50">No comments yet</p>
           ) : (
-            <div className="space-y-3">
-              {comments.map((comment, commentIndex) => {
-                const canDeleteComment = profile?.uid === comment.userId || profile?.isAdmin;
-                const canEditComment = profile?.uid === comment.userId;
-                const isEditingComment = editingCommentId === comment.id;
+            <div className="space-y-4">
+              {commentThreads.map((thread, threadIndex) => {
+                const expanded = expandedCommentThreads.has(thread.root.id);
+                const visibleReplies = expanded ? thread.replies : thread.replies.slice(0, 2);
+                const hiddenCount = thread.replies.length - visibleReplies.length;
                 return (
-                  <article
-                    key={comment.id}
-                    className="animate-comment-enter flex gap-3 rounded-md bg-field p-3 transition hover:bg-line/45"
-                    style={{ animationDelay: `${Math.min(commentIndex, 10) * 35}ms` }}
-                  >
-                    <Avatar
-                      name={comment.displayName || comment.username}
-                      src={comment.photoURL}
-                      round
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <Link to={`/profile/${comment.userId}`} className="font-bold text-ink hover:underline">
-                          {comment.displayName || comment.username}
-                        </Link>
-                        <span className="text-xs font-semibold text-ink/45">@{comment.username}</span>
-                        <span className="text-xs text-ink/35">{relativeTime(comment.createdAt)}</span>
-                      </div>
-                      {isEditingComment ? (
-                        <div className="animate-action-reveal mt-2">
-                          <textarea
-                            value={editingCommentBody}
-                            onChange={(event) => setEditingCommentBody(event.target.value)}
-                            maxLength={1000}
-                            className="min-h-20 w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-mint"
-                          />
-                          <div className="mt-2 flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingCommentId('');
-                                setEditingCommentBody('');
-                              }}
-                              className="rounded-md px-3 py-1.5 text-xs font-bold text-ink/55 hover:bg-white"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void onUpdateComment(comment)}
-                              disabled={commentBusy || !editingCommentBody.trim()}
-                              className="rounded-md bg-ink px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="mt-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-ink/75">
-                          {comment.body}
-                          {comment.updatedAt && comment.updatedAt.toMillis() > comment.createdAt.toMillis() + 1000 ? (
-                            <span className="ml-2 text-xs font-semibold text-ink/35">edited</span>
-                          ) : null}
-                        </p>
-                      )}
-                    </div>
-                    {!isEditingComment ? (
-                      <div className="flex shrink-0">
-                        {canEditComment ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingCommentId(comment.id);
-                              setEditingCommentBody(comment.body);
-                            }}
-                            className="grid h-8 w-8 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-ink"
-                            aria-label="Edit comment"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                        ) : null}
-                        {canDeleteComment ? (
-                          <button
-                            type="button"
-                            onClick={() => onDeleteComment(comment)}
-                            disabled={deletingCommentId === comment.id}
-                            className="grid h-8 w-8 place-items-center rounded-md text-ink/35 transition hover:bg-white hover:text-coral disabled:opacity-40"
-                            aria-label="Delete comment"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        ) : null}
+                  <div key={thread.root.id}>
+                    {renderBetComment(thread.root, thread.root.id, threadIndex)}
+                    {visibleReplies.length ? (
+                      <div className="ml-8 mt-1 space-y-1 border-l-2 border-line pl-3 sm:ml-12">
+                        {visibleReplies.map((reply, replyIndex) => (
+                          renderBetComment(reply, thread.root.id, threadIndex + replyIndex + 1, true)
+                        ))}
                       </div>
                     ) : null}
-                  </article>
+                    {hiddenCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCommentThreads((current) => {
+                          const next = new Set(current);
+                          next.add(thread.root.id);
+                          return next;
+                        })}
+                        className="ml-12 mt-1 inline-flex items-center gap-1 text-xs font-bold text-ink/45 hover:text-ink"
+                      >
+                        <ChevronDown size={13} /> View {hiddenCount} more {hiddenCount === 1 ? 'reply' : 'replies'}
+                      </button>
+                    ) : thread.replies.length > 2 && expanded ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCommentThreads((current) => {
+                          const next = new Set(current);
+                          next.delete(thread.root.id);
+                          return next;
+                        })}
+                        className="ml-12 mt-1 text-xs font-bold text-ink/45 hover:text-ink"
+                      >
+                        Hide replies
+                      </button>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>

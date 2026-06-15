@@ -109,6 +109,7 @@ export interface Bet {
   predictionCount: number;
   totalCoinsStaked: number;
   chanceSummary: ChanceOptionSummary[];
+  initialChanceSummary?: ChanceOptionSummary[];
   resolution?: BetResolution | null;
   resolvedBy?: string;
   resolvedAt?: Timestamp | null;
@@ -198,8 +199,18 @@ export interface BetComment {
   displayName: string;
   photoURL?: string;
   body: string;
+  replyTo?: CommentReplyPreview | null;
+  parentCommentId?: string | null;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+}
+
+export interface CommentReplyPreview {
+  id: string;
+  authorId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  body: string;
 }
 
 export interface CreateBetInput {
@@ -214,6 +225,7 @@ export interface CreateBetInput {
   invitedUsernames: string[];
   maskedUsernames?: string[];
   options: BetOption[];
+  initialChances?: Record<string, number>;
   allowMultipleChoices?: boolean;
   allowMultipleOutcomes?: boolean;
   allowDraw?: boolean;
@@ -277,8 +289,18 @@ export interface GroupMessage {
   authorId: string;
   authorUsername: string;
   authorDisplayName: string;
+  authorPhotoURL?: string | null;
   body: string;
+  replyTo?: GroupMessageReplyPreview | null;
   createdAt: Timestamp;
+}
+
+export interface GroupMessageReplyPreview {
+  id: string;
+  authorId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  body: string;
 }
 
 export interface GroupReadState {
@@ -350,6 +372,8 @@ export interface ChallengeComment {
   authorUsername: string;
   authorDisplayName: string;
   body: string;
+  replyTo?: CommentReplyPreview | null;
+  parentCommentId?: string | null;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }

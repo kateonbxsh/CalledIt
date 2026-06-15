@@ -74,6 +74,7 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
     const displayed = displayChanceSummary({
       options: bet.options,
       summary: latestSummary,
+      initialSummary: bet.initialChanceSummary,
       type: bet.type,
       createdAtMs,
       deadlineMs,

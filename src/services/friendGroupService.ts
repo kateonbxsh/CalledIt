@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -16,9 +17,18 @@ import {
   where,
   type DocumentData,
   type QueryDocumentSnapshot,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { Bet, ChallengeActivity, FriendGroup, GroupMessage, GroupReadState, UserProfile } from '../types';
+import type {
+  Bet,
+  ChallengeActivity,
+  FriendGroup,
+  GroupMessage,
+  GroupMessageReplyPreview,
+  GroupReadState,
+  UserProfile,
+} from '../types';
 import { createNotification } from './notificationService';
 
 async function resolveUids(usernames: string[]): Promise<string[]> {
@@ -38,6 +48,17 @@ function sameUsernames(a: string[], b: string[]) {
   return sortedA.every((username, index) => username === sortedB[index]);
 }
 
+export function sortFriendGroupsByLatestMessage(groups: FriendGroup[]) {
+  return [...groups].sort((a, b) => {
+    const aMessageAt = a.lastMessageAt?.toMillis?.() ?? 0;
+    const bMessageAt = b.lastMessageAt?.toMillis?.() ?? 0;
+    if (aMessageAt !== bMessageAt) return bMessageAt - aMessageAt;
+
+    // Conversations without messages stay below active chats, newest group first.
+    return (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0);
+  });
+}
+
 export async function listMyFriendGroups(user: UserProfile): Promise<FriendGroup[]> {
   const groupsRef = collection(db, 'friendGroups');
   const [createdSnap, memberSnap] = await Promise.all([
@@ -51,9 +72,7 @@ export async function listMyFriendGroups(user: UserProfile): Promise<FriendGroup
       map.set(d.id, { id: d.id, ...d.data() } as FriendGroup);
     }
   }
-  return [...map.values()].sort(
-    (a, b) => a.createdAt.toMillis() - b.createdAt.toMillis(),
-  );
+  return sortFriendGroupsByLatestMessage([...map.values()]);
 }
 
 export async function createFriendGroup(
@@ -173,7 +192,34 @@ export async function listGroupMessages(
   };
 }
 
-export async function sendGroupMessage(group: FriendGroup, user: UserProfile, body: string) {
+export function subscribeToGroupMessages(
+  groupId: string,
+  onMessages: (page: GroupMessagePage) => void,
+  onError?: (error: Error) => void,
+  pageSize = 30,
+): Unsubscribe {
+  const messagesRef = collection(db, 'friendGroups', groupId, 'messages');
+  return onSnapshot(
+    query(messagesRef, orderBy('createdAt', 'desc'), limit(pageSize)),
+    (snap) => {
+      onMessages({
+        messages: snap.docs
+          .map((item) => ({ id: item.id, groupId, ...item.data() }) as GroupMessage)
+          .reverse(),
+        cursor: snap.docs.at(-1) ?? null,
+        hasMore: snap.docs.length === pageSize,
+      });
+    },
+    (error) => onError?.(error),
+  );
+}
+
+export async function sendGroupMessage(
+  group: FriendGroup,
+  user: UserProfile,
+  body: string,
+  replyTo?: GroupMessageReplyPreview | null,
+) {
   const trimmed = body.trim();
   if (!trimmed) throw new Error('Write a message first.');
   if (trimmed.length > 1000) throw new Error('Messages can be at most 1000 characters.');
@@ -186,6 +232,7 @@ export async function sendGroupMessage(group: FriendGroup, user: UserProfile, bo
       authorUsername: user.username,
       authorDisplayName: user.displayName,
       body: trimmed,
+      replyTo: replyTo ?? null,
       createdAt: serverTimestamp(),
     });
     transaction.update(groupRef, {

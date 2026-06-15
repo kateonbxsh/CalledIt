@@ -342,6 +342,8 @@ service cloud.firestore {
           'displayName',
           'photoURL',
           'body',
+          'replyTo',
+          'parentCommentId',
           'createdAt',
           'updatedAt'
         ])
@@ -355,6 +357,22 @@ service cloud.firestore {
         && request.resource.data.body is string
         && request.resource.data.body.size() > 0
         && request.resource.data.body.size() <= 1000
+        && (
+          request.resource.data.replyTo == null ||
+          (
+            request.resource.data.replyTo is map
+            && request.resource.data.replyTo.id is string
+            && request.resource.data.replyTo.authorId is string
+            && request.resource.data.replyTo.authorUsername is string
+            && request.resource.data.replyTo.authorDisplayName is string
+            && request.resource.data.replyTo.body is string
+          )
+        )
+        && (
+          !request.resource.data.keys().hasAny(['parentCommentId']) ||
+          request.resource.data.parentCommentId == null ||
+          request.resource.data.parentCommentId is string
+        )
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if signedIn()
@@ -406,6 +424,23 @@ service cloud.firestore {
           && request.resource.data.body is string
           && request.resource.data.body.size() > 0
           && request.resource.data.body.size() <= 500
+          && (
+            !request.resource.data.keys().hasAny(['replyTo']) ||
+            request.resource.data.replyTo == null ||
+            (
+              request.resource.data.replyTo is map
+              && request.resource.data.replyTo.id is string
+              && request.resource.data.replyTo.authorId is string
+              && request.resource.data.replyTo.authorUsername is string
+              && request.resource.data.replyTo.authorDisplayName is string
+              && request.resource.data.replyTo.body is string
+            )
+          )
+          && (
+            !request.resource.data.keys().hasAny(['parentCommentId']) ||
+            request.resource.data.parentCommentId == null ||
+            request.resource.data.parentCommentId is string
+          )
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time;
         allow update: if canReadChallengeById(challengeId)
@@ -456,8 +491,41 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isGroupMember(groupId);
         allow create: if isGroupMember(groupId)
+          && request.resource.data.keys().hasOnly([
+            'groupId',
+            'authorId',
+            'authorUsername',
+            'authorDisplayName',
+            'authorPhotoURL',
+            'body',
+            'replyTo',
+            'createdAt'
+          ])
           && request.resource.data.authorId == request.auth.uid
-          && request.resource.data.groupId == groupId;
+          && request.resource.data.groupId == groupId
+          && request.resource.data.authorUsername == username()
+          && request.resource.data.authorDisplayName == me().data.displayName
+          && (
+            !request.resource.data.keys().hasAny(['authorPhotoURL']) ||
+            (me().data.keys().hasAny(['photoURL']) && request.resource.data.authorPhotoURL == me().data.photoURL) ||
+            (!me().data.keys().hasAny(['photoURL']) && request.resource.data.authorPhotoURL == null)
+          )
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 1000
+          && request.resource.data.createdAt == request.time
+          && (
+            !request.resource.data.keys().hasAny(['replyTo']) ||
+            request.resource.data.replyTo == null ||
+            (
+              request.resource.data.replyTo is map
+              && request.resource.data.replyTo.id is string
+              && request.resource.data.replyTo.authorId is string
+              && request.resource.data.replyTo.authorUsername is string
+              && request.resource.data.replyTo.authorDisplayName is string
+              && request.resource.data.replyTo.body is string
+            )
+          );
         allow update, delete: if false;
       }
     }

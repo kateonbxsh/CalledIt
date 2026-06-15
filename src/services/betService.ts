@@ -20,6 +20,7 @@ import { awardDailyBonus } from './bonusService';
 import type {
   Bet,
   BetComment,
+  CommentReplyPreview,
   BetOption,
   BetResolution,
   ChanceSnapshot,
@@ -36,7 +37,6 @@ import {
 } from '../utils/coins';
 import {
   calculateClosestGuessChances,
-  calculateChanceSummary,
   calculateSmoothedChanceSummary,
   chanceForOption,
   displayChanceSummary,
@@ -105,6 +105,16 @@ function scoreConsistencyError(optionId: string, homeScore?: number, awayScore?:
 
 export async function createBet(input: CreateBetInput, creator: UserProfile) {
   const now = serverTimestamp();
+  const initialTotal = input.options.reduce(
+    (sum, option) => sum + Math.max(0, input.initialChances?.[option.id] ?? 1),
+    0,
+  ) || 1;
+  const initialChanceSummary = input.options.map((option) => ({
+    optionId: option.id,
+    users: 0,
+    coins: 0,
+    chance: Math.max(0, input.initialChances?.[option.id] ?? 1) / initialTotal,
+  }));
   const ref = await addDoc(collection(db, 'bets'), {
     type: input.type,
     title: input.title.trim(),
@@ -134,7 +144,8 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     status: 'open',
     predictionCount: 0,
     totalCoinsStaked: 0,
-    chanceSummary: calculateChanceSummary(input.options, []),
+    chanceSummary: initialChanceSummary,
+    initialChanceSummary,
     resolution: null,
     resolvedAt: null,
     createdAt: now,
@@ -296,7 +307,13 @@ export async function listCommentsForBet(betId: string) {
     .sort((left, right) => left.createdAt.toMillis() - right.createdAt.toMillis());
 }
 
-export async function addBetComment(betId: string, user: UserProfile, body: string) {
+export async function addBetComment(
+  betId: string,
+  user: UserProfile,
+  body: string,
+  replyTo?: CommentReplyPreview | null,
+  parentCommentId?: string | null,
+) {
   const text = body.trim();
   if (!text) throw new Error('Write a comment first.');
   if (text.length > 1000) throw new Error('Keep comments under 1000 characters.');
@@ -308,6 +325,8 @@ export async function addBetComment(betId: string, user: UserProfile, body: stri
     displayName: user.displayName,
     photoURL: user.photoURL ?? null,
     body: text,
+    replyTo: replyTo ?? null,
+    parentCommentId: parentCommentId ?? null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -477,6 +496,7 @@ export async function placePrediction(input: PredictionInput) {
       const displayed = displayChanceSummary({
         options: nextOptions,
         summary: bet.chanceSummary,
+        initialSummary: bet.initialChanceSummary,
         type: bet.type,
         createdAtMs,
         deadlineMs,
@@ -613,6 +633,7 @@ export async function placePrediction(input: PredictionInput) {
       const projectedPreviousSummary = projectChanceSummaryOverTime({
         options: nextOptions,
         summary: bet.chanceSummary,
+        initialSummary: bet.initialChanceSummary,
         updatedAt: bet.updatedAt,
         status: bet.status,
       });

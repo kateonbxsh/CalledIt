@@ -33,6 +33,7 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
   const projectedSummary = displayChanceSummary({
     options: bet.options,
     summary: bet.chanceSummary,
+    initialSummary: bet.initialChanceSummary,
     type: bet.type,
     createdAtMs: bet.createdAt?.toMillis?.() ?? Date.now(),
     deadlineMs: bet.deadline?.toMillis?.() ?? null,

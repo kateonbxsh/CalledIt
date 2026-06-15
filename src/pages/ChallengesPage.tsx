@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Clock3, ImagePlus, MessageCircle, Pencil, Send, Target, Trash2, Trophy, Users, X, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Clock3, ImagePlus, MessageCircle, Pencil, Reply, Send, Target, Trash2, Trophy, Users, X, XCircle } from 'lucide-react';
 import { doc, getDoc, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { CoinAmount } from '../components/CoinAmount';
@@ -10,6 +10,7 @@ import { RewardChest } from '../components/RewardChest';
 import { ZoomableImage } from '../components/Lightbox';
 import { StakeInput } from '../components/StakeInput';
 import { useAuth } from '../contexts/AuthContext';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import { listMyFriendGroups } from '../services/friendGroupService';
 import {
   completeWagerChallenge,
@@ -26,8 +27,9 @@ import {
   weeklyChallengesForUser,
 } from '../services/rewardService';
 import { getUsersByIds } from '../services/userService';
-import type { BetVisibility, ChallengeActivity, ChallengeComment, FriendGroup } from '../types';
+import type { BetVisibility, ChallengeActivity, ChallengeComment, CommentReplyPreview, FriendGroup } from '../types';
 import type { WeeklyChallengeDefinition } from '../services/rewardService';
+import { buildCommentThreads } from '../utils/commentThreads';
 import { relativeTime } from '../utils/format';
 import { downscaleBetImage } from '../utils/image';
 
@@ -85,10 +87,24 @@ export function ChallengesPage() {
   const [commentsHaveMore, setCommentsHaveMore] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [replyingToComment, setReplyingToComment] = useState<{
+    preview: CommentReplyPreview;
+    parentCommentId: string;
+  } | null>(null);
+  const [expandedCommentThreads, setExpandedCommentThreads] = useState<Set<string>>(new Set());
   const [editingThreadCommentId, setEditingThreadCommentId] = useState('');
   const [editingThreadCommentBody, setEditingThreadCommentBody] = useState('');
   const [recentCommentsByChallenge, setRecentCommentsByChallenge] = useState<Record<string, ChallengeComment[]>>({});
   const [completingWagerId, setCompletingWagerId] = useState('');
+  const commentSheet = useSwipeToDismiss(() => {
+    setCommentChallenge(null);
+    setReplyingToComment(null);
+  });
+  const wagerEditSheet = useSwipeToDismiss(() => setStakeEditChallenge(null));
+  const challengeCommentThreads = useMemo(
+    () => buildCommentThreads(challengeComments),
+    [challengeComments],
+  );
 
   const weekKey = currentWeekKey();
   const weekly = useMemo(
@@ -128,7 +144,7 @@ export function ChallengesPage() {
     if (missingIds.length === 0) return;
     let cancelled = false;
     void Promise.all(missingIds.map(async (id) => {
-      const page = await listChallengeComments(id, null, 2);
+      const page = await listChallengeComments(id, null, 8);
       return [id, page.comments] as const;
     })).then((entries) => {
       if (cancelled) return;
@@ -339,7 +355,7 @@ export function ChallengesPage() {
   async function refreshComments(challenge: ChallengeActivity) {
     const [thread, recent] = await Promise.all([
       listChallengeComments(challenge.id),
-      listChallengeComments(challenge.id, null, 2),
+      listChallengeComments(challenge.id, null, 8),
     ]);
     setChallengeComments(thread.comments);
     setCommentCursor(thread.cursor);
@@ -365,8 +381,15 @@ export function ChallengesPage() {
     if (!profile || !commentChallenge || !newComment.trim()) return;
     setBusy(`comment-${commentChallenge.id}`);
     try {
-      await addChallengeComment(commentChallenge, profile, newComment);
+      await addChallengeComment(
+        commentChallenge,
+        profile,
+        newComment,
+        replyingToComment?.preview,
+        replyingToComment?.parentCommentId,
+      );
       setNewComment('');
+      setReplyingToComment(null);
       await refreshComments(commentChallenge);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not post comment.');
@@ -403,6 +426,187 @@ export function ChallengesPage() {
     } finally {
       setBusy('');
     }
+  }
+
+  function renderChallengeComment(
+    comment: ChallengeComment,
+    rootCommentId: string,
+    commentIndex: number,
+    isReply = false,
+  ) {
+    const canEdit = comment.authorId === profile?.uid;
+    const canDelete = canEdit || profile?.isAdmin;
+    const isEditing = editingThreadCommentId === comment.id;
+    return (
+      <div
+        key={comment.id}
+        className={`animate-comment-enter rounded-md px-3 py-2.5 sm:px-4 sm:py-3 ${isReply ? 'bg-white' : 'bg-field'}`}
+        style={{ animationDelay: `${Math.min(commentIndex, 10) * 35}ms` }}
+      >
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <p className="text-sm font-black">{comment.authorDisplayName || comment.authorUsername}</p>
+              <span className="text-xs text-ink/35">{comment.createdAt ? relativeTime(comment.createdAt) : 'just now'}</span>
+              {comment.updatedAt && comment.createdAt && comment.updatedAt.toMillis() > comment.createdAt.toMillis() + 1000 ? (
+                <span className="text-xs font-semibold text-ink/35">edited</span>
+              ) : null}
+            </div>
+            {isEditing ? (
+              <div className="animate-action-reveal mt-2">
+                <textarea
+                  value={editingThreadCommentBody}
+                  onChange={(event) => setEditingThreadCommentBody(event.target.value)}
+                  maxLength={500}
+                  className="min-h-20 w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm"
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingThreadCommentId('');
+                      setEditingThreadCommentBody('');
+                    }}
+                    className="rounded-md px-3 py-1.5 text-xs font-bold text-ink/55"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveThreadComment(comment)}
+                    disabled={!editingThreadCommentBody.trim() || !!busy}
+                    className="rounded-md bg-ink px-3 py-1.5 text-xs font-black text-white disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-ink/70">
+                {isReply && comment.replyTo ? (
+                  <span className="mr-1 font-bold text-mint">@{comment.replyTo.authorUsername}</span>
+                ) : null}
+                {comment.body}
+              </p>
+            )}
+          </div>
+          {!isEditing ? (
+            <div className="flex shrink-0">
+              <button
+                type="button"
+                onClick={() => setReplyingToComment({
+                  parentCommentId: rootCommentId,
+                  preview: {
+                    id: comment.id,
+                    authorId: comment.authorId,
+                    authorUsername: comment.authorUsername,
+                    authorDisplayName: comment.authorDisplayName,
+                    body: comment.body,
+                  },
+                })}
+                className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white hover:text-ink"
+                aria-label="Reply to comment"
+              >
+                <Reply size={14} />
+              </button>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingThreadCommentId(comment.id);
+                    setEditingThreadCommentBody(comment.body);
+                  }}
+                  className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white hover:text-ink"
+                  aria-label="Edit comment"
+                >
+                  <Pencil size={14} />
+                </button>
+              ) : null}
+              {canDelete ? (
+                <button
+                  type="button"
+                  onClick={() => void removeThreadComment(comment)}
+                  disabled={busy === `delete-comment-${comment.id}`}
+                  className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white hover:text-coral disabled:opacity-40"
+                  aria-label="Delete comment"
+                >
+                  <Trash2 size={14} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  function renderChallengeCardComments(
+    challenge: ChallengeActivity,
+    comments: ChallengeComment[],
+  ) {
+    if (comments.length === 0) return null;
+    const threads = buildCommentThreads(comments).slice(-2);
+    return (
+      <div className="space-y-3 border-t border-line px-4 py-3">
+        {threads.map((thread) => {
+          const visibleReplies = thread.replies.slice(-2);
+          const hiddenReplies = Math.max(0, thread.replies.length - visibleReplies.length);
+          return (
+            <div key={thread.root.id} className="challenge-comment-preview rounded-md bg-field px-3 py-2.5">
+              <button
+                type="button"
+                onClick={() => void openComments(challenge)}
+                className="block w-full text-left"
+              >
+                <span className="text-xs font-black text-ink/70">
+                  {thread.root.authorDisplayName || thread.root.authorUsername}
+                </span>
+                <span className="ml-2 text-[11px] font-semibold text-ink/35">
+                  {thread.root.createdAt ? relativeTime(thread.root.createdAt) : 'just now'}
+                </span>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-ink/65 [overflow-wrap:anywhere]">
+                  {thread.root.body}
+                </p>
+              </button>
+              {visibleReplies.length ? (
+                <div className="ml-3 mt-2 space-y-1.5 border-l-2 border-line pl-3">
+                  {visibleReplies.map((reply) => (
+                    <button
+                      key={reply.id}
+                      type="button"
+                      onClick={() => void openComments(challenge)}
+                      className="block w-full rounded-md bg-white/80 px-2.5 py-2 text-left transition hover:bg-white"
+                    >
+                      <span className="text-xs font-black text-ink/65">
+                        {reply.authorDisplayName || reply.authorUsername}
+                      </span>
+                      <span className="ml-2 text-[11px] font-semibold text-ink/30">
+                        {reply.createdAt ? relativeTime(reply.createdAt) : 'just now'}
+                      </span>
+                      <p className="mt-0.5 break-words text-sm leading-5 text-ink/60 [overflow-wrap:anywhere]">
+                        {reply.replyTo ? (
+                          <span className="mr-1 font-bold text-mint">@{reply.replyTo.authorUsername}</span>
+                        ) : null}
+                        {reply.body}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {hiddenReplies > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void openComments(challenge)}
+                  className="ml-6 mt-2 text-xs font-bold text-ink/45 hover:text-ink"
+                >
+                  View {hiddenReplies} more {hiddenReplies === 1 ? 'reply' : 'replies'}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   return (
@@ -592,21 +796,7 @@ export function ChallengesPage() {
                         </div>
                       ) : null}
 
-                      {recentComments.length > 0 ? (
-                        <div className="space-y-2 border-t border-line px-4 py-3">
-                          {recentComments.map((comment) => (
-                            <button
-                              key={comment.id}
-                              type="button"
-                              onClick={() => void openComments(activity)}
-                              className="challenge-comment-preview block w-full rounded-md bg-field px-3 py-2 text-left"
-                            >
-                              <span className="text-xs font-black text-ink/65">{comment.authorDisplayName || comment.authorUsername}</span>
-                              <span className="ml-2 break-words text-sm text-ink/60 [overflow-wrap:anywhere]">{comment.body}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
+                      {renderChallengeCardComments(activity, recentComments)}
 
                       {completionOpen && canComplete ? (
                         <div className="animate-action-reveal border-t border-line bg-field/55 p-4">
@@ -757,21 +947,7 @@ export function ChallengesPage() {
                       </div>
                     ) : null}
 
-                    {recentComments.length > 0 ? (
-                      <div className="space-y-2 border-t border-line px-4 py-3">
-                        {recentComments.map((comment) => (
-                          <button
-                            key={comment.id}
-                            type="button"
-                            onClick={() => void openComments(activity)}
-                            className="challenge-comment-preview block w-full rounded-md bg-field px-3 py-2 text-left"
-                          >
-                            <span className="text-xs font-black text-ink/65">{comment.authorDisplayName || comment.authorUsername}</span>
-                            <span className="ml-2 break-words text-sm text-ink/60 [overflow-wrap:anywhere]">{comment.body}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+                    {renderChallengeCardComments(activity, recentComments)}
 
                     <div className="flex items-center border-t border-line px-4 py-3">
                       <button
@@ -792,7 +968,7 @@ export function ChallengesPage() {
       </div>
 
       {weeklyModalChallenge ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-lg animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -874,7 +1050,7 @@ export function ChallengesPage() {
       ) : null}
 
       {weeklyModalOpen ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="max-h-[90vh] w-full max-w-5xl animate-soft-enter overflow-y-auto rounded-md border border-line bg-white shadow-lift">
             <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-white px-5 py-4">
               <Trophy size={19} className="text-citrus" />
@@ -953,7 +1129,7 @@ export function ChallengesPage() {
       ) : null}
 
 {weeklyReward ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-reward-pop rounded-md border border-line bg-white p-6 text-center shadow-lift">
             <RewardChest open className="mx-auto mb-4 h-28 w-32" />
             <h2 className="text-xl font-black">Challenge complete</h2>
@@ -979,7 +1155,7 @@ export function ChallengesPage() {
       ) : null}
 
       {editChallenge ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-lg animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1037,7 +1213,11 @@ export function ChallengesPage() {
 
       {stakeEditChallenge ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="flex max-h-[92dvh] w-full max-w-lg animate-soft-enter flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:rounded-2xl">
+          <div
+            {...wagerEditSheet.sheetProps}
+            className="flex max-h-[92dvh] w-full max-w-lg animate-soft-enter touch-pan-y flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:rounded-2xl"
+          >
+            <div className="shrink-0 pt-2 sm:hidden">{wagerEditSheet.dragHandle}</div>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 py-4 sm:px-5">
               <div>
                 <h2 className="text-lg font-black">Edit wager</h2>
@@ -1047,7 +1227,7 @@ export function ChallengesPage() {
                 <X size={17} />
               </button>
             </div>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+            <div data-sheet-scroll className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
               <label className="block text-sm font-medium">
                 Title
                 <input
@@ -1101,17 +1281,21 @@ export function ChallengesPage() {
 
       {commentChallenge ? (
         <div className="fixed inset-0 z-[70] flex animate-fade-in items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
-          <div className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift animate-soft-enter sm:h-[72dvh] sm:max-h-[760px] sm:w-[min(94vw,1100px)] sm:max-w-none sm:rounded-2xl">
+          <div
+            {...commentSheet.sheetProps}
+            className="flex max-h-[92dvh] w-full touch-pan-y flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift animate-soft-enter sm:h-[72dvh] sm:max-h-[760px] sm:w-[min(94vw,1100px)] sm:max-w-none sm:rounded-2xl"
+          >
+            <div className="shrink-0 pt-2 sm:hidden">{commentSheet.dragHandle}</div>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 py-4 sm:px-6">
               <div className="min-w-0">
                 <h2 className="text-lg font-black">Comments</h2>
                 <p className="truncate text-sm text-ink/50">{commentChallenge.title}</p>
               </div>
-              <button type="button" onClick={() => setCommentChallenge(null)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95">
+              <button type="button" onClick={() => { setCommentChallenge(null); setReplyingToComment(null); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field transition hover:bg-line active:scale-95">
                 <X size={17} />
               </button>
             </div>
-            <div className="min-h-48 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:px-6 sm:py-5">
+            <div data-sheet-scroll className="min-h-48 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:px-6 sm:py-5">
               {commentsHaveMore ? (
                 <button onClick={loadOlderComments} disabled={commentsLoading} className="mx-auto block rounded-md bg-field px-3 py-2 text-xs font-bold text-ink/60">
                   {commentsLoading ? 'Loading...' : 'Load older comments'}
@@ -1119,102 +1303,74 @@ export function ChallengesPage() {
               ) : null}
               {!commentsLoading && challengeComments.length === 0 ? (
                 <p className="py-10 text-center text-sm font-semibold text-ink/40">No comments yet.</p>
-              ) : challengeComments.map((comment, commentIndex) => {
-                const canEdit = comment.authorId === profile?.uid;
-                const canDelete = canEdit || profile?.isAdmin;
-                const isEditing = editingThreadCommentId === comment.id;
+              ) : challengeCommentThreads.map((thread, threadIndex) => {
+                const expanded = expandedCommentThreads.has(thread.root.id);
+                const visibleReplies = expanded ? thread.replies : thread.replies.slice(0, 2);
+                const hiddenCount = thread.replies.length - visibleReplies.length;
                 return (
-                  <div
-                    key={comment.id}
-                    className="animate-comment-enter rounded-md bg-field px-3 py-2.5 sm:px-4 sm:py-3"
-                    style={{ animationDelay: `${Math.min(commentIndex, 10) * 35}ms` }}
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                          <p className="text-sm font-black">{comment.authorDisplayName || comment.authorUsername}</p>
-                          <span className="text-xs text-ink/35">{comment.createdAt ? relativeTime(comment.createdAt) : 'just now'}</span>
-                          {comment.updatedAt && comment.createdAt && comment.updatedAt.toMillis() > comment.createdAt.toMillis() + 1000 ? (
-                            <span className="text-xs font-semibold text-ink/35">edited</span>
-                          ) : null}
-                        </div>
-                        {isEditing ? (
-                          <div className="animate-action-reveal mt-2">
-                            <textarea
-                              value={editingThreadCommentBody}
-                              onChange={(event) => setEditingThreadCommentBody(event.target.value)}
-                              maxLength={500}
-                              className="min-h-20 w-full resize-y rounded-md border border-line bg-white px-3 py-2 text-sm"
-                            />
-                            <div className="mt-2 flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingThreadCommentId('');
-                                  setEditingThreadCommentBody('');
-                                }}
-                                className="rounded-md px-3 py-1.5 text-xs font-bold text-ink/55"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void saveThreadComment(comment)}
-                                disabled={!editingThreadCommentBody.trim() || !!busy}
-                                className="rounded-md bg-ink px-3 py-1.5 text-xs font-black text-white disabled:opacity-40"
-                              >
-                                Save
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-ink/70">{comment.body}</p>
-                        )}
+                  <div key={thread.root.id}>
+                    {renderChallengeComment(thread.root, thread.root.id, threadIndex)}
+                    {visibleReplies.length ? (
+                      <div className="ml-6 mt-1 space-y-1 border-l-2 border-line pl-3 sm:ml-10">
+                        {visibleReplies.map((reply, replyIndex) => (
+                          renderChallengeComment(reply, thread.root.id, threadIndex + replyIndex + 1, true)
+                        ))}
                       </div>
-                      {!isEditing && (canEdit || canDelete) ? (
-                        <div className="flex shrink-0">
-                          {canEdit ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingThreadCommentId(comment.id);
-                                setEditingThreadCommentBody(comment.body);
-                              }}
-                              className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white hover:text-ink"
-                              aria-label="Edit comment"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                          ) : null}
-                          {canDelete ? (
-                            <button
-                              type="button"
-                              onClick={() => void removeThreadComment(comment)}
-                              disabled={busy === `delete-comment-${comment.id}`}
-                              className="grid h-8 w-8 place-items-center rounded-md text-ink/35 hover:bg-white hover:text-coral disabled:opacity-40"
-                              aria-label="Delete comment"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
+                    ) : null}
+                    {hiddenCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCommentThreads((current) => {
+                          const next = new Set(current);
+                          next.add(thread.root.id);
+                          return next;
+                        })}
+                        className="ml-10 mt-1 inline-flex items-center gap-1 text-xs font-bold text-ink/45 hover:text-ink"
+                      >
+                        <ChevronDown size={13} /> View {hiddenCount} more {hiddenCount === 1 ? 'reply' : 'replies'}
+                      </button>
+                    ) : thread.replies.length > 2 && expanded ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCommentThreads((current) => {
+                          const next = new Set(current);
+                          next.delete(thread.root.id);
+                          return next;
+                        })}
+                        className="ml-10 mt-1 text-xs font-bold text-ink/45 hover:text-ink"
+                      >
+                        Hide replies
+                      </button>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-            <form onSubmit={submitComment} className="flex shrink-0 gap-2 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
-              <input
-                value={newComment}
-                onChange={(event) => setNewComment(event.target.value)}
-                maxLength={500}
-                placeholder="Write a comment"
-                className="min-w-0 flex-1 rounded-md border border-line bg-field px-3 py-2.5 text-sm"
-              />
-              <button type="submit" disabled={!newComment.trim() || !!busy} className="grid h-10 w-10 place-items-center rounded-md bg-ink text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40" aria-label="Post comment">
-                <Send size={17} />
-              </button>
+            <form onSubmit={submitComment} className="shrink-0 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+              {replyingToComment ? (
+                <div className="mb-2 flex items-center gap-2 rounded-lg bg-field px-3 py-2 text-xs">
+                  <Reply size={13} className="shrink-0 text-mint" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black">Replying to {replyingToComment.preview.authorDisplayName || replyingToComment.preview.authorUsername}</p>
+                    <p className="truncate text-ink/50">{replyingToComment.preview.body}</p>
+                  </div>
+                  <button type="button" onClick={() => setReplyingToComment(null)} className="grid h-7 w-7 place-items-center rounded-full hover:bg-white" aria-label="Cancel reply">
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : null}
+              <div className="flex gap-2">
+                <input
+                  value={newComment}
+                  onChange={(event) => setNewComment(event.target.value)}
+                  maxLength={500}
+                  placeholder="Write a comment"
+                  className="min-w-0 flex-1 rounded-md border border-line bg-field px-3 py-2.5 text-sm"
+                />
+                <button type="submit" disabled={!newComment.trim() || !!busy} className="grid h-10 w-10 place-items-center rounded-md bg-ink text-white transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-40" aria-label="Post comment">
+                  <Send size={17} />
+                </button>
+              </div>
             </form>
           </div>
         </div>

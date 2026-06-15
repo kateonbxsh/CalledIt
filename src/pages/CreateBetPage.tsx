@@ -41,6 +41,7 @@ export function CreateBetPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
+  const [initialChances, setInitialChances] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (profile) {
@@ -102,6 +103,31 @@ export function CreateBetPage() {
       .map((label, index) => ({ id: optionId(label, index), label }));
   }, [allowDraw, awayTeam, homeTeam, multiOptions, numberLine, targetDate, type]);
 
+  useEffect(() => {
+    if (options.length === 0) {
+      setInitialChances({});
+      return;
+    }
+    setInitialChances((current) => {
+      const equal = 100 / options.length;
+      const optionIds = new Set(options.map((option) => option.id));
+      const stillMatches = Object.keys(current).length === options.length
+        && Object.keys(current).every((id) => optionIds.has(id));
+      if (stillMatches) return current;
+      return Object.fromEntries(options.map((option) => [option.id, equal]));
+    });
+  }, [options]);
+
+  const initialChanceTotal = options.reduce(
+    (sum, option) => sum + Math.max(0, initialChances[option.id] ?? 0),
+    0,
+  );
+
+  function resetInitialChances() {
+    const equal = options.length ? 100 / options.length : 0;
+    setInitialChances(Object.fromEntries(options.map((option) => [option.id, equal])));
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!profile) return;
@@ -110,6 +136,9 @@ export function CreateBetPage() {
     try {
       if (type !== 'closestNumber' && type !== 'closestDate' && type !== 'openChoice' && options.length < 2) {
         throw new Error('Add at least two options.');
+      }
+      if (options.length && initialChanceTotal <= 0) {
+        throw new Error('Initial chances need a positive total.');
       }
       const maskedSet = new Set(masked.map((username) => username.trim().toLowerCase()));
       await createBet(
@@ -125,6 +154,7 @@ export function CreateBetPage() {
           invitedUsernames: invited.filter((username) => !maskedSet.has(username)),
           maskedUsernames: selectedGroupId ? [...maskedSet] : [],
           options,
+          initialChances,
           allowMultipleChoices: (type === 'multi' || type === 'openChoice') && allowMultipleChoices,
           allowMultipleOutcomes: (type === 'multi' || type === 'openChoice') && allowMultipleOutcomes,
           allowDraw,
@@ -328,6 +358,44 @@ export function CreateBetPage() {
               </div>
             </div>
           ) : null}
+          {options.length > 0 ? (
+            <div className="rounded-md border border-line bg-field p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black">Initial chances</p>
+                  <p className="mt-0.5 text-xs text-ink/50">These are the starting odds. Crowd predictions gradually take over.</p>
+                </div>
+                <button type="button" onClick={resetInitialChances} className="shrink-0 rounded-md bg-white px-3 py-1.5 text-xs font-bold text-ink/60">
+                  Equal
+                </button>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {options.map((option) => (
+                  <label key={option.id} className="flex items-center gap-3 rounded-md bg-white px-3 py-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate font-semibold">{option.label}</span>
+                    <span className="relative w-24 shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={Number((initialChances[option.id] ?? 0).toFixed(1))}
+                        onChange={(event) => setInitialChances((current) => ({
+                          ...current,
+                          [option.id]: Math.max(0, Number(event.target.value) || 0),
+                        }))}
+                        className="w-full rounded-md border border-line bg-field py-1.5 pl-2 pr-7 text-right font-bold"
+                      />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-ink/40">%</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className={`mt-2 text-right text-xs font-bold ${Math.abs(initialChanceTotal - 100) < 0.11 ? 'text-mint' : 'text-ink/45'}`}>
+                Total {initialChanceTotal.toFixed(1)}% {Math.abs(initialChanceTotal - 100) < 0.11 ? '' : '(normalized when created)'}
+              </p>
+            </div>
+          ) : null}
         </section>
 
         <aside className="space-y-4">
@@ -447,7 +515,11 @@ export function CreateBetPage() {
                   <div key={`${option.id}-${index}`} className="rounded-md bg-field px-3 py-2 text-sm font-semibold">
                     <div className="flex items-center justify-between gap-2">
                       <span>{option.label}</span>
-                      <span className="text-xs text-ink/45">0%</span>
+                      <span className="text-xs text-ink/45">
+                        {initialChanceTotal > 0
+                          ? `${Math.round(((initialChances[option.id] ?? 0) / initialChanceTotal) * 100)}%`
+                          : '0%'}
+                      </span>
                     </div>
                   </div>
                 ))}

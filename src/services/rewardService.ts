@@ -23,6 +23,7 @@ import type {
   ChallengeActivity,
   ChallengeComment,
   ChestDefinition,
+  CommentReplyPreview,
   DailyForecastMode,
   FriendGroup,
   RewardClaim,
@@ -555,6 +556,8 @@ export async function addChallengeComment(
   challenge: ChallengeActivity,
   user: UserProfile,
   body: string,
+  replyTo?: CommentReplyPreview | null,
+  parentCommentId?: string | null,
 ) {
   const trimmed = body.trim();
   if (!trimmed) throw new Error('Write a comment first.');
@@ -565,6 +568,8 @@ export async function addChallengeComment(
     authorUsername: user.username,
     authorDisplayName: user.displayName,
     body: trimmed,
+    replyTo: replyTo ?? null,
+    parentCommentId: parentCommentId ?? null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
