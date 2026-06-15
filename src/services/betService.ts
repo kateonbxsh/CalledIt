@@ -489,6 +489,7 @@ export async function placePrediction(input: PredictionInput) {
     const chanceForClosestGuess = () => {
       if (!closest) return 0;
       const dateLike = bet.type === 'closestDate' || bet.type === 'closestHour';
+      const closestType: 'closestNumber' | 'closestDate' | 'closestHour' = dateLike ? bet.type : 'closestNumber';
       const value = dateLike
         ? input.dateGuess ? new Date(input.dateGuess).getTime() : null
         : input.numericGuess;
@@ -509,7 +510,7 @@ export async function placePrediction(input: PredictionInput) {
       });
       return calculateClosestGuessChances({
         predictions: predictionsForChance,
-        type: dateLike ? bet.type : 'closestNumber',
+        type: closestType,
         createdAtMs,
         deadlineMs,
         nowMs: nowMsForChance,
