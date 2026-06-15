@@ -36,6 +36,17 @@ export function useSwipeToDismiss(onDismiss: () => void, active = true) {
 
   function onPointerDown(event: ReactPointerEvent<HTMLElement>) {
     if (event.pointerType === 'mouse') return;
+    const target = event.target as HTMLElement | null;
+    const scrollHost = target?.closest?.('[data-sheet-scroll]') as HTMLElement | null;
+    if (scrollHost && scrollHost.scrollTop > 0) return;
+    if (target && (
+      target.closest('input') ||
+      target.closest('textarea') ||
+      target.closest('select') ||
+      target.closest('button')
+    ) && !target.closest('[data-sheet-drag-handle]')) {
+      return;
+    }
     startRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -53,6 +64,7 @@ export function useSwipeToDismiss(onDismiss: () => void, active = true) {
       setOffset(0);
       return;
     }
+    event.preventDefault();
     setOffset(Math.min(220, deltaY));
   }
 
@@ -73,15 +85,16 @@ export function useSwipeToDismiss(onDismiss: () => void, active = true) {
         transform: offset ? `translateY(${offset}px)` : undefined,
         transition: offset ? 'none' : 'transform 180ms ease',
       },
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: finish,
+      onPointerCancel: finish,
     },
     dragHandle: (
       <div
         aria-label="Swipe down to close"
+        data-sheet-drag-handle
         className="mx-auto -mt-2 mb-1 flex h-8 w-20 shrink-0 touch-none items-center justify-center sm:hidden"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={finish}
-        onPointerCancel={finish}
       >
         <span aria-hidden="true" className="block h-1 w-10 rounded-full bg-ink/20" />
       </div>

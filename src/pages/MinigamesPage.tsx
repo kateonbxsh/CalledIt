@@ -451,7 +451,7 @@ export function MinigamesPage() {
           <div
             {...forecastSheet.sheetProps}
             data-sheet-scroll
-            className="max-h-[90dvh] w-full touch-pan-y overflow-y-auto rounded-t-2xl border border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lift sm:max-w-2xl sm:rounded-2xl sm:p-5"
+            className="max-h-[90dvh] w-full touch-pan-y overflow-y-auto rounded-t-2xl border border-line bg-white p-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] shadow-lift sm:max-w-2xl sm:rounded-2xl sm:p-5"
           >
             {forecastSheet.dragHandle}
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -533,7 +533,7 @@ export function MinigamesPage() {
                 <X size={18} />
               </button>
             </div>
-            <div data-sheet-scroll className="grid min-h-0 gap-3 overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:grid-cols-2 sm:px-5 sm:pb-5">
+            <div data-sheet-scroll className="grid min-h-0 gap-3 overflow-y-auto px-4 py-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] sm:grid-cols-2 sm:px-5 sm:pb-5">
               {chests.length === 0 ? (
                 <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
                   <div>
@@ -657,7 +657,7 @@ export function MinigamesPage() {
                 </svg>
               </div>
             </div>
-            <div className="border-t border-white/10 bg-white/[0.04] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
+            <div className="border-t border-white/10 bg-white/[0.04] px-5 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] pt-4">
               <div className="mb-3 flex items-center justify-between text-xs text-white/45">
                 <span>Possible result</span>
                 <span>-80 to +400</span>

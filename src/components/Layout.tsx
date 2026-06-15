@@ -19,6 +19,7 @@ import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
 import { useAuth } from '../contexts/AuthContext';
 import { listFeedBets } from '../services/betService';
+import { listIncomingCoinGifts } from '../services/coinGiftService';
 import { groupHasUnread, listGroupReadStates, listMyFriendGroups } from '../services/friendGroupService';
 import { getChestDefinitions, listChallengeActivities } from '../services/rewardService';
 import { canClaimSixHourReward } from '../utils/coins';
@@ -104,7 +105,7 @@ export function Layout() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
   const [mobileNavHeight, setMobileNavHeight] = useState(88);
-  const [attention, setAttention] = useState({ bets: false, wagers: false, games: false, groups: false });
+  const [attention, setAttention] = useState({ bets: false, wagers: false, games: false, groups: false, gifts: false });
   const mobileNavRef = useRef<HTMLElement>(null);
   const lastScrollYRef = useRef(0);
   const scrollIntentRef = useRef(0);
@@ -118,13 +119,14 @@ export function Layout() {
     if (!force && now - attentionCheckedAtRef.current < 5 * 60_000) return;
     attentionCheckedAtRef.current = now;
     try {
-      const [publicBets, privateBets, activities, chests, groups, groupReads] = await Promise.all([
+      const [publicBets, privateBets, activities, chests, groups, groupReads, incomingGifts] = await Promise.all([
         listFeedBets('public', profile),
         listFeedBets('private', profile),
         listChallengeActivities(profile),
         getChestDefinitions(profile),
         listMyFriendGroups(profile),
         listGroupReadStates(profile.uid),
+        listIncomingCoinGifts(profile.uid, 1),
       ]);
       const seenBetsAt = Number(localStorage.getItem(seenKey('bets')) ?? 0);
       const seenWagersAt = Number(localStorage.getItem(seenKey('wagers')) ?? 0);
@@ -148,6 +150,7 @@ export function Layout() {
         wagers: location.pathname.startsWith('/challenges') ? false : unseenWager,
         games: location.pathname.startsWith('/minigames') ? false : !!gamesSignature && gamesSignature !== seenGamesSignature,
         groups: groups.some((group) => groupHasUnread(group, groupReads, profile.uid)),
+        gifts: incomingGifts.length > 0,
       });
     } catch {
       // Navigation should stay quiet when an attention check is unavailable.
@@ -289,7 +292,14 @@ export function Layout() {
             <NavItem
               key={item.to}
               {...item}
-              attention={item.to === '/' ? attention.bets : item.to === '/challenges' ? attention.wagers : item.to === '/minigames' ? attention.games : item.to === '/groups' ? attention.groups : false}
+              attention={
+                item.to === '/' ? attention.bets
+                  : item.to === '/challenges' ? attention.wagers
+                  : item.to === '/minigames' ? attention.games
+                  : item.to === '/groups' ? attention.groups
+                  : item.to === '/gifts' ? attention.gifts
+                  : false
+              }
             />
           ))}
           <div className="relative pt-2 hidden lg:block">
@@ -417,8 +427,9 @@ export function Layout() {
           <Link to="/mine" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
             My bets
           </Link>
-          <Link to="/gifts" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
-            Gifts
+          <Link to="/gifts" className="relative flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
+            <span>Gifts</span>
+            {attention.gifts ? <AttentionDot /> : null}
           </Link>
           <Link to="/how-to-play" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
             How to Play
@@ -467,7 +478,7 @@ export function Layout() {
             setProfileMenuOpen((open) => !open);
             setBottomNavVisible(true);
           }}
-          className="rounded-2xl transition-colors active:bg-field lg:hidden grid h-12 place-items-center"
+          className="relative rounded-2xl transition-colors active:bg-field lg:hidden grid h-12 place-items-center"
           aria-label="Profile menu"
           style={{ backfaceVisibility: 'hidden' } as React.CSSProperties}
         >
@@ -480,6 +491,7 @@ export function Layout() {
           >
             <Avatar name={profile?.displayName ?? 'Me'} src={profile?.photoURL} round />
           </span>
+          {attention.gifts ? <AttentionDot /> : null}
         </button>
       </nav>
     </div>

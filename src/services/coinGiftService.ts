@@ -30,7 +30,7 @@ export async function sendCoinGift(params: {
 }) {
   const amount = Math.max(0, Math.round(params.amount));
   const note = params.note?.trim() || null;
-  if (amount < 10) throw new Error('Send at least 10 coins.');
+  if (amount <= 0) throw new Error('Send at least 1 coin.');
   if (params.sender.uid === params.recipient.uid) throw new Error('You cannot send coins to yourself.');
   if (note && note.length > 200) throw new Error('Keep the note under 200 characters.');
 
@@ -70,7 +70,7 @@ export async function sendCoinGift(params: {
     targetUids: [params.recipient.uid],
     title: `${params.sender.displayName || params.sender.username} sent you coins`,
     body: `${amount.toLocaleString('en-US')} coins are waiting for you.`,
-    url: '/#/me',
+    url: '/#/gifts',
   });
 }
 

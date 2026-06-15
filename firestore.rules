@@ -259,7 +259,7 @@ service cloud.firestore {
           && request.resource.data.senderUsername == username()
           && request.resource.data.senderDisplayName == me().data.displayName
           && request.resource.data.amount is number
-          && request.resource.data.amount >= 10
+          && request.resource.data.amount > 0
           && (
             !request.resource.data.keys().hasAny(['note']) ||
             request.resource.data.note == null ||

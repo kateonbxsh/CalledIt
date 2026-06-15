@@ -743,7 +743,7 @@ export function FriendGroupsPage() {
                 })}
               </div>
             </div>
-            <form onSubmit={submitMessage} className="shrink-0 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <form onSubmit={submitMessage} className="shrink-0 border-t border-line bg-white p-3 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))]">
               {replyingTo ? (
                 <div className="mb-2 flex items-center gap-2 rounded-lg bg-field px-3 py-2 text-xs">
                   <Reply size={13} className="shrink-0 text-mint" />

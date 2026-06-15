@@ -214,7 +214,7 @@ export function MinesGame({
         </div>
 
         {phase === 'setup' ? (
-          <section className="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-white/10 bg-[#172337]/[0.98] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-18px_45px_rgba(0,0,0,.35)] backdrop-blur sm:static sm:overflow-visible sm:rounded-2xl sm:bg-white/[0.07] sm:pb-4 sm:shadow-lift lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:w-full lg:self-center">
+          <section className="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-white/10 bg-[#172337]/[0.98] p-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] shadow-[0_-18px_45px_rgba(0,0,0,.35)] backdrop-blur sm:static sm:overflow-visible sm:rounded-2xl sm:bg-white/[0.07] sm:pb-4 sm:shadow-lift lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:w-full lg:self-center">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="mb-2 text-xs font-black uppercase text-white/45">Board</p>

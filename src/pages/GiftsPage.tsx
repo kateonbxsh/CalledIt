@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Gift, Send } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
+import { StakeInput } from '../components/StakeInput';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { claimCoinGift, listIncomingCoinGifts, sendCoinGift } from '../services/coinGiftService';
@@ -120,17 +121,13 @@ export function GiftsPage() {
               exclude={profile?.username ? [profile.username] : []}
               placeholder="Search one username"
             />
-            <label className="block text-sm font-medium">
-              Amount
-              <input
-                className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 outline-none focus:border-mint"
-                type="number"
-                min={10}
-                step={10}
-                value={giftAmount}
-                onChange={(event) => setGiftAmount(Math.max(10, Number(event.target.value) || 10))}
-              />
-            </label>
+            <StakeInput
+              label="Amount"
+              value={giftAmount}
+              min={0}
+              step={1}
+              onChange={(value) => setGiftAmount(Math.max(0, Math.round(value)))}
+            />
             <label className="block text-sm font-medium">
               Note
               <input

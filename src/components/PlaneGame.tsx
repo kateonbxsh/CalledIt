@@ -331,7 +331,7 @@ export function PlaneGame({
       {phase === 'aim' && (
         <div
           className="absolute inset-x-0 bottom-0 flex max-h-[58dvh] flex-col gap-3 overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#172337]/[0.98] px-4 pt-4 shadow-[0_-18px_45px_rgba(0,0,0,.35)] backdrop-blur"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
+          style={{ paddingBottom: 'max(0.5rem, calc(env(safe-area-inset-bottom) + 0.25rem))' }}
         >
           <p className="text-center text-xs font-semibold text-white/55">Drag the sky to aim. The dotted line shows your glide.</p>
           {err ? <p className="text-center text-xs font-bold text-coral">{err}</p> : null}

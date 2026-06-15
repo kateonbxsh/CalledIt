@@ -109,7 +109,10 @@ export function UsernamePicker({
             <button
               key={user.uid}
               type="button"
-              onClick={() => add(user.username)}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                add(user.username);
+              }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-field active:bg-field"
               style={{ WebkitTouchCallout: 'none' }}
             >

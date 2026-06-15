@@ -1266,7 +1266,7 @@ export function ChallengesPage() {
                 Completion bonus: <CoinAmount amount={Math.max(5, Math.round(editStake * 0.2)) * 2} className="ml-1 text-sm" />
               </p>
             </div>
-            <div className="shrink-0 border-t border-line bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
+            <div className="shrink-0 border-t border-line bg-white p-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] sm:p-5">
               <button
                 onClick={saveWagerEdit}
                 disabled={!!busy || !editWagerTitle.trim() || !editWagerDeadline}
@@ -1346,7 +1346,7 @@ export function ChallengesPage() {
                 );
               })}
             </div>
-            <form onSubmit={submitComment} className="shrink-0 border-t border-line bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+            <form onSubmit={submitComment} className="shrink-0 border-t border-line bg-white p-3 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] sm:px-6 sm:py-4">
               {replyingToComment ? (
                 <div className="mb-2 flex items-center gap-2 rounded-lg bg-field px-3 py-2 text-xs">
                   <Reply size={13} className="shrink-0 text-mint" />
