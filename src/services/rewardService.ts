@@ -5,7 +5,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  increment,
   limit,
   orderBy,
   query,
@@ -33,6 +32,7 @@ import { ALL_ENABLED_TARGET_UID, createNotification, uidsForUsernames } from './
 import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
 import { rankForRating } from '../utils/ranks';
+import { setBalanceInTransaction } from './balanceService';
 
 // Global buff applied to coin rewards across forecasts, chests, weekly
 // challenges and wager bonuses so the whole economy pays out more generously.
@@ -345,11 +345,9 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
       nextPendingForecasts.push({ bonus: reward.spicyBonus, claimedAt: Timestamp.now() });
     }
 
-    transaction.update(userRef, {
-      coinBalance: Math.max(0, current.coinBalance + reward.amount),
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + reward.amount, reward.label, {
       lastDailyForecastAt: serverTimestamp(),
       pendingSpicyForecasts: nextPendingForecasts,
-      updatedAt: serverTimestamp(),
     });
   });
   return reward;
@@ -383,8 +381,13 @@ export async function claimChest(user: UserProfile, chestId: string) {
   const userRef = doc(db, 'users', user.uid);
   const claimRef = rewardClaimRef(user.uid, `chest_${chest.id}`);
   await runTransaction(db, async (transaction) => {
-    const claimSnap = await transaction.get(claimRef);
+    const [claimSnap, userSnap] = await Promise.all([
+      transaction.get(claimRef),
+      transaction.get(userRef),
+    ]);
     if (claimSnap.exists()) throw new Error('Chest already opened.');
+    const current = userSnap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
     transaction.set(claimRef, {
       userId: user.uid,
       username: user.username,
@@ -393,10 +396,11 @@ export async function claimChest(user: UserProfile, chestId: string) {
       amount,
       createdAt: serverTimestamp(),
     });
-    transaction.update(userRef, {
-      coinBalance: increment(amount),
-      'stats.chestsOpened': increment(1),
-      updatedAt: serverTimestamp(),
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + amount, `Chest: ${chest.title}`, {
+      stats: {
+        ...current.stats,
+        chestsOpened: (current.stats.chestsOpened ?? 0) + 1,
+      },
     });
   });
   return { amount, label: chest.title };
@@ -436,10 +440,8 @@ export async function spinWheel(user: UserProfile) {
       amount: reward.amount,
       createdAt: serverTimestamp(),
     });
-    transaction.update(userRef, {
-      coinBalance: Math.max(0, current.coinBalance + reward.amount),
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + reward.amount, 'Spin the wheel', {
       lastWheelSpinAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     });
   });
 
@@ -461,7 +463,7 @@ export async function chargeMinigameStake(user: UserProfile, stake: number) {
     const current = snap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
     if (current.coinBalance < stake) throw new Error('Not enough coins for that stake.');
-    transaction.update(userRef, { coinBalance: current.coinBalance - stake, updatedAt: serverTimestamp() });
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance - stake, 'Minigame stake');
   });
 }
 
@@ -475,10 +477,8 @@ export async function awardMinigameWin(user: UserProfile, amount: number): Promi
     const current = snap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
     const nextRating = current.rating + ratingDelta;
-    transaction.update(userRef, {
-      coinBalance: current.coinBalance + payout,
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + payout, 'Minigame payout', {
       ...(ratingDelta > 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
-      updatedAt: serverTimestamp(),
     });
   });
   return { payout, ratingDelta };
@@ -594,8 +594,14 @@ export async function postCompletedChallenge(params: {
   const totalReward = params.challenge.reward + params.challenge.chestReward;
 
   await runTransaction(db, async (transaction) => {
-    const claimSnap = await transaction.get(claimRef);
+    const userRef = doc(db, 'users', params.user.uid);
+    const [claimSnap, userSnap] = await Promise.all([
+      transaction.get(claimRef),
+      transaction.get(userRef),
+    ]);
     if (claimSnap.exists()) throw new Error('Weekly challenge already completed.');
+    const current = userSnap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
     transaction.set(claimRef, {
       userId: params.user.uid,
       username: params.user.username,
@@ -628,10 +634,11 @@ export async function postCompletedChallenge(params: {
       updatedAt: serverTimestamp(),
       completedAt: serverTimestamp(),
     });
-    transaction.update(doc(db, 'users', params.user.uid), {
-      coinBalance: increment(totalReward),
-      'stats.challengesCompleted': increment(1),
-      updatedAt: serverTimestamp(),
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + totalReward, `Challenge: ${params.challenge.title}`, {
+      stats: {
+        ...current.stats,
+        challengesCompleted: (current.stats.challengesCompleted ?? 0) + 1,
+      },
     });
   });
   await createNotification({
@@ -698,10 +705,17 @@ export async function legacyPostCompletedChallenge(params: {
     completedAt: serverTimestamp(),
   });
 
-  await updateDoc(doc(db, 'users', params.user.uid), {
-    coinBalance: increment(35),
-    'stats.challengesCompleted': increment(1),
-    updatedAt: serverTimestamp(),
+  const userRef = doc(db, 'users', params.user.uid);
+  await runTransaction(db, async (transaction) => {
+    const userSnap = await transaction.get(userRef);
+    const current = userSnap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + 35, `Challenge: ${params.title}`, {
+      stats: {
+        ...current.stats,
+        challengesCompleted: (current.stats.challengesCompleted ?? 0) + 1,
+      },
+    });
   });
 }
 
@@ -734,10 +748,7 @@ export async function createWagerChallenge(params: {
     const userSnap = await transaction.get(userRef);
     const current = userSnap.data() as UserProfile | undefined;
     if (!current || current.coinBalance < params.stake) throw new Error('Insufficient coins.');
-    transaction.update(userRef, {
-      coinBalance: increment(-params.stake),
-      updatedAt: serverTimestamp(),
-    });
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance - params.stake, `Wager stake: ${params.title}`);
     transaction.set(doc(collection(db, 'challenges')), {
       type: 'wager',
       status: 'open',
@@ -841,10 +852,13 @@ export async function updateWagerChallenge(params: {
     }
     const balanceChange = (currentChallenge.stake ?? 0) - nextStake;
     if (currentUser.coinBalance + balanceChange < 0) throw new Error('Insufficient coins.');
-    transaction.update(userRef, {
-      coinBalance: currentUser.coinBalance + balanceChange,
-      updatedAt: serverTimestamp(),
-    });
+    setBalanceInTransaction(
+      transaction,
+      userRef,
+      currentUser,
+      currentUser.coinBalance + balanceChange,
+      `Wager stake changed: ${trimmedTitle}`,
+    );
     transaction.update(challengeRef, {
       title: trimmedTitle,
       body: body?.trim() || null,
@@ -864,6 +878,10 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
   }
   const reward = (challenge.stake ?? 0) + (challenge.bonus ?? 0);
   await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await transaction.get(userRef);
+    const current = userSnap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
     transaction.update(doc(db, 'challenges', challenge.id), {
       status: 'completed',
       completerId: user.uid,
@@ -873,10 +891,11 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
       completedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    transaction.update(doc(db, 'users', user.uid), {
-      coinBalance: increment(reward),
-      'stats.challengesCompleted': increment(1),
-      updatedAt: serverTimestamp(),
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + reward, `Wager completed: ${challenge.title}`, {
+      stats: {
+        ...current.stats,
+        challengesCompleted: (current.stats.challengesCompleted ?? 0) + 1,
+      },
     });
   });
   await createNotification({
@@ -894,16 +913,17 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
   if (challenge.creatorId !== user.uid) throw new Error('Only the creator can fail this challenge.');
   const refund = (challenge.stake ?? 0) + Math.max(5, Math.floor((challenge.stake ?? 0) * 0.5));
   await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await transaction.get(userRef);
+    const current = userSnap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
     transaction.update(doc(db, 'challenges', challenge.id), {
       status: 'failed',
       creatorRefund: refund,
       failedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    transaction.update(doc(db, 'users', user.uid), {
-      coinBalance: increment(refund),
-      updatedAt: serverTimestamp(),
-    });
+    setBalanceInTransaction(transaction, userRef, current, current.coinBalance + refund, `Wager refund: ${challenge.title}`);
   });
   await createNotification({
     type: 'wager_failed',

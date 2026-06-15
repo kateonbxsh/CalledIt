@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pencil, X } from 'lucide-react';
+import { Bell, Camera, LogOut, Pencil, Save, UserRound, X } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
@@ -118,27 +118,44 @@ export function SettingsPage() {
   return (
     <>
       <PageHeader title="Profile" />
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <form onSubmit={save} className="space-y-4 rounded-2xl border border-line bg-white p-3 shadow-soft sm:p-4">
-          <div className="rounded-2xl bg-field p-3">
-            <div className="flex items-center gap-3">
-              <Avatar name={displayName || profile?.username || 'FF'} src={photoURL} size="lg" />
-              <div className="min-w-0">
-                <p className="truncate text-xl font-black">{displayName || profile?.username}</p>
-                <p className="truncate text-sm font-semibold text-ink/45">@{profile?.username}</p>
-              </div>
+      <div className="mb-4 flex items-center gap-4 rounded-md border border-line bg-white p-4 shadow-soft sm:p-5">
+        <Avatar name={displayName || profile?.username || 'FF'} src={photoURL} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-2xl font-black">{displayName || profile?.username}</p>
+          <p className="truncate text-sm font-semibold text-ink/45">@{profile?.username}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <RankBadge rank={rankForRating(profile?.rating ?? 1000)} />
+            <CoinAmount amount={profile?.coinBalance ?? 0} className="text-sm" />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <form onSubmit={save} className="overflow-hidden rounded-md border border-line bg-white shadow-soft">
+          <div className="border-b border-line px-4 py-4 sm:px-5">
+            <div className="flex items-center gap-2">
+              <UserRound size={18} className="text-mint" />
+              <h2 className="font-black">Identity</h2>
             </div>
-            <div className="mt-3">
-              <label className="block text-sm font-medium">
+            <p className="mt-1 text-sm text-ink/50">How friends see you across bets, groups, and challenges.</p>
+          </div>
+
+          <div className="space-y-5 p-4 sm:p-5">
+            <div className="rounded-md bg-field p-3">
+              <div className="flex items-center gap-2 text-sm font-black">
+                <Camera size={16} className="text-ink/45" />
                 Profile picture
+              </div>
+              <label className="mt-3 block text-sm font-medium">
+                <span className="sr-only">Choose profile picture</span>
                 <input
-                  className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
+                  className="w-full rounded-md border border-line bg-white px-3 py-2"
                   type="file"
                   accept="image/*"
                   onChange={(event) => onImageChange(event.target.files?.[0])}
                 />
               </label>
-              <p className="mt-1 text-xs text-ink/55">Cropped and compressed into your profile</p>
+              <p className="mt-1 text-xs text-ink/55">The image is cropped and compressed before saving.</p>
               {photoURL ? (
                 <button
                   type="button"
@@ -150,53 +167,55 @@ export function SettingsPage() {
               ) : null}
               {imageBusy ? <p className="mt-2 text-xs text-ink/55">Resizing image...</p> : null}
             </div>
-          </div>
-          <div className="block text-sm font-medium">
-            Username
-            <div className="mt-1 flex gap-2">
-              <input
-                className={`w-full rounded-md border border-line px-3 py-2 ${
-                  editingUsername ? 'bg-field outline-none focus:border-mint' : 'bg-white text-ink/55'
-                }`}
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                pattern="[a-zA-Z0-9_]{3,20}"
-                autoComplete="username"
-                readOnly={!editingUsername}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (editingUsername) setUsername(profile?.username ?? '');
-                  setEditingUsername((value) => !value);
-                }}
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-white text-ink/60"
-                aria-label={editingUsername ? 'Cancel username edit' : 'Edit username'}
-              >
-                {editingUsername ? <X size={16} /> : <Pencil size={16} />}
-              </button>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="block text-sm font-medium">
+                Username
+                <div className="mt-1 flex gap-2">
+                  <input
+                    className={`min-w-0 flex-1 rounded-md border border-line px-3 py-2 ${
+                      editingUsername ? 'bg-field outline-none focus:border-mint' : 'bg-white text-ink/55'
+                    }`}
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    pattern="[a-zA-Z0-9_]{3,20}"
+                    autoComplete="username"
+                    readOnly={!editingUsername}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingUsername) setUsername(profile?.username ?? '');
+                      setEditingUsername((value) => !value);
+                    }}
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-white text-ink/60"
+                    aria-label={editingUsername ? 'Cancel username edit' : 'Edit username'}
+                  >
+                    {editingUsername ? <X size={16} /> : <Pencil size={16} />}
+                  </button>
+                </div>
+                <span className="mt-1 block text-xs text-ink/50">
+                  {editingUsername ? 'Letters, numbers, underscore. 3-20 characters.' : 'Use the pencil to make it editable.'}
+                </span>
+              </div>
+              <label className="block text-sm font-medium">
+                Display name
+                <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 outline-none focus:border-mint" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+              </label>
             </div>
-            <span className="mt-1 block text-xs text-ink/50">
-              {editingUsername ? 'Letters, numbers, underscore. 3-20 characters.' : 'Tap the pencil to change your username.'}
-            </span>
+
+            <label className="block text-sm font-medium">
+              Bio/status
+              <textarea className="mt-1 min-h-28 w-full resize-y rounded-md border border-line bg-field px-3 py-2 outline-none focus:border-mint" value={bio} onChange={(event) => setBio(event.target.value)} />
+            </label>
+            {message ? <p className="rounded-md bg-mint/10 p-3 text-sm font-semibold text-mint">{message}</p> : null}
+            <button className="btn-special inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 font-semibold sm:w-auto">
+              <Save size={17} /> Save profile
+            </button>
           </div>
-          <label className="block text-sm font-medium">
-            Display name
-            <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-          </label>
-          <label className="block text-sm font-medium">
-            Bio/status
-            <textarea className="mt-1 min-h-28 w-full rounded-md border border-line bg-field px-3 py-2" value={bio} onChange={(event) => setBio(event.target.value)} />
-          </label>
-          {message ? <p className="rounded-md bg-mint/10 p-3 text-sm text-mint">{message}</p> : null}
-          <button className="btn-special w-full rounded-md px-4 py-3 font-semibold sm:w-auto">Save profile</button>
         </form>
         <aside className="grid gap-3 sm:grid-cols-2 lg:block lg:space-y-4">
-          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft">
-            <p className="text-sm text-ink/55">Username</p>
-            <p className="font-bold">@{username || profile?.username}</p>
-          </section>
-          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft">
+          <section className="rounded-md border border-line bg-white p-4 shadow-soft">
             <div className="flex items-center justify-between">
               <p className="text-sm font-black">Rating/ELO</p>
               <RankBadge rank={rankForRating(profile?.rating ?? 1000)} />
@@ -210,13 +229,19 @@ export function SettingsPage() {
               {progress.nextRank ? ` - next ${progress.nextRank}` : ''}
             </p>
           </section>
-          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft">
-            <p className="text-sm text-ink/55">Coins</p>
-            <CoinAmount amount={profile?.coinBalance ?? 0} className="mt-1 text-2xl" />
+          <section className="grid grid-cols-2 gap-3 rounded-md border border-line bg-white p-4 shadow-soft">
+            <div>
+              <p className="text-xs font-black uppercase text-ink/40">Coins</p>
+              <CoinAmount amount={profile?.coinBalance ?? 0} className="mt-1 text-xl" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase text-ink/40">Maximum</p>
+              <CoinAmount amount={Math.max(profile?.coinBalance ?? 0, profile?.stats.maxBalance ?? 0)} className="mt-1 text-xl" />
+            </div>
           </section>
-          <section className="rounded-2xl border border-line bg-white p-4 shadow-soft sm:col-span-2 lg:col-span-1">
+          <section className="rounded-md border border-line bg-white p-4 shadow-soft sm:col-span-2 lg:col-span-1">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-black">Push notifications</p>
+              <p className="flex items-center gap-2 text-sm font-black"><Bell size={16} className="text-mint" /> Push notifications</p>
               {pushState ? (
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-2xs font-black ${
@@ -271,12 +296,12 @@ export function SettingsPage() {
           </section>
           <Link
             to="/how-to-play"
-            className="block rounded-2xl border border-line bg-white p-4 text-sm font-bold shadow-soft transition hover:bg-field"
+            className="block rounded-md border border-line bg-white p-4 text-sm font-bold shadow-soft transition hover:bg-field"
           >
             How to Play
           </Link>
-          <button onClick={logout} className="w-full rounded-2xl bg-coral px-4 py-3 font-semibold text-white shadow-soft">
-            Sign out
+          <button onClick={logout} className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-coral px-4 py-3 font-semibold text-white shadow-soft">
+            <LogOut size={17} /> Sign out
           </button>
         </aside>
       </div>

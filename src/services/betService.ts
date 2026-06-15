@@ -53,6 +53,7 @@ import {
 } from '../utils/closestGuess';
 import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution, getLeaderboard } from './userService';
+import { setBalanceInTransaction } from './balanceService';
 import {
   ALL_ENABLED_TARGET_UID,
   createNotification,
@@ -555,10 +556,13 @@ export async function placePrediction(input: PredictionInput) {
 
     transaction.set(predictionRef, predictionPayload);
 
-    transaction.update(userRef, {
-      coinBalance: increment(balanceDelta),
-      updatedAt: serverTimestamp(),
-    });
+    setBalanceInTransaction(
+      transaction,
+      userRef,
+      user,
+      user.coinBalance + balanceDelta,
+      existingPrediction ? `Prediction updated: ${bet.title}` : `Prediction placed: ${bet.title}`,
+    );
 
     transaction.set(eventRef, {
       betId: bet.id,
@@ -870,11 +874,16 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
     // --- Event did not happen: refund every prediction, no winners/losers. ---
     if (resolution.eventDidNotHappen) {
       for (const prediction of predictions) {
-        if (!usersById.has(prediction.userId)) continue;
-        transaction.update(doc(db, 'users', prediction.userId), {
-          coinBalance: increment(prediction.stake),
-          updatedAt: serverTimestamp(),
-        });
+        const user = usersById.get(prediction.userId);
+        if (!user) continue;
+        const userRef = doc(db, 'users', prediction.userId);
+        setBalanceInTransaction(
+          transaction,
+          userRef,
+          user,
+          user.coinBalance + prediction.stake,
+          `Bet refunded: ${freshBet.title}`,
+        );
         transaction.update(doc(db, 'predictions', prediction.id), {
           status: 'refunded',
           correct: false,
@@ -911,8 +920,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
       });
       ratingChanges.push({ uid: prediction.userId, oldRating: user.rating, newRating: outcome.nextRating });
 
-      transaction.update(userRef, {
-        coinBalance: increment(outcome.grossCoinDelta),
+      setBalanceInTransaction(transaction, userRef, user, user.coinBalance + outcome.grossCoinDelta, `Bet resolved: ${freshBet.title}`, {
         rating: outcome.nextRating,
         rank: rankForRating(outcome.nextRating),
         ...(pendingBonuses.length > 0 ? { pendingSpicyForecasts: [] } : {}),
@@ -922,7 +930,6 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
           coinsDelta: outcome.netCoinDelta,
           chosenChance: prediction.displayedChanceAtBetTime,
         }),
-        updatedAt: serverTimestamp(),
       });
 
       transaction.update(doc(db, 'predictions', prediction.id), {
@@ -1080,14 +1087,19 @@ export async function amendBetResolution(bet: Bet, newResolution: BetResolution,
 
       ratingChanges.push({ uid: prediction.userId, oldRating: user.rating, newRating: result.finalRating });
 
-      transaction.update(userRef, {
-        coinBalance: Math.max(0, user.coinBalance + result.newGross - oldGross),
+      setBalanceInTransaction(
+        transaction,
+        userRef,
+        user,
+        user.coinBalance + result.newGross - oldGross,
+        `Bet result amended: ${freshBet.title}`,
+        {
         rating: result.finalRating,
         rank: rankForRating(result.finalRating),
         pendingSpicyForecasts: result.finalPending,
         stats: result.finalStats,
-        updatedAt: serverTimestamp(),
-      });
+        },
+      );
       transaction.update(doc(db, 'predictions', prediction.id), {
         status: result.status,
         correct: result.correct,

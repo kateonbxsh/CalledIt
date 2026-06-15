@@ -1,75 +1,93 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
+import { Coins, Crosshair, Target, Trophy, TrendingUp } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { BalanceHistoryChart } from '../components/BalanceHistoryChart';
 import { CoinAmount } from '../components/CoinAmount';
 import { PageHeader } from '../components/PageHeader';
 import { RankBadge } from '../components/RankBadge';
 import { db } from '../lib/firebase';
-import type { UserProfile } from '../types';
+import { listBalanceHistory } from '../services/balanceService';
+import type { BalanceSnapshot, UserProfile } from '../types';
 import { rankForRating } from '../utils/ranks';
 
 export function ProfilePage() {
   const { uid } = useParams();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [history, setHistory] = useState<BalanceSnapshot[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!uid) return;
-    getDoc(doc(db, 'users', uid)).then((snap) => {
+    setLoading(true);
+    Promise.all([
+      getDoc(doc(db, 'users', uid)),
+      listBalanceHistory(uid).catch(() => []),
+    ]).then(([snap, snapshots]) => {
       setUser(snap.exists() ? (snap.data() as UserProfile) : null);
-    });
+      setHistory(snapshots);
+    }).finally(() => setLoading(false));
   }, [uid]);
 
-  if (!user) return <PageHeader title="Profile" description="Loading profile..." back />;
+  const maximumBalance = useMemo(() => {
+    if (!user) return 0;
+    return Math.max(
+      user.coinBalance,
+      user.stats.maxBalance ?? 0,
+      ...history.map((snapshot) => snapshot.balance),
+    );
+  }, [history, user]);
+
+  if (loading) return <PageHeader title="Profile" description="Loading profile..." back />;
+  if (!user) return <PageHeader title="Profile" description="This profile could not be found." back />;
 
   return (
     <>
       <PageHeader title="Profile" back />
-      <section className="mb-4 overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
-        <div className="h-20 bg-gradient-to-r from-mint/20 via-sky/15 to-citrus/20" />
-        <div className="-mt-9 px-4 pb-4">
-          <Avatar name={user.displayName} src={user.photoURL} size="lg" />
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <section className="mb-4 rounded-md border border-line bg-white p-4 shadow-soft sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <Avatar name={user.displayName} src={user.photoURL} size="lg" />
             <div className="min-w-0">
-              <h1 className="break-words text-2xl font-black">{user.displayName}</h1>
+              <h1 className="break-words text-2xl font-black sm:text-3xl">{user.displayName}</h1>
               <p className="text-sm font-semibold text-ink/45">@{user.username}</p>
+              {user.bio ? <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/65">{user.bio}</p> : null}
             </div>
-            <RankBadge rank={rankForRating(user.rating)} />
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-field px-3 py-3">
-              <p className="text-xs font-black uppercase text-ink/35">Rating</p>
-              <p className="mt-1 text-2xl font-black">{user.rating}</p>
-            </div>
-            <div className="rounded-xl bg-field px-3 py-3">
-              <p className="text-xs font-black uppercase text-ink/35">Coins</p>
-              <CoinAmount amount={user.coinBalance} className="mt-1 text-2xl" />
-            </div>
+          <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
+            <RankBadge rank={rankForRating(user.rating)} />
+            <p className="text-sm font-black text-ink/55">{user.rating} ELO</p>
           </div>
         </div>
       </section>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="rounded-md border border-line bg-white p-4">
-          <p className="text-sm text-ink/55">Record</p>
-          <p className="mt-1 text-2xl font-black">{user.stats.wins}-{user.stats.losses}</p>
-        </div>
-        <div className="rounded-md border border-line bg-white p-4">
-          <p className="text-sm text-ink/55">Accuracy</p>
-          <p className="mt-1 text-2xl font-black">{user.stats.accuracy}%</p>
-        </div>
-        <div className="rounded-md border border-line bg-white p-4">
-          <p className="text-sm text-ink/55">Best upset</p>
-          <p className="mt-1 text-2xl font-black">{user.stats.bestUpsetWin}%</p>
-        </div>
-        <div className="rounded-md border border-line bg-white p-4">
-          <p className="text-sm text-ink/55">Bets</p>
-          <p className="mt-1 text-2xl font-black">{user.stats.totalBets}</p>
-        </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
+        {[
+          { label: 'Balance', value: <CoinAmount amount={user.coinBalance} className="text-xl" />, icon: Coins },
+          { label: 'Maximum', value: <CoinAmount amount={maximumBalance} className="text-xl" />, icon: TrendingUp },
+          { label: 'Record', value: `${user.stats.wins}-${user.stats.losses}`, icon: Trophy },
+          { label: 'Accuracy', value: `${user.stats.accuracy}%`, icon: Target },
+          { label: 'Best upset', value: `${user.stats.bestUpsetWin}%`, icon: Crosshair },
+          { label: 'Predictions', value: user.stats.totalBets, icon: Coins },
+        ].map(({ label, value, icon: Icon }) => (
+          <div key={label} className="rounded-md border border-line bg-white p-3 shadow-soft sm:p-4">
+            <div className="flex items-center gap-2 text-ink/40">
+              <Icon size={15} />
+              <p className="text-xs font-black uppercase">{label}</p>
+            </div>
+            <div className="mt-2 text-xl font-black">{value}</div>
+          </div>
+        ))}
       </div>
-      <div className="mt-4 rounded-md border border-line bg-white p-4">
-        <h2 className="mb-2 font-bold">Bio</h2>
-        <p className="text-sm text-ink/70">{user.bio || 'No status yet.'}</p>
-      </div>
+
+      <section className="rounded-md border border-line bg-white p-4 shadow-soft sm:p-5">
+        <div className="mb-2">
+          <h2 className="font-black">Balance progress</h2>
+          <p className="text-sm text-ink/50">Coin balance after each win, reward, stake, and payout.</p>
+        </div>
+        <BalanceHistoryChart user={user} snapshots={history} />
+      </section>
     </>
   );
 }

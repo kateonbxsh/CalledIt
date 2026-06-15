@@ -17,6 +17,7 @@ import { db, envAdminUids } from '../lib/firebase';
 import type { UserProfile, UserStats } from '../types';
 import { canClaimDailyRefill } from '../utils/coins';
 import { rankForRating } from '../utils/ranks';
+import { setBalanceInTransaction } from './balanceService';
 
 export const emptyStats: UserStats = {
   totalBets: 0,
@@ -28,6 +29,7 @@ export const emptyStats: UserStats = {
   coinsLost: 0,
   chestsOpened: 0,
   challengesCompleted: 0,
+  maxBalance: 1000,
 };
 
 export async function createProfile(params: {
@@ -68,6 +70,13 @@ export async function createProfile(params: {
       lastRefillAt: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+    });
+    transaction.set(doc(collection(userRef, 'balanceHistory')), {
+      userId: params.authUser.uid,
+      balance: 1000,
+      delta: 1000,
+      reason: 'Account created',
+      createdAt: serverTimestamp(),
     });
   });
 }
@@ -125,10 +134,8 @@ export async function claimDailyRefill(user: UserProfile) {
       throw new Error('Refill is not available yet.');
     }
 
-    transaction.update(userRef, {
-      coinBalance: 100,
+    setBalanceInTransaction(transaction, userRef, current, 100, 'Balance refill', {
       lastRefillAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     });
   });
 }

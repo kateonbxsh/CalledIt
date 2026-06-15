@@ -54,6 +54,16 @@ export interface UserStats {
   coinsLost: number;
   chestsOpened?: number;
   challengesCompleted?: number;
+  maxBalance?: number;
+}
+
+export interface BalanceSnapshot {
+  id: string;
+  userId: string;
+  balance: number;
+  delta: number;
+  reason: string;
+  createdAt: Timestamp;
 }
 
 export interface BetOption {

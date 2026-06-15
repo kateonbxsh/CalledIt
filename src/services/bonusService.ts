@@ -2,13 +2,13 @@ import {
   collection,
   doc,
   getDoc,
-  increment,
   runTransaction,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { DailyBonus, UserProfile } from '../types';
+import { setBalanceInTransaction } from './balanceService';
 
 // Bonus amounts for each action type
 const BONUS_AMOUNTS = {
@@ -70,10 +70,13 @@ export async function awardDailyBonus(
       const totalClaimed = updatedBonuses.reduce((sum: number, b: DailyBonus) => sum + b.amount, 0);
 
       // Update user coins
-      transaction.update(userRef, {
-        coinBalance: increment(bonusAmount),
-        updatedAt: serverTimestamp(),
-      });
+      setBalanceInTransaction(
+        transaction,
+        userRef,
+        currentUser,
+        currentUser.coinBalance + bonusAmount,
+        `Daily ${bonusType} bonus`,
+      );
 
       // Update daily bonus tracker
       transaction.set(

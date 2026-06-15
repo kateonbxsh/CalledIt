@@ -217,6 +217,18 @@ service cloud.firestore {
         allow read, create, update: if signedIn() && request.auth.uid == userId;
         allow delete: if signedIn() && request.auth.uid == userId;
       }
+
+      match /balanceHistory/{snapshotId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.userId == userId
+          && request.resource.data.balance is number
+          && request.resource.data.balance >= 0
+          && request.resource.data.delta is number
+          && request.resource.data.reason is string
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
       allow delete: if false;
     }
 
