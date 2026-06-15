@@ -99,8 +99,8 @@ export function ChallengesPage() {
   const commentSheet = useSwipeToDismiss(() => {
     setCommentChallenge(null);
     setReplyingToComment(null);
-  });
-  const wagerEditSheet = useSwipeToDismiss(() => setStakeEditChallenge(null));
+  }, Boolean(commentChallenge));
+  const wagerEditSheet = useSwipeToDismiss(() => setStakeEditChallenge(null), Boolean(stakeEditChallenge));
   const challengeCommentThreads = useMemo(
     () => buildCommentThreads(challengeComments),
     [challengeComments],

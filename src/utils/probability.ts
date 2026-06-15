@@ -264,7 +264,7 @@ export interface ClosestGuessChance {
 // deadline. Date guesses additionally lose probability as their date expires.
 export function calculateClosestGuessChances(params: {
   predictions: Array<Pick<Prediction, 'numericGuess' | 'dateGuess' | 'stake' | 'userRating'>>;
-  type: 'closestNumber' | 'closestDate';
+  type: 'closestNumber' | 'closestDate' | 'closestHour';
   createdAtMs: number;
   deadlineMs?: number | null;
   nowMs?: number;
@@ -314,7 +314,7 @@ export function calculateClosestGuessChances(params: {
     const blendedChance = neutral + (crowdChance - neutral) * convergence;
 
     let expiryWeight = 1;
-    if (params.type === 'closestDate') {
+    if (params.type === 'closestDate' || params.type === 'closestHour') {
       const fullWindow = Math.max(ONE_DAY_MS, value - params.createdAtMs);
       const remainingRatio = clamp((value - nowMs) / fullWindow, 0, 1);
       // The date is almost unpenalized early, then falls increasingly quickly

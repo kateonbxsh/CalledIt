@@ -1,17 +1,41 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 const DISMISS_DISTANCE = 96;
 const DISMISS_VELOCITY = 0.55;
+let bodyLockCount = 0;
+let previousBodyOverflow = '';
+let previousBodyOverscrollBehavior = '';
 
-export function useSwipeToDismiss(onDismiss: () => void) {
+function lockPageScroll() {
+  if (bodyLockCount === 0) {
+    previousBodyOverflow = document.body.style.overflow;
+    previousBodyOverscrollBehavior = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+  }
+  bodyLockCount += 1;
+}
+
+function unlockPageScroll() {
+  bodyLockCount = Math.max(0, bodyLockCount - 1);
+  if (bodyLockCount === 0) {
+    document.body.style.overflow = previousBodyOverflow;
+    document.body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+  }
+}
+
+export function useSwipeToDismiss(onDismiss: () => void, active = true) {
   const startRef = useRef({ x: 0, y: 0, time: 0, active: false });
   const [offset, setOffset] = useState(0);
 
+  useEffect(() => {
+    if (!active) return;
+    lockPageScroll();
+    return unlockPageScroll;
+  }, [active]);
+
   function onPointerDown(event: ReactPointerEvent<HTMLElement>) {
     if (event.pointerType === 'mouse') return;
-    const target = event.target as HTMLElement;
-    const scrollPanel = target.closest<HTMLElement>('[data-sheet-scroll]');
-    if (scrollPanel && scrollPanel.scrollTop > 0) return;
     startRef.current = {
       x: event.clientX,
       y: event.clientY,
@@ -45,20 +69,22 @@ export function useSwipeToDismiss(onDismiss: () => void) {
 
   return {
     sheetProps: {
-      onPointerDown,
-      onPointerMove,
-      onPointerUp: finish,
-      onPointerCancel: finish,
       style: {
         transform: offset ? `translateY(${offset}px)` : undefined,
         transition: offset ? 'none' : 'transform 180ms ease',
       },
     },
     dragHandle: (
-      <span
-        aria-hidden="true"
-        className="mx-auto mb-2 block h-1 w-10 shrink-0 rounded-full bg-ink/20 sm:hidden"
-      />
+      <div
+        aria-label="Swipe down to close"
+        className="mx-auto -mt-2 mb-1 flex h-8 w-20 shrink-0 touch-none items-center justify-center sm:hidden"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finish}
+        onPointerCancel={finish}
+      >
+        <span aria-hidden="true" className="block h-1 w-10 rounded-full bg-ink/20" />
+      </div>
     ),
   };
 }

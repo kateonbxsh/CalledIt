@@ -1,6 +1,7 @@
 import {
   BarChart2,
   CalendarDays,
+  Clock3,
   Hash,
   HelpCircle,
   ListPlus,
@@ -22,6 +23,7 @@ export const betTypeOptions: Array<{
   { type: 'date', label: 'Before / After', description: 'Whether it happens before a date' },
   { type: 'closestNumber', label: 'Closest Number', description: 'Guess the number, closest wins' },
   { type: 'closestDate', label: 'Closest Date', description: 'Guess the date, closest wins' },
+  { type: 'closestHour', label: 'Closest Hour', description: 'Guess the time within one day' },
 ];
 
 export const betTypeMeta: Record<
@@ -36,6 +38,7 @@ export const betTypeMeta: Record<
   openChoice:    { icon: ListPlus,     color: 'text-plum',   bg: 'bg-plum/12'   },
   closestNumber: { icon: Hash,         color: 'text-aqua',   bg: 'bg-aqua/12'   },
   closestDate:   { icon: CalendarDays, color: 'text-aqua',   bg: 'bg-aqua/12'   },
+  closestHour:   { icon: Clock3,       color: 'text-sky',    bg: 'bg-sky/12'    },
 };
 
 export function betTypeLabel(type: BetType) {
@@ -43,5 +46,5 @@ export function betTypeLabel(type: BetType) {
 }
 
 export function isClosestType(type: BetType) {
-  return type === 'closestNumber' || type === 'closestDate';
+  return type === 'closestNumber' || type === 'closestDate' || type === 'closestHour';
 }

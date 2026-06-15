@@ -33,6 +33,8 @@ import { isClosestType } from '../utils/betTypes';
 import {
   closestDateDistance,
   closestDateGuessLabel,
+  closestHourDistance,
+  closestHourGuessLabel,
   closestNumberDistance,
   closestNumberGuessLabel,
 } from '../utils/closestGuess';
@@ -45,6 +47,30 @@ function datetimeLocalValue(date?: Date | null) {
   if (!date) return '';
   const offsetMs = date.getTimezoneOffset() * 60 * 1000;
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function localDateKey(date?: Date | null) {
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function timeInputValue(value: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function timeOnBetDay(bet: Bet, time: string) {
+  const day = bet.targetDate?.toDate?.();
+  return day && time ? `${localDateKey(day)}T${time}` : '';
+}
+
+function closestGuessLabel(bet: Bet, dateGuess?: string) {
+  return bet.type === 'closestHour' ? closestHourGuessLabel(dateGuess) : closestDateGuessLabel(dateGuess);
 }
 
 function supportsMultipleWinners(bet: Bet) {
@@ -90,7 +116,7 @@ function signedNumber(value: number) {
 
 function predictionDetail(bet: Bet, prediction: Prediction) {
   if (bet.type === 'closestNumber') return closestNumberGuessLabel(prediction.numericGuess);
-  if (bet.type === 'closestDate') return closestDateGuessLabel(prediction.dateGuess);
+  if (bet.type === 'closestDate' || bet.type === 'closestHour') return closestGuessLabel(bet, prediction.dateGuess);
 
   const optionIds = prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
   const labels = optionIds.map((optionId) => {
@@ -313,7 +339,7 @@ export function BetDetailPage() {
       return {
         winningOptionId: 'guess',
         ...(bet.type === 'closestNumber' && actualValue !== '' ? { actualValue: Number(actualValue) } : {}),
-        ...(bet.type === 'closestDate' && actualDateValue ? { actualDateValue } : {}),
+        ...((bet.type === 'closestDate' || bet.type === 'closestHour') && actualDateValue ? { actualDateValue } : {}),
         ...(resolutionNote.trim() ? { note: resolutionNote.trim() } : {}),
       };
     }
@@ -358,7 +384,7 @@ export function BetDetailPage() {
             ? { home: Number(homeScore), away: Number(awayScore) }
             : undefined,
         numericGuess: bet.type === 'closestNumber' && numericGuess !== '' ? Number(numericGuess) : undefined,
-        dateGuess: bet.type === 'closestDate' && dateGuess ? dateGuess : undefined,
+        dateGuess: (bet.type === 'closestDate' || bet.type === 'closestHour') && dateGuess ? dateGuess : undefined,
         customOptionLabel: bet.type === 'openChoice' && !openChoiceMulti ? customOptionLabel : undefined,
         customOptionLabels: openChoiceMulti && customLabels.length ? customLabels : undefined,
       });
@@ -726,9 +752,10 @@ export function BetDetailPage() {
           return (closestNumberDistance(a.numericGuess, bet.resolution!.actualValue!) ?? Infinity)
             - (closestNumberDistance(b.numericGuess, bet.resolution!.actualValue!) ?? Infinity);
         }
-        if (bet.type === 'closestDate' && bet.resolution!.actualDateValue) {
-          return (closestDateDistance(a.dateGuess, bet.resolution!.actualDateValue!) ?? Infinity)
-            - (closestDateDistance(b.dateGuess, bet.resolution!.actualDateValue!) ?? Infinity);
+        if ((bet.type === 'closestDate' || bet.type === 'closestHour') && bet.resolution!.actualDateValue) {
+          const distance = bet.type === 'closestHour' ? closestHourDistance : closestDateDistance;
+          return (distance(a.dateGuess, bet.resolution!.actualDateValue!) ?? Infinity)
+            - (distance(b.dateGuess, bet.resolution!.actualDateValue!) ?? Infinity);
         }
         return 0;
       })
@@ -850,7 +877,7 @@ export function BetDetailPage() {
                   <span className="ml-2 text-sm font-normal text-ink/55">
                     Actual: {bet.type === 'closestNumber'
                       ? String(bet.resolution.actualValue ?? '—')
-                      : closestDateGuessLabel(bet.resolution.actualDateValue)}
+                      : closestGuessLabel(bet, bet.resolution.actualDateValue)}
                   </span>
                 ) : null}
               </h2>
@@ -864,8 +891,8 @@ export function BetDetailPage() {
                     const isWinner = bet.resolution?.winnerPredictionIds?.includes(p.id);
                     const dist = bet.type === 'closestNumber' && bet.resolution?.actualValue !== undefined
                       ? closestNumberDistance(p.numericGuess, bet.resolution.actualValue)
-                      : bet.type === 'closestDate' && bet.resolution?.actualDateValue
-                        ? closestDateDistance(p.dateGuess, bet.resolution.actualDateValue)
+                      : (bet.type === 'closestDate' || bet.type === 'closestHour') && bet.resolution?.actualDateValue
+                        ? (bet.type === 'closestHour' ? closestHourDistance : closestDateDistance)(p.dateGuess, bet.resolution.actualDateValue)
                         : null;
                     return (
                       <div key={p.id} className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${isWinner ? 'bg-mint/10 font-semibold' : 'bg-field'}`}>
@@ -873,8 +900,8 @@ export function BetDetailPage() {
                         <span className="font-mono text-xs">
                           {bet.type === 'closestNumber'
                             ? closestNumberGuessLabel(p.numericGuess)
-                            : closestDateGuessLabel(p.dateGuess)}
-                          {dist !== null ? <span className="ml-2 text-ink/45">±{dist}{bet.type === 'closestDate' ? 'd' : ''}</span> : null}
+                            : closestGuessLabel(bet, p.dateGuess)}
+                          {dist !== null ? <span className="ml-2 text-ink/45">±{dist}{bet.type === 'closestDate' ? 'd' : bet.type === 'closestHour' ? 'm' : ''}</span> : null}
                         </span>
                         {isWinner ? <span className="text-xs font-black text-mint">Winner</span> : null}
                       </div>
@@ -962,7 +989,7 @@ export function BetDetailPage() {
                       <strong>
                         {bet.type === 'closestNumber'
                           ? closestNumberGuessLabel(myPrediction.numericGuess)
-                          : closestDateGuessLabel(myPrediction.dateGuess)}
+                          : closestGuessLabel(bet, myPrediction.dateGuess)}
                       </strong>
                       {' '}with <CoinAmount amount={myPrediction.stake} className="text-sm" />
                     </span>
@@ -1229,6 +1256,21 @@ export function BetDetailPage() {
                     />
                   </label>
                 ) : null}
+                {bet.type === 'closestHour' ? (
+                  <label className="block text-sm font-medium">
+                    Your time guess
+                    <input
+                      className="mt-1 w-full rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
+                      type="time"
+                      value={timeInputValue(dateGuess)}
+                      onChange={(e) => setDateGuess(timeOnBetDay(bet, e.target.value))}
+                      required
+                    />
+                    <span className="mt-1 block text-xs font-normal text-ink/50">
+                      On {bet.targetDate?.toDate?.().toLocaleDateString() ?? 'the selected day'}
+                    </span>
+                  </label>
+                ) : null}
 
                 <div className="hidden">
                   <p className="mb-1.5 text-xs font-semibold text-ink/50">Stake</p>
@@ -1325,7 +1367,7 @@ export function BetDetailPage() {
                     <p className="mt-1 font-black">
                       {bet.type === 'closestNumber'
                         ? String(bet.resolution?.actualValue ?? '—')
-                        : closestDateGuessLabel(bet.resolution?.actualDateValue)}
+                        : closestGuessLabel(bet, bet.resolution?.actualDateValue)}
                     </p>
                   </>
                 ) : (
@@ -1416,6 +1458,18 @@ export function BetDetailPage() {
                       type="date"
                       value={actualDateValue}
                       onChange={(e) => setActualDateValue(e.target.value)}
+                      required
+                    />
+                  </label>
+                ) : null}
+                {bet.type === 'closestHour' ? (
+                  <label className="block text-sm font-medium">
+                    Actual time
+                    <input
+                      className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
+                      type="time"
+                      value={timeInputValue(actualDateValue)}
+                      onChange={(e) => setActualDateValue(timeOnBetDay(bet, e.target.value))}
                       required
                     />
                   </label>
@@ -1733,7 +1787,7 @@ export function BetDetailPage() {
                 <>
                   <p className="font-bold text-ink/55">Actual value</p>
                   <p className="mt-1 font-black">
-                    {bet.type === 'closestNumber' ? (actualValue || '—') : (actualDateValue ? closestDateGuessLabel(actualDateValue) : '—')}
+                    {bet.type === 'closestNumber' ? (actualValue || '—') : (actualDateValue ? closestGuessLabel(bet, actualDateValue) : '—')}
                   </p>
                 </>
               ) : (

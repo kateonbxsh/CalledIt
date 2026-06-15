@@ -72,8 +72,8 @@ export function FriendGroupsPage() {
     setReplyingTo(null);
   }
 
-  const chatSheet = useSwipeToDismiss(closeChat);
-  const editSheet = useSwipeToDismiss(() => setEditing(null));
+  const chatSheet = useSwipeToDismiss(closeChat, Boolean(chatGroup));
+  const editSheet = useSwipeToDismiss(() => setEditing(null), Boolean(editing));
 
   async function onGroupPhotoChange(file?: File) {
     const groupId = editing?.groupId;
@@ -532,11 +532,17 @@ export function FriendGroupsPage() {
 
       {/* Delete confirmation modal */}
       {confirmDelete ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-[90] grid place-items-center bg-ink/35 px-4 backdrop-blur-sm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-group-title"
+        >
           <div className="w-full max-w-sm rounded-md border border-line bg-white p-5 shadow-lift animate-soft-enter">
-            <h2 className="font-black">Delete this group?</h2>
+            <h2 id="delete-group-title" className="font-black">Delete friend group?</h2>
             <p className="mt-2 text-sm text-ink/65">
-              The group will be removed. Editing group members updates linked bets, but deleting the group leaves existing bets as they are.
+              This permanently removes <strong>{groups.find((group) => group.id === confirmDelete)?.name ?? 'this group'}</strong> and
+              its chat for every member. Existing linked bets remain.
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -685,7 +691,7 @@ export function FriendGroupsPage() {
                         {mine ? (
                           <time
                             title={messageTime?.toLocaleString() ?? 'Sending...'}
-                            className="mr-2 whitespace-nowrap text-[10px] font-semibold text-ink/35 opacity-100 transition sm:opacity-0 sm:group-hover/message:opacity-100"
+                            className="mr-2 hidden whitespace-nowrap text-[10px] font-semibold text-ink/35 opacity-0 transition sm:block sm:group-hover/message:opacity-100"
                           >
                             {shortTime}
                           </time>
@@ -711,7 +717,7 @@ export function FriendGroupsPage() {
                           <Reply size={14} />
                         </button>
                         <div
-                          className={`max-w-[72vw] rounded-2xl px-3 py-2 sm:max-w-[62vw] ${mine ? 'bg-ink text-white' : 'bg-white text-ink shadow-soft'} ${sameAsNext ? '' : mine ? 'rounded-br-md' : 'rounded-bl-md'}`}
+                          className={`max-w-[72vw] rounded-2xl px-3 py-2 sm:max-w-[62vw] ${mine ? 'bg-ink text-white' : 'bg-white text-ink shadow-[0_2px_8px_rgba(18,20,23,0.055)]'} ${sameAsNext ? '' : mine ? 'rounded-br-md' : 'rounded-bl-md'}`}
                         >
                           {!mine && !sameAsPrevious ? <p className="mb-0.5 text-xs font-black opacity-55">{messageProfile?.displayName || message.authorDisplayName || message.authorUsername}</p> : null}
                           {message.replyTo ? (
@@ -725,7 +731,7 @@ export function FriendGroupsPage() {
                         {!mine ? (
                           <time
                             title={messageTime?.toLocaleString() ?? 'Sending...'}
-                            className="ml-2 whitespace-nowrap text-[10px] font-semibold text-ink/35 opacity-100 transition sm:opacity-0 sm:group-hover/message:opacity-100"
+                            className="ml-2 hidden whitespace-nowrap text-[10px] font-semibold text-ink/35 opacity-0 transition sm:block sm:group-hover/message:opacity-100"
                           >
                             {shortTime}
                           </time>

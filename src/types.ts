@@ -8,6 +8,7 @@ export type BetType =
   | 'date'
   | 'closestNumber'
   | 'closestDate'
+  | 'closestHour'
   | 'openChoice';
 export type BetVisibility = 'public' | 'private';
 export type BetStatus = 'open' | 'locked' | 'resolved';
@@ -100,7 +101,8 @@ export interface Bet {
   awayTeam?: string;
   imageUrl?: string;
   deadline?: Timestamp;
-  // Before/After ('date') bets: the date the "before" side decays toward 0.
+  // Before/After bets use this as their target; closest-hour bets use it as
+  // the single calendar day on which guesses are allowed.
   targetDate?: Timestamp | null;
   // Before/After ('date') bets: if true the event may never happen, so resolution
   // offers an "event did not happen" outcome that refunds everyone.

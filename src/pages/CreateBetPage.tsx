@@ -14,6 +14,18 @@ function optionId(label: string, index: number) {
   return `${base}-${index + 1}`;
 }
 
+function localDateFromInput(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return year && month && day ? new Date(year, month - 1, day) : null;
+}
+
+function endOfLocalDay(value: string) {
+  const date = localDateFromInput(value);
+  if (!date) return undefined;
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
 export function CreateBetPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -93,7 +105,7 @@ export function CreateBetPage() {
         { id: 'on-or-after', label: `On or after ${dateLabel}` },
       ];
     }
-    if (type === 'closestNumber' || type === 'closestDate' || type === 'openChoice') {
+    if (type === 'closestNumber' || type === 'closestDate' || type === 'closestHour' || type === 'openChoice') {
       return [];
     }
     return multiOptions
@@ -134,8 +146,11 @@ export function CreateBetPage() {
     setBusy(true);
     setError('');
     try {
-      if (type !== 'closestNumber' && type !== 'closestDate' && type !== 'openChoice' && options.length < 2) {
+      if (type !== 'closestNumber' && type !== 'closestDate' && type !== 'closestHour' && type !== 'openChoice' && options.length < 2) {
         throw new Error('Add at least two options.');
+      }
+      if (type === 'closestHour' && !targetDate) {
+        throw new Error('Choose the day for the closest-hour bet.');
       }
       if (options.length && initialChanceTotal <= 0) {
         throw new Error('Initial chances need a positive total.');
@@ -147,8 +162,10 @@ export function CreateBetPage() {
           title,
           description: description || undefined,
           category,
-          deadline: deadline ? new Date(deadline) : undefined,
-          targetDate: type === 'date' && targetDate ? new Date(targetDate) : undefined,
+          deadline: type === 'closestHour' ? endOfLocalDay(targetDate) : deadline ? new Date(deadline) : undefined,
+          targetDate: (type === 'date' || type === 'closestHour') && targetDate
+            ? localDateFromInput(targetDate) ?? undefined
+            : undefined,
           eventMightNotHappen: type === 'date' ? eventMightNotHappen : undefined,
           visibility,
           invitedUsernames: invited.filter((username) => !maskedSet.has(username)),
@@ -244,12 +261,14 @@ export function CreateBetPage() {
               <input
                 className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 disabled:opacity-50"
                 type="datetime-local"
-                value={type === 'date' && !eventMightNotHappen ? '' : deadline}
+                value={(type === 'date' && !eventMightNotHappen) || type === 'closestHour' ? '' : deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                disabled={type === 'date' && !eventMightNotHappen}
+                disabled={(type === 'date' && !eventMightNotHappen) || type === 'closestHour'}
               />
               <span className="mt-1 block text-xs text-ink/50">
-                {type === 'date' && !eventMightNotHappen
+                {type === 'closestHour'
+                  ? 'Automatically set to 11:59 PM on the selected day.'
+                  : type === 'date' && !eventMightNotHappen
                   ? 'Set by the target date — the event is guaranteed to happen.'
                   : 'Optional: If not set, the bet stays open indefinitely'}
               </span>
@@ -338,6 +357,25 @@ export function CreateBetPage() {
             <div className="rounded-md bg-field p-3 text-sm text-ink/70">
               <p className="font-semibold text-ink">Closest Date</p>
               <p className="mt-1">Each participant guesses a date. Whoever picks the date closest to the actual outcome wins. Use the title to describe what is being guessed (e.g., "When will the baby be born?").</p>
+            </div>
+          ) : null}
+          {type === 'closestHour' ? (
+            <div className="space-y-3 rounded-md bg-field p-3 text-sm text-ink/70">
+              <div>
+                <p className="font-semibold text-ink">Closest Hour</p>
+                <p className="mt-1">Everyone guesses a time on one chosen day. The nearest time wins.</p>
+              </div>
+              <label className="block font-medium text-ink">
+                Guessing day
+                <input
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2"
+                  type="date"
+                  value={targetDate}
+                  onChange={(event) => setTargetDate(event.target.value)}
+                  required
+                />
+                <span className="mt-1 block text-xs font-normal text-ink/50">Predictions close at 11:59 PM on this day.</span>
+              </label>
             </div>
           ) : null}
           {type === 'openChoice' ? (
@@ -503,11 +541,11 @@ export function CreateBetPage() {
             {imageUrl ? <img src={imageUrl} alt="" className="mt-3 h-28 w-full rounded-md object-cover" /> : null}
             <h2 className="mt-3 line-clamp-2 font-black">{title || 'Untitled bet'}</h2>
             <p className="mt-1 line-clamp-2 text-xs text-ink/55">{description || 'Description preview'}</p>
-            {type === 'closestNumber' || type === 'closestDate' || type === 'openChoice' ? (
+            {type === 'closestNumber' || type === 'closestDate' || type === 'closestHour' || type === 'openChoice' ? (
               <p className="mt-3 text-sm text-ink/55 italic">
                 {type === 'openChoice'
                   ? 'Players add answers when they predict.'
-                  : `Each player submits their own ${type === 'closestNumber' ? 'number' : 'date'} guess.`}
+                  : `Each player submits their own ${type === 'closestNumber' ? 'number' : type === 'closestHour' ? 'time' : 'date'} guess.`}
               </p>
             ) : (
               <div className="mt-3 space-y-2">

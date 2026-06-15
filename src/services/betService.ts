@@ -103,7 +103,16 @@ function scoreConsistencyError(optionId: string, homeScore?: number, awayScore?:
   return '';
 }
 
+function endOfDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
 export async function createBet(input: CreateBetInput, creator: UserProfile) {
+  if (input.type === 'closestHour' && !input.targetDate) {
+    throw new Error('Closest-hour bets need a guessing day.');
+  }
   const now = serverTimestamp();
   const initialTotal = input.options.reduce(
     (sum, option) => sum + Math.max(0, input.initialChances?.[option.id] ?? 1),
@@ -136,8 +145,10 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     creatorUsername: creator.username,
     // A guaranteed before/after event resolves at its target date, so the target
     // date doubles as the deadline; otherwise use the explicit deadline.
-    deadline: input.type === 'date' && !input.eventMightNotHappen && input.targetDate
-      ? Timestamp.fromDate(input.targetDate)
+    deadline: input.type === 'closestHour' && input.targetDate
+      ? Timestamp.fromDate(endOfDay(input.targetDate))
+      : input.type === 'date' && !input.eventMightNotHappen && input.targetDate
+        ? Timestamp.fromDate(input.targetDate)
       : (input.deadline ? Timestamp.fromDate(input.deadline) : null),
     targetDate: input.targetDate ? Timestamp.fromDate(input.targetDate) : null,
     eventMightNotHappen: input.type === 'date' ? (input.eventMightNotHappen ?? false) : false,
@@ -392,6 +403,17 @@ export async function placePrediction(input: PredictionInput) {
     if (bet.status !== 'open') throw new Error('This bet is not open.');
     if (bet.deadline && Timestamp.now().toMillis() >= bet.deadline.toMillis()) throw new Error('The deadline has passed.');
     if (input.stake < 10) throw new Error('Minimum stake is 10 coins.');
+    if (bet.type === 'closestHour') {
+      const guess = input.dateGuess ? new Date(input.dateGuess) : null;
+      const target = bet.targetDate?.toDate?.() ?? null;
+      if (!guess || !Number.isFinite(guess.getTime()) || !target) {
+        throw new Error('Choose a valid time on the guessing day.');
+      }
+      const sameDay = guess.getFullYear() === target.getFullYear()
+        && guess.getMonth() === target.getMonth()
+        && guess.getDate() === target.getDate();
+      if (!sameDay) throw new Error('The time must be on the selected guessing day.');
+    }
 
     const previousPredictions = await getDocs(
       query(collection(db, 'predictions'), where('betId', '==', bet.id)),
@@ -466,7 +488,8 @@ export async function placePrediction(input: PredictionInput) {
     const targetDateMs = bet.targetDate?.toMillis?.() ?? null;
     const chanceForClosestGuess = () => {
       if (!closest) return 0;
-      const value = bet.type === 'closestDate'
+      const dateLike = bet.type === 'closestDate' || bet.type === 'closestHour';
+      const value = dateLike
         ? input.dateGuess ? new Date(input.dateGuess).getTime() : null
         : input.numericGuess;
       if (typeof value !== 'number' || !Number.isFinite(value)) return 1 / (existing.length + 1);
@@ -480,13 +503,13 @@ export async function placePrediction(input: PredictionInput) {
         }));
       predictionsForChance.push({
         numericGuess: bet.type === 'closestNumber' ? value : undefined,
-        dateGuess: bet.type === 'closestDate' ? input.dateGuess : undefined,
+        dateGuess: dateLike ? input.dateGuess : undefined,
         stake: input.stake,
         userRating: user.rating,
       });
       return calculateClosestGuessChances({
         predictions: predictionsForChance,
-        type: bet.type === 'closestDate' ? 'closestDate' : 'closestNumber',
+        type: dateLike ? bet.type : 'closestNumber',
         createdAtMs,
         deadlineMs,
         nowMs: nowMsForChance,
@@ -517,12 +540,12 @@ export async function placePrediction(input: PredictionInput) {
       ? closest
         ? calculateClosestGuessChances({
             predictions: existing,
-            type: bet.type === 'closestDate' ? 'closestDate' : 'closestNumber',
+            type: bet.type === 'closestDate' || bet.type === 'closestHour' ? bet.type : 'closestNumber',
             createdAtMs,
             deadlineMs,
             nowMs: nowMsForChance,
           }).find((guess) => guess.value === (
-            bet.type === 'closestDate'
+            bet.type === 'closestDate' || bet.type === 'closestHour'
               ? existingPrediction.dateGuess ? new Date(existingPrediction.dateGuess).getTime() : Number.NaN
               : existingPrediction.numericGuess
           ))?.chance
@@ -740,8 +763,21 @@ function computeResolutionOutcome(freshBet: Bet, predictions: Prediction[], reso
   if (closest) {
     if (freshBet.type === 'closestNumber' && resolution.actualValue !== undefined) {
       winnerPredictionIds = resolveClosestNumber(predictions, resolution.actualValue).winnerPredictionIds;
-    } else if (freshBet.type === 'closestDate' && resolution.actualDateValue) {
+    } else if ((freshBet.type === 'closestDate' || freshBet.type === 'closestHour') && resolution.actualDateValue) {
+      if (freshBet.type === 'closestHour') {
+        const actual = new Date(resolution.actualDateValue);
+        const target = freshBet.targetDate?.toDate?.();
+        const sameDay = target
+          && actual.getFullYear() === target.getFullYear()
+          && actual.getMonth() === target.getMonth()
+          && actual.getDate() === target.getDate();
+        if (!Number.isFinite(actual.getTime()) || !sameDay) {
+          throw new Error('The actual time must be on the selected guessing day.');
+        }
+      }
       winnerPredictionIds = resolveClosestDate(predictions, resolution.actualDateValue).winnerPredictionIds;
+    } else {
+      throw new Error('Enter the actual result.');
     }
     coinPayouts = calculateClosestPayouts(predictions, winnerPredictionIds);
   } else {

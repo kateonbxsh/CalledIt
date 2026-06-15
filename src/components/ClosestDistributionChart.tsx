@@ -10,7 +10,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { Bet, Prediction } from '../types';
-import { closestDateGuessLabel } from '../utils/closestGuess';
+import { closestDateGuessLabel, closestHourGuessLabel } from '../utils/closestGuess';
 import { asDate } from '../utils/format';
 import { calculateClosestGuessChances } from '../utils/probability';
 
@@ -24,6 +24,13 @@ function compactDate(ms: number) {
   return new Date(ms).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
+  });
+}
+
+function compactTime(ms: number) {
+  return new Date(ms).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
   });
 }
 
@@ -85,7 +92,7 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
 
   const entries = calculateClosestGuessChances({
     predictions,
-    type: bet.type === 'closestNumber' ? 'closestNumber' : 'closestDate',
+    type: bet.type === 'closestNumber' ? 'closestNumber' : bet.type === 'closestHour' ? 'closestHour' : 'closestDate',
     createdAtMs,
     deadlineMs,
     nowMs,
@@ -106,12 +113,14 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
   const numberDecimals = range < 10 ? 1 : 0;
   const formatX = bet.type === 'closestNumber'
     ? (x: number) => x.toFixed(numberDecimals)
-    : (x: number) => compactDate(x);
+    : bet.type === 'closestHour'
+      ? compactTime
+      : compactDate;
 
   const actual =
     bet.status === 'resolved' && bet.type === 'closestNumber' && bet.resolution?.actualValue !== undefined
       ? bet.resolution.actualValue
-      : bet.status === 'resolved' && bet.type === 'closestDate'
+      : bet.status === 'resolved' && (bet.type === 'closestDate' || bet.type === 'closestHour')
         ? asTime(bet.resolution?.actualDateValue)
         : null;
 
@@ -160,7 +169,11 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
               stroke="#d95f46"
               strokeDasharray="4 4"
               label={{
-                value: bet.type === 'closestNumber' ? `Actual ${actual}` : `Actual ${closestDateGuessLabel(bet.resolution?.actualDateValue)}`,
+                value: bet.type === 'closestNumber'
+                  ? `Actual ${actual}`
+                  : `Actual ${bet.type === 'closestHour'
+                    ? closestHourGuessLabel(bet.resolution?.actualDateValue)
+                    : closestDateGuessLabel(bet.resolution?.actualDateValue)}`,
                 position: 'insideTopRight',
                 fontSize: 10,
                 fill: '#d95f46',

@@ -148,9 +148,9 @@ export function MinigamesPage() {
   const [testPushSending, setTestPushSending] = useState(false);
   const [showPlane, setShowPlane] = useState(false);
   const [showMines, setShowMines] = useState(false);
-  const forecastSheet = useSwipeToDismiss(() => setForecastOpen(false));
-  const chestsSheet = useSwipeToDismiss(() => setChestsOpen(false));
-  const wheelSheet = useSwipeToDismiss(() => setWheelOpen(false));
+  const forecastSheet = useSwipeToDismiss(() => setForecastOpen(false), forecastOpen);
+  const chestsSheet = useSwipeToDismiss(() => setChestsOpen(false), chestsOpen);
+  const wheelSheet = useSwipeToDismiss(() => setWheelOpen(false), wheelOpen);
   const forecastAvailable = profile ? canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
   const wheelAvailable = profile ? canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
   const openableChests = chests.filter((chest) => chest.unlocked && !chest.claimed).length;

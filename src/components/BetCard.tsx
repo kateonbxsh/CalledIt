@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { CoinAmount } from './CoinAmount';
 import type { Bet, Prediction } from '../types';
 import { betTypeMeta, betTypeLabel, isClosestType } from '../utils/betTypes';
-import { closestDateGuessLabel } from '../utils/closestGuess';
+import { closestDateGuessLabel, closestHourGuessLabel } from '../utils/closestGuess';
 import { percent, relativeTime } from '../utils/format';
 import { displayChanceSummary } from '../utils/probability';
 
@@ -86,7 +86,9 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
             <span className="inline-flex rounded-xl bg-mint/10 px-2.5 py-2 text-xs font-black text-mint">
               Answer: {bet.type === 'closestNumber'
                 ? (bet.resolution?.actualValue ?? '—')
-                : closestDateGuessLabel(bet.resolution?.actualDateValue)}
+                : bet.type === 'closestHour'
+                  ? closestHourGuessLabel(bet.resolution?.actualDateValue)
+                  : closestDateGuessLabel(bet.resolution?.actualDateValue)}
             </span>
           ) : winnerIds.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">

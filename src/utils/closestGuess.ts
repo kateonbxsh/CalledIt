@@ -77,6 +77,11 @@ export function closestDateGuessLabel(dateStr: string | undefined) {
   return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+export function closestHourGuessLabel(dateStr: string | undefined) {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
 export function closestNumberDistance(guess: number | undefined, actual: number) {
   if (guess === undefined || guess === null) return null;
   return Math.abs(guess - actual);
@@ -86,4 +91,9 @@ export function closestDateDistance(dateStr: string | undefined, actualStr: stri
   if (!dateStr) return null;
   const days = Math.round(Math.abs(dateToMs(dateStr) - dateToMs(actualStr)) / (1000 * 60 * 60 * 24));
   return days;
+}
+
+export function closestHourDistance(dateStr: string | undefined, actualStr: string) {
+  if (!dateStr) return null;
+  return Math.round(Math.abs(dateToMs(dateStr) - dateToMs(actualStr)) / (1000 * 60));
 }
