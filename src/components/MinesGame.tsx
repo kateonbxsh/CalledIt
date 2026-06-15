@@ -54,7 +54,7 @@ export function MinesGame({
   const safeTotal = total - bombCount;
   const multiplier = payoutMultiplier(total, bombCount, revealed.size);
   const payout = Math.round(stake * multiplier);
-  const canStart = stake >= 10 && stake <= coins;
+  const canStart = stake >= 1 && stake <= coins;
 
   const cells = useMemo(() => Array.from({ length: total }, (_, index) => index), [total]);
 
@@ -256,9 +256,9 @@ export function MinesGame({
               <StakeInput
                 label="Stake"
                 value={stake}
-                min={10}
-                step={10}
-                onChange={(value) => setStake(Math.max(10, Math.min(Math.floor(coins), Math.round(value))))}
+                min={1}
+                step={1}
+                onChange={(value) => setStake(Math.max(1, Math.min(Math.floor(coins), Math.round(value))))}
               />
               <div className="mt-2 flex flex-wrap gap-2">
                 {stakes.map((amount) => (

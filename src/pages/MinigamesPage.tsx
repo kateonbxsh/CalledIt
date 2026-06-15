@@ -705,7 +705,7 @@ export function MinigamesPage() {
       {showPlane && profile ? (
         <PlaneGame
           coins={profile.coinBalance}
-          stakes={[50, 100, 250, 500]}
+          stakes={[1, 10, 50, 100, 250, 500]}
           onCharge={async (s) => { await chargePlaneStake(profile, s); return true; }}
           onWin={async (p) => awardPlaneWin(profile, p)}
           onLose={async (s, context) => recordMinigameLoss(profile, { game: 'plane', stake: s, ...context })}
@@ -716,7 +716,7 @@ export function MinigamesPage() {
       {showMines && profile ? (
         <MinesGame
           coins={profile.coinBalance}
-          stakes={[50, 100, 250, 500]}
+          stakes={[1, 10, 50, 100, 250, 500]}
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
           onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context })}
           onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context })}

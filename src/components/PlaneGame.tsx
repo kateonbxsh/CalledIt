@@ -54,7 +54,7 @@ export function PlaneGame({
   const onLoseRef = useRef(onLose); onLoseRef.current = onLose;
   const api = useRef<{ launch: () => void; playAgain: () => void } | null>(null);
 
-  const canPlay = stake <= coins && stake >= 10;
+  const canPlay = stake <= coins && stake >= 1;
 
   async function handleLaunch() {
     if (!canPlay || busy) return;
@@ -341,9 +341,9 @@ export function PlaneGame({
               <StakeInput
                 label="Stake"
                 value={stake}
-                min={10}
-                step={10}
-                onChange={(v) => setStake(Math.max(10, Math.min(Math.floor(coins), Math.round(v))))}
+                min={1}
+                step={1}
+                onChange={(v) => setStake(Math.max(1, Math.min(Math.floor(coins), Math.round(v))))}
               />
               <div className="mt-2 flex flex-wrap gap-2">
                 {stakes.map((s) => (
@@ -366,7 +366,7 @@ export function PlaneGame({
 
           <button onClick={handleLaunch} disabled={!canPlay || busy}
             className="mx-auto w-full max-w-md rounded-xl bg-sky px-4 py-3.5 text-base font-black text-white shadow-lift transition active:scale-[.99] disabled:opacity-50">
-            {busy ? 'Launching…' : coins < 10 ? 'Not enough coins' : <>Launch for <CoinAmount amount={stake} className="text-base" /></>}
+            {busy ? 'Launching…' : coins < 1 ? 'Not enough coins' : <>Launch for <CoinAmount amount={stake} className="text-base" /></>}
           </button>
         </div>
       )}

@@ -489,7 +489,12 @@ export async function placePrediction(input: PredictionInput) {
     const chanceForClosestGuess = () => {
       if (!closest) return 0;
       const dateLike = bet.type === 'closestDate' || bet.type === 'closestHour';
-      const closestType: 'closestNumber' | 'closestDate' | 'closestHour' = dateLike ? bet.type : 'closestNumber';
+      let closestType: 'closestNumber' | 'closestDate' | 'closestHour';
+      if (bet.type === 'closestDate' || bet.type === 'closestHour') {
+        closestType = bet.type;
+      } else {
+        closestType = 'closestNumber';
+      }
       const value = dateLike
         ? input.dateGuess ? new Date(input.dateGuess).getTime() : null
         : input.numericGuess;
