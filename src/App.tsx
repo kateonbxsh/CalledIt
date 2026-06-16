@@ -1,27 +1,28 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Layout } from './components/Layout';
 import { Lightbox } from './components/Lightbox';
 import { useAuth } from './contexts/AuthContext';
-import { AuthPage } from './pages/AuthPage';
-import { BetDetailPage } from './pages/BetDetailPage';
-import { ChallengesPage } from './pages/ChallengesPage';
-import { CompleteProfilePage } from './pages/CompleteProfilePage';
-import { CreateBetPage } from './pages/CreateBetPage';
-import { CreateWagerPage } from './pages/CreateWagerPage';
-import { FeedPage } from './pages/FeedPage';
-import { FriendGroupsPage } from './pages/FriendGroupsPage';
-import { GiftsPage } from './pages/GiftsPage';
-import { HowToPlayPage } from './pages/HowToPlayPage';
-import { InstallAppPage } from './pages/InstallAppPage';
-import { LeaderboardPage } from './pages/LeaderboardPage';
-import { MinigamesPage } from './pages/MinigamesPage';
-import { MyBetsPage } from './pages/MyBetsPage';
-import { PredictionHistoryPage } from './pages/PredictionHistoryPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { SettingsPage } from './pages/SettingsPage';
 import { listenForForegroundNotifications, refreshPushTokenIfEnabled, registerAppServiceWorker } from './services/notificationService';
+
+const AuthPage = lazy(() => import('./pages/AuthPage').then((module) => ({ default: module.AuthPage })));
+const BetDetailPage = lazy(() => import('./pages/BetDetailPage').then((module) => ({ default: module.BetDetailPage })));
+const ChallengesPage = lazy(() => import('./pages/ChallengesPage').then((module) => ({ default: module.ChallengesPage })));
+const CompleteProfilePage = lazy(() => import('./pages/CompleteProfilePage').then((module) => ({ default: module.CompleteProfilePage })));
+const CreateBetPage = lazy(() => import('./pages/CreateBetPage').then((module) => ({ default: module.CreateBetPage })));
+const CreateWagerPage = lazy(() => import('./pages/CreateWagerPage').then((module) => ({ default: module.CreateWagerPage })));
+const FeedPage = lazy(() => import('./pages/FeedPage').then((module) => ({ default: module.FeedPage })));
+const FriendGroupsPage = lazy(() => import('./pages/FriendGroupsPage').then((module) => ({ default: module.FriendGroupsPage })));
+const GiftsPage = lazy(() => import('./pages/GiftsPage').then((module) => ({ default: module.GiftsPage })));
+const HowToPlayPage = lazy(() => import('./pages/HowToPlayPage').then((module) => ({ default: module.HowToPlayPage })));
+const InstallAppPage = lazy(() => import('./pages/InstallAppPage').then((module) => ({ default: module.InstallAppPage })));
+const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage').then((module) => ({ default: module.LeaderboardPage })));
+const MinigamesPage = lazy(() => import('./pages/MinigamesPage').then((module) => ({ default: module.MinigamesPage })));
+const MyBetsPage = lazy(() => import('./pages/MyBetsPage').then((module) => ({ default: module.MyBetsPage })));
+const PredictionHistoryPage = lazy(() => import('./pages/PredictionHistoryPage').then((module) => ({ default: module.PredictionHistoryPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 
 function LoadingScreen() {
   return (
@@ -72,42 +73,44 @@ export function App() {
 
   return (
     <>
-      <Routes>
-        <Route path="/auth" element={<AuthPage />} />
-        <Route
-          path="/complete-profile"
-          element={
-            <PrivateRoute>
-              <CompleteProfilePage />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/"
-          element={
-            <PrivateRoute>
-              <Layout />
-            </PrivateRoute>
-          }
-        >
-          <Route index element={<FeedPage />} />
-          <Route path="mine" element={<MyBetsPage />} />
-          <Route path="history" element={<PredictionHistoryPage />} />
-          <Route path="groups" element={<FriendGroupsPage />} />
-          <Route path="gifts" element={<GiftsPage />} />
-          <Route path="challenges" element={<ChallengesPage />} />
-          <Route path="minigames" element={<MinigamesPage />} />
-          <Route path="create" element={<CreateBetPage />} />
-          <Route path="create-wager" element={<CreateWagerPage />} />
-          <Route path="bets/:betId" element={<BetDetailPage />} />
-          <Route path="leaderboard" element={<LeaderboardPage />} />
-          <Route path="how-to-play" element={<HowToPlayPage />} />
-          <Route path="install" element={<InstallAppPage />} />
-          <Route path="profile/:uid" element={<ProfilePage />} />
-          <Route path="me" element={<SettingsPage />} />
-          <Route path="settings" element={<Navigate to="/me" replace />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/auth" element={<AuthPage />} />
+          <Route
+            path="/complete-profile"
+            element={
+              <PrivateRoute>
+                <CompleteProfilePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <Layout />
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<FeedPage />} />
+            <Route path="mine" element={<MyBetsPage />} />
+            <Route path="history" element={<PredictionHistoryPage />} />
+            <Route path="groups" element={<FriendGroupsPage />} />
+            <Route path="gifts" element={<GiftsPage />} />
+            <Route path="challenges" element={<ChallengesPage />} />
+            <Route path="minigames" element={<MinigamesPage />} />
+            <Route path="create" element={<CreateBetPage />} />
+            <Route path="create-wager" element={<CreateWagerPage />} />
+            <Route path="bets/:betId" element={<BetDetailPage />} />
+            <Route path="leaderboard" element={<LeaderboardPage />} />
+            <Route path="how-to-play" element={<HowToPlayPage />} />
+            <Route path="install" element={<InstallAppPage />} />
+            <Route path="profile/:uid" element={<ProfilePage />} />
+            <Route path="me" element={<SettingsPage />} />
+            <Route path="settings" element={<Navigate to="/me" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
       {notificationToast ? (
         <a
           href={notificationToast.url}

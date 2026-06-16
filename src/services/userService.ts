@@ -17,9 +17,11 @@ import { db, envAdminUids } from '../lib/firebase';
 import type { UserProfile, UserStats } from '../types';
 import { canClaimDailyRefill } from '../utils/coins';
 import { rankForRating } from '../utils/ranks';
+import { invalidateQueryCache, readThroughCache } from './queryCache';
 import { setBalanceInTransaction } from './balanceService';
 
 const userCache = new Map<string, UserProfile>();
+const usernameCache = new Map<string, UserProfile>();
 
 export const emptyStats: UserStats = {
   totalBets: 0,
@@ -93,6 +95,8 @@ export async function updateProfile(
     photoURL: data.photoURL ?? '',
     updatedAt: serverTimestamp(),
   });
+  userCache.delete(uid);
+  invalidateQueryCache('users:');
 }
 
 export async function updateUsername(user: UserProfile, nextUsername: string) {
@@ -122,6 +126,9 @@ export async function updateUsername(user: UserProfile, nextUsername: string) {
       updatedAt: serverTimestamp(),
     });
   });
+  userCache.delete(user.uid);
+  usernameCache.delete(user.username);
+  invalidateQueryCache('users:');
 }
 
 export async function claimDailyRefill(user: UserProfile) {
@@ -142,36 +149,48 @@ export async function claimDailyRefill(user: UserProfile) {
   });
 }
 
-export async function getLeaderboard() {
+async function fetchLeaderboard() {
   const snap = await getDocs(
     query(collection(db, 'users'), orderBy('rating', 'desc'), limit(50)),
   );
   return snap.docs.map((item) => item.data() as UserProfile);
 }
 
+export async function getLeaderboard() {
+  return readThroughCache('users:leaderboard', 20_000, fetchLeaderboard);
+}
+
+export async function getFreshLeaderboard() {
+  return fetchLeaderboard();
+}
+
 export async function findUsersByUsernamePrefix(prefix: string) {
   const normalized = prefix.trim().toLowerCase();
   if (!normalized) return [];
-  const snap = await getDocs(
-    query(
-      collection(db, 'users'),
-      where('username', '>=', normalized),
-      where('username', '<=', `${normalized}\uf8ff`),
-      limit(8),
-    ),
-  );
-  return snap.docs.map((item) => item.data() as UserProfile);
+  return readThroughCache(`users:prefix:${normalized}`, 30_000, async () => {
+    const snap = await getDocs(
+      query(
+        collection(db, 'users'),
+        where('username', '>=', normalized),
+        where('username', '<=', `${normalized}\uf8ff`),
+        limit(8),
+      ),
+    );
+    return snap.docs.map((item) => item.data() as UserProfile);
+  });
 }
 
 export async function getUserByUsername(username: string) {
   const normalized = username.trim().toLowerCase();
   if (!normalized) return null;
+  if (usernameCache.has(normalized)) return usernameCache.get(normalized) ?? null;
   const usernameSnap = await getDoc(doc(db, 'usernames', normalized));
   if (!usernameSnap.exists()) return null;
   const userSnap = await getDoc(doc(db, 'users', (usernameSnap.data() as { uid: string }).uid));
   if (!userSnap.exists()) return null;
   const user = userSnap.data() as UserProfile;
   userCache.set(user.uid, user);
+  usernameCache.set(normalized, user);
   return user;
 }
 

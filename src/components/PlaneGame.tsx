@@ -6,10 +6,10 @@ import type { MinigameWinResult } from '../services/rewardService';
 
 // ---- Tuning (mirrors the standalone plane-game) ----
 const V0 = 480;
-const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 230, MAXVY = 260;
+const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 360, MAXVY = 260;
 const ANGLE_MIN = 20, ANGLE_MAX = 80;
 const CAM_OFF = 0.22;
-const MULT_K = 0.52, MULT_SCALE = 500, STAR_MULT = 0.075;
+const MULT_K = 0.936, MULT_SCALE = 500, STAR_MULT = 0.075;
 const STAR_BOOST = 230, MISSILE_PUSH = 230, MISSILE_MULT_PENALTY = 0.015, FIRST_BOAT = 340;
 
 const ASSET = (name: string) => `${import.meta.env.BASE_URL}plane-game/assets/${name}`;

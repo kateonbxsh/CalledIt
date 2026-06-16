@@ -3,23 +3,40 @@ import {
   doc,
   getDocs,
   limit,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
+  where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { CoinGift, UserProfile } from '../types';
 import { createNotification } from './notificationService';
+import { invalidateQueryCache, readThroughCache } from './queryCache';
 import { setBalanceInTransaction } from './balanceService';
 
 export async function listIncomingCoinGifts(userId: string, pageSize = 12): Promise<CoinGift[]> {
-  const snap = await getDocs(query(
-    collection(db, 'users', userId, 'incomingGifts'),
-    orderBy('createdAt', 'desc'),
-    limit(pageSize),
-  ));
-  return snap.docs.map((item) => ({ id: item.id, ...item.data() }) as CoinGift);
+  return readThroughCache(`gifts:list:${userId}:${pageSize}`, 15_000, async () => {
+    const snap = await getDocs(query(
+      collection(db, 'users', userId, 'incomingGifts'),
+      where('status', '==', 'pending'),
+      limit(Math.max(pageSize, 24)),
+    ));
+    return snap.docs
+      .map((item) => ({ id: item.id, ...item.data() }) as CoinGift)
+      .sort((left, right) => (right.createdAt?.toMillis?.() ?? 0) - (left.createdAt?.toMillis?.() ?? 0))
+      .slice(0, pageSize);
+  });
+}
+
+export async function hasPendingCoinGifts(userId: string) {
+  return readThroughCache(`gifts:hasPending:${userId}`, 10_000, async () => {
+    const snap = await getDocs(query(
+      collection(db, 'users', userId, 'incomingGifts'),
+      where('status', '==', 'pending'),
+      limit(1),
+    ));
+    return !snap.empty;
+  });
 }
 
 export async function sendCoinGift(params: {
@@ -72,6 +89,8 @@ export async function sendCoinGift(params: {
     body: `${amount.toLocaleString('en-US')} coins are waiting for you.`,
     url: '/#/gifts',
   });
+  invalidateQueryCache(`gifts:list:${params.recipient.uid}:`);
+  invalidateQueryCache(`gifts:hasPending:${params.recipient.uid}`);
 }
 
 export async function claimCoinGift(user: UserProfile, gift: CoinGift) {
@@ -103,4 +122,6 @@ export async function claimCoinGift(user: UserProfile, gift: CoinGift) {
       claimedAt: serverTimestamp(),
     });
   });
+  invalidateQueryCache(`gifts:list:${user.uid}:`);
+  invalidateQueryCache(`gifts:hasPending:${user.uid}`);
 }

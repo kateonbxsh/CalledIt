@@ -46,13 +46,14 @@ import { applyRatingDelta, calculateRatingDelta } from '../utils/rating';
 import { rankForRating } from '../utils/ranks';
 import { calculateSportsScoreBonus } from '../utils/sportsBonus';
 import type { ScoreBonusResult } from '../utils/sportsBonus';
+import { invalidateQueryCache, readThroughCache } from './queryCache';
 import {
   calculateClosestPayouts,
   resolveClosestDate,
   resolveClosestNumber,
 } from '../utils/closestGuess';
 import { isClosestType } from '../utils/betTypes';
-import { buildStatsAfterResolution, getLeaderboard } from './userService';
+import { buildStatsAfterResolution, getFreshLeaderboard } from './userService';
 import { setBalanceInTransaction } from './balanceService';
 import {
   ALL_ENABLED_TARGET_UID,
@@ -200,6 +201,8 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
 
   // Award daily bonus for creating a bet
   await awardDailyBonus(creator, 'bet');
+  invalidateQueryCache('bets:feed:');
+  invalidateQueryCache(`bets:mine:${creator.uid}`);
 
   return ref.id;
 }
@@ -232,6 +235,8 @@ export async function updateBetMetadata(betId: string, input: UpdateBetMetadataI
     ...(nextStatus ? { status: nextStatus } : {}),
     updatedAt: serverTimestamp(),
   });
+  invalidateQueryCache('bets:feed:');
+  invalidateQueryCache('bets:mine:');
 }
 
 function byCreatedDesc(left: Bet, right: Bet) {
@@ -247,34 +252,38 @@ function sortedBetsFromSnapshot(snap: QuerySnapshot<DocumentData>) {
 }
 
 export async function listFeedBets(scope: 'public' | 'private', user: UserProfile) {
-  const betsRef = collection(db, 'bets');
+  return readThroughCache(`bets:feed:${scope}:${user.uid}:${user.username}:${user.isAdmin ? 'admin' : 'user'}`, 20_000, async () => {
+    const betsRef = collection(db, 'bets');
 
-  if (scope === 'public') {
-    const snap = await getDocs(query(betsRef, where('visibility', '==', 'public'), limit(80)));
-    return sortedBetsFromSnapshot(snap);
-  }
+    if (scope === 'public') {
+      const snap = await getDocs(query(betsRef, where('visibility', '==', 'public'), limit(80)));
+      return sortedBetsFromSnapshot(snap);
+    }
 
-  if (user.isAdmin) {
-    const snap = await getDocs(query(betsRef, where('visibility', '==', 'private'), limit(80)));
-    return sortedBetsFromSnapshot(snap);
-  }
+    if (user.isAdmin) {
+      const snap = await getDocs(query(betsRef, where('visibility', '==', 'private'), limit(80)));
+      return sortedBetsFromSnapshot(snap);
+    }
 
-  const [createdSnap, invitedSnap] = await Promise.all([
-    getDocs(query(betsRef, where('visibility', '==', 'private'), where('creatorId', '==', user.uid), limit(80))),
-    getDocs(query(betsRef, where('visibility', '==', 'private'), where('invitedUsernames', 'array-contains', user.username), limit(80))),
-  ]);
+    const [createdSnap, invitedSnap] = await Promise.all([
+      getDocs(query(betsRef, where('visibility', '==', 'private'), where('creatorId', '==', user.uid), limit(80))),
+      getDocs(query(betsRef, where('visibility', '==', 'private'), where('invitedUsernames', 'array-contains', user.username), limit(80))),
+    ]);
 
-  return uniqueBets([
-    ...createdSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Bet),
-    ...invitedSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Bet),
-  ]).slice(0, 80);
+    return uniqueBets([
+      ...createdSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Bet),
+      ...invitedSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Bet),
+    ]).slice(0, 80);
+  });
 }
 
 export async function listMyBets(uid: string) {
-  const snap = await getDocs(
-    query(collection(db, 'bets'), where('creatorId', '==', uid), limit(80)),
-  );
-  return sortedBetsFromSnapshot(snap);
+  return readThroughCache(`bets:mine:${uid}`, 20_000, async () => {
+    const snap = await getDocs(
+      query(collection(db, 'bets'), where('creatorId', '==', uid), limit(80)),
+    );
+    return sortedBetsFromSnapshot(snap);
+  });
 }
 
 export async function listPredictionsForBet(betId: string) {
@@ -283,8 +292,10 @@ export async function listPredictionsForBet(betId: string) {
 }
 
 export async function listMyPredictions(uid: string) {
-  const snap = await getDocs(query(collection(db, 'predictions'), where('userId', '==', uid)));
-  return snap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
+  return readThroughCache(`predictions:user:${uid}`, 20_000, async () => {
+    const snap = await getDocs(query(collection(db, 'predictions'), where('userId', '==', uid)));
+    return snap.docs.map((item) => ({ id: item.id, ...item.data() }) as Prediction);
+  });
 }
 
 export async function getBetsByIds(ids: string[]) {
@@ -727,6 +738,9 @@ export async function placePrediction(input: PredictionInput) {
       await awardDailyBonus(input.user, 'prediction');
     }
   }
+  invalidateQueryCache(`predictions:user:${input.user.uid}`);
+  invalidateQueryCache('bets:feed:');
+  invalidateQueryCache(`bets:mine:${input.bet.creatorId}`);
 }
 
 export async function lockExpiredBet(bet: Bet) {
@@ -1211,8 +1225,9 @@ async function notifyLeaderboardMoves(
   changes: Array<{ uid: string; oldRating: number; newRating: number }>,
 ) {
   if (changes.length === 0) return;
+  invalidateQueryCache('users:leaderboard');
   const changeByUid = new Map(changes.map((change) => [change.uid, change]));
-  const board = await getLeaderboard();
+  const board = await getFreshLeaderboard();
   if (board.length === 0) return;
 
   const newRank = new Map(

@@ -19,7 +19,7 @@ import { Avatar } from './Avatar';
 import { CoinAmount } from './CoinAmount';
 import { useAuth } from '../contexts/AuthContext';
 import { listFeedBets } from '../services/betService';
-import { listIncomingCoinGifts } from '../services/coinGiftService';
+import { hasPendingCoinGifts } from '../services/coinGiftService';
 import { groupHasUnread, listGroupReadStates, listMyFriendGroups } from '../services/friendGroupService';
 import { getChestDefinitions, listChallengeActivities } from '../services/rewardService';
 import { canClaimSixHourReward } from '../utils/coins';
@@ -118,15 +118,20 @@ export function Layout() {
     const now = Date.now();
     if (!force && now - attentionCheckedAtRef.current < 5 * 60_000) return;
     attentionCheckedAtRef.current = now;
+    const onFeed = location.pathname === '/';
+    const onChallenges = location.pathname.startsWith('/challenges');
+    const onMinigames = location.pathname.startsWith('/minigames');
+    const onGroups = location.pathname.startsWith('/groups');
+    const onGifts = location.pathname.startsWith('/gifts');
     try {
-      const [publicBets, privateBets, activities, chests, groups, groupReads, incomingGifts] = await Promise.all([
-        listFeedBets('public', profile),
-        listFeedBets('private', profile),
-        listChallengeActivities(profile),
-        getChestDefinitions(profile),
-        listMyFriendGroups(profile),
-        listGroupReadStates(profile.uid),
-        listIncomingCoinGifts(profile.uid, 1),
+      const [publicBets, privateBets, activities, chests, groups, groupReads, hasGifts] = await Promise.all([
+        onFeed ? Promise.resolve([]) : listFeedBets('public', profile),
+        onFeed ? Promise.resolve([]) : listFeedBets('private', profile),
+        onChallenges ? Promise.resolve([]) : listChallengeActivities(profile),
+        onMinigames ? Promise.resolve([]) : getChestDefinitions(profile),
+        onGroups ? Promise.resolve([]) : listMyFriendGroups(profile),
+        onGroups ? Promise.resolve(new Map()) : listGroupReadStates(profile.uid),
+        onGifts ? Promise.resolve(false) : hasPendingCoinGifts(profile.uid),
       ]);
       const seenBetsAt = Number(localStorage.getItem(seenKey('bets')) ?? 0);
       const seenWagersAt = Number(localStorage.getItem(seenKey('wagers')) ?? 0);
@@ -146,11 +151,11 @@ export function Layout() {
       const seenGamesSignature = localStorage.getItem(seenKey('games')) ?? '';
 
       setAttention({
-        bets: location.pathname === '/' ? false : unseenBet,
-        wagers: location.pathname.startsWith('/challenges') ? false : unseenWager,
-        games: location.pathname.startsWith('/minigames') ? false : !!gamesSignature && gamesSignature !== seenGamesSignature,
-        groups: groups.some((group) => groupHasUnread(group, groupReads, profile.uid)),
-        gifts: incomingGifts.length > 0,
+        bets: onFeed ? false : unseenBet,
+        wagers: onChallenges ? false : unseenWager,
+        games: onMinigames ? false : !!gamesSignature && gamesSignature !== seenGamesSignature,
+        groups: onGroups ? false : groups.some((group) => groupHasUnread(group, groupReads, profile.uid)),
+        gifts: onGifts ? false : hasGifts,
       });
     } catch {
       // Navigation should stay quiet when an attention check is unavailable.
@@ -196,6 +201,9 @@ export function Layout() {
         localStorage.setItem(seenKey('games'), signature);
         setAttention((current) => ({ ...current, games: false }));
       }).catch(() => {});
+    }
+    if (location.pathname.startsWith('/gifts')) {
+      setAttention((current) => ({ ...current, gifts: false }));
     }
     void refreshAttention();
   // The profile timestamps intentionally retrigger this when a reward is claimed.

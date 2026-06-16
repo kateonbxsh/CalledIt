@@ -34,7 +34,8 @@ import { awardDailyBonus } from './bonusService';
 import { canClaimDailyReward, canClaimSixHourReward } from '../utils/coins';
 import { rankForRating } from '../utils/ranks';
 import { setBalanceInTransaction } from './balanceService';
-import { getLeaderboard } from './userService';
+import { invalidateQueryCache, readThroughCache } from './queryCache';
+import { getFreshLeaderboard } from './userService';
 
 // Global buff applied to coin rewards across forecasts, chests, weekly
 // challenges and wager bonuses so the whole economy pays out more generously.
@@ -352,26 +353,29 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
       pendingSpicyForecasts: nextPendingForecasts,
     });
   });
+  invalidateQueryCache(`rewards:chests:${user.uid}`);
   return reward;
 }
 
 export async function getChestDefinitions(user: UserProfile): Promise<ChestDefinition[]> {
-  const snap = await getDocs(query(collection(db, 'rewardClaims'), where('userId', '==', user.uid), limit(100)));
-  const claimed = new Set(
-    snap.docs
-      .map((item) => ({ id: item.id, ...item.data() }) as RewardClaim)
-      .filter((claim) => claim.type === 'chest')
-      .map((claim) => claim.id.replace(`${user.uid}_chest_`, '')),
-  );
+  return readThroughCache(`rewards:chests:${user.uid}`, 20_000, async () => {
+    const snap = await getDocs(query(collection(db, 'rewardClaims'), where('userId', '==', user.uid), limit(100)));
+    const claimed = new Set(
+      snap.docs
+        .map((item) => ({ id: item.id, ...item.data() }) as RewardClaim)
+        .filter((claim) => claim.type === 'chest')
+        .map((claim) => claim.id.replace(`${user.uid}_chest_`, '')),
+    );
 
-  return chestCatalog.map((chest) => ({
-    id: chest.id,
-    title: chest.title,
-    description: chest.description,
-    reward: chest.reward * REWARD_MULTIPLIER,
-    unlocked: chest.unlocked(user),
-    claimed: claimed.has(chest.id),
-  }));
+    return chestCatalog.map((chest) => ({
+      id: chest.id,
+      title: chest.title,
+      description: chest.description,
+      reward: chest.reward * REWARD_MULTIPLIER,
+      unlocked: chest.unlocked(user),
+      claimed: claimed.has(chest.id),
+    }));
+  });
 }
 
 export async function claimChest(user: UserProfile, chestId: string) {
@@ -405,6 +409,7 @@ export async function claimChest(user: UserProfile, chestId: string) {
       },
     });
   });
+  invalidateQueryCache(`rewards:chests:${user.uid}`);
   return { amount, label: chest.title };
 }
 
@@ -446,6 +451,7 @@ export async function spinWheel(user: UserProfile) {
       lastWheelSpinAt: serverTimestamp(),
     });
   });
+  invalidateQueryCache(`rewards:chests:${user.uid}`);
 
   return reward.amount;
 }
@@ -456,16 +462,31 @@ export interface MinigameWinResult {
 }
 
 export type MinigameOutcomeContext = {
-  game: 'mines' | 'plane';
+  game: 'mines' | 'plane' | 'guessing';
   stake: number;
   payout?: number;
   riskLevel?: number;
   blunder?: boolean;
 };
 
-async function notifyLeaderboardMoveForUser(user: UserProfile, nextRating: number) {
-  const before = await getLeaderboard();
-  const nextSelf = { ...user, rating: nextRating, rank: rankForRating(nextRating) };
+export function minigameAffectsRating(context: MinigameOutcomeContext) {
+  const stake = Math.max(0, context.stake);
+  const risk = Math.max(0, context.riskLevel ?? 0.35);
+  return stake >= 10 && risk >= 0.35;
+}
+
+async function notifyLeaderboardMoveForUser(
+  user: UserProfile,
+  nextRating: number,
+  before: UserProfile[],
+  nextBalance = user.coinBalance,
+) {
+  const nextSelf = {
+    ...user,
+    rating: nextRating,
+    rank: rankForRating(nextRating),
+    coinBalance: Math.max(0, Math.round(nextBalance)),
+  };
   const after = [...before.filter((entry) => entry.uid !== user.uid), nextSelf]
     .sort((a, b) => {
       if (b.rating !== a.rating) return b.rating - a.rating;
@@ -509,17 +530,19 @@ async function notifyLeaderboardMoveForUser(user: UserProfile, nextRating: numbe
 }
 
 function minigameWinDelta(context: MinigameOutcomeContext) {
+  if (!minigameAffectsRating(context)) return 0;
   const stakeWeight = Math.min(1, context.stake / 900);
   const payoutWeight = Math.min(1, Math.max(context.payout ?? context.stake, context.stake) / Math.max(context.stake, 1) / 4.5);
   const riskWeight = Math.min(1, Math.max(0, context.riskLevel ?? 0.35));
   const score = stakeWeight * 0.42 + payoutWeight * 0.33 + riskWeight * 0.25;
-  if (score < 0.5) return 1;
+  if (score < 0.5) return 2;
   if (score < 0.82) return 2;
   if (score < 0.965) return 3;
   return Math.random() < 0.16 ? 4 : 3;
 }
 
 function minigameLossDelta(context: MinigameOutcomeContext) {
+  if (!minigameAffectsRating(context)) return 0;
   if (!context.blunder) return -1;
   return Math.random() < 0.18 ? -2 : -1;
 }
@@ -548,12 +571,17 @@ export async function recordMinigameLoss(
 ): Promise<MinigameWinResult> {
   if (context.stake <= 0) return { payout: 0, ratingDelta: 0 };
   const ratingDelta = minigameLossDelta(context);
+  const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
   const userRef = doc(db, 'users', user.uid);
+  let committedRating = Math.max(0, user.rating + ratingDelta);
+  let committedBalance = user.coinBalance;
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(userRef);
     const current = snap.data() as UserProfile | undefined;
     if (!current) return;
     const nextRating = Math.max(0, current.rating + ratingDelta);
+    committedRating = nextRating;
+    committedBalance = current.coinBalance;
     transaction.update(userRef, {
       rating: nextRating,
       rank: rankForRating(nextRating),
@@ -567,7 +595,10 @@ export async function recordMinigameLoss(
       createdAt: serverTimestamp(),
     });
   });
-  await notifyLeaderboardMoveForUser(user, Math.max(0, user.rating + ratingDelta));
+  if (ratingDelta !== 0) {
+    invalidateQueryCache('users:leaderboard');
+    await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
+  }
   return { payout: 0, ratingDelta };
 }
 
@@ -579,17 +610,80 @@ export async function awardMinigameWin(
   const payout = Math.max(0, Math.round(amount));
   if (payout === 0) return { payout: 0, ratingDelta: 0 };
   const ratingDelta = minigameWinDelta({ ...context, payout });
+  const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
   const userRef = doc(db, 'users', user.uid);
+  let committedRating = user.rating + ratingDelta;
+  let committedBalance = user.coinBalance + payout;
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(userRef);
     const current = snap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
     const nextRating = current.rating + ratingDelta;
+    committedRating = nextRating;
+    committedBalance = current.coinBalance + payout;
     setBalanceInTransaction(transaction, userRef, current, current.coinBalance + payout, 'Minigame payout', {
       ...(ratingDelta > 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
     });
   });
-  await notifyLeaderboardMoveForUser(user, user.rating + ratingDelta);
+  if (ratingDelta !== 0) {
+    invalidateQueryCache('users:leaderboard');
+    await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
+  }
+  return { payout, ratingDelta };
+}
+
+export async function settleCustomMinigameResult(
+  user: UserProfile,
+  params: {
+    payout: number;
+    ratingDelta?: number;
+    historyDelta?: number;
+    reason?: string;
+  },
+): Promise<MinigameWinResult> {
+  const payout = Math.max(0, Math.round(params.payout));
+  const ratingDelta = Math.round(params.ratingDelta ?? 0);
+  const historyDelta = Math.round(params.historyDelta ?? payout);
+  if (payout === 0 && ratingDelta === 0 && historyDelta === 0) {
+    return { payout: 0, ratingDelta: 0 };
+  }
+
+  const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
+  const userRef = doc(db, 'users', user.uid);
+  let committedRating = Math.max(0, user.rating + ratingDelta);
+  let committedBalance = user.coinBalance + payout;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+    const current = snap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
+    const nextRating = Math.max(0, current.rating + ratingDelta);
+    const nextBalance = current.coinBalance + payout;
+    committedRating = nextRating;
+    committedBalance = nextBalance;
+    setBalanceInTransaction(
+      transaction,
+      userRef,
+      current,
+      nextBalance,
+      params.reason ?? 'Minigame result',
+      ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {},
+      false,
+    );
+    if (historyDelta !== 0) {
+      transaction.set(doc(collection(userRef, 'balanceHistory')), {
+        userId: user.uid,
+        balance: Math.max(0, Math.round(nextBalance)),
+        delta: historyDelta,
+        reason: params.reason ?? 'Minigame result',
+        createdAt: serverTimestamp(),
+      });
+    }
+  });
+
+  if (ratingDelta !== 0) {
+    invalidateQueryCache('users:leaderboard');
+    await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
+  }
   return { payout, ratingDelta };
 }
 
@@ -600,21 +694,24 @@ export async function chargePlaneStake(user: UserProfile, stake: number) {
 export async function awardPlaneWin(user: UserProfile, amount: number) {
   return awardMinigameWin(user, amount, {
     game: 'plane',
-    stake: Math.max(10, Math.round(amount / 2.7)),
+    stake: Math.max(1, Math.round(amount / 2.7)),
     riskLevel: 0.72,
   });
 }
 
 export async function listChallengeActivities(user: UserProfile, groups: FriendGroup[] = []) {
-  const challengesRef = collection(db, 'challenges');
-  const snaps = await Promise.all([
-    getDocs(query(challengesRef, where('visibility', '==', 'public'), limit(80))),
-    getDocs(query(challengesRef, where('creatorId', '==', user.uid), limit(80))),
-    getDocs(query(challengesRef, where('invitedUsernames', 'array-contains', user.username), limit(80))),
-  ]);
-  return uniqueById(
-    snaps.flatMap((snap) => snap.docs.map((item) => ({ id: item.id, ...item.data() }) as ChallengeActivity)),
-  );
+  const groupScope = groups.map((group) => group.id).sort().join(',');
+  return readThroughCache(`challenges:activities:${user.uid}:${user.username}:${groupScope}`, 20_000, async () => {
+    const challengesRef = collection(db, 'challenges');
+    const snaps = await Promise.all([
+      getDocs(query(challengesRef, where('visibility', '==', 'public'), limit(80))),
+      getDocs(query(challengesRef, where('creatorId', '==', user.uid), limit(80))),
+      getDocs(query(challengesRef, where('invitedUsernames', 'array-contains', user.username), limit(80))),
+    ]);
+    return uniqueById(
+      snaps.flatMap((snap) => snap.docs.map((item) => ({ id: item.id, ...item.data() }) as ChallengeActivity)),
+    );
+  });
 }
 
 export type ChallengeCommentPage = {
@@ -676,6 +773,7 @@ export async function addChallengeComment(
     body: `${user.displayName || user.username}: ${trimmed.slice(0, 120)}`,
     url: '/#/challenges',
   });
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function updateChallengeComment(challengeId: string, commentId: string, body: string) {
@@ -686,10 +784,12 @@ export async function updateChallengeComment(challengeId: string, commentId: str
     body: trimmed,
     updatedAt: serverTimestamp(),
   });
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function deleteChallengeComment(challengeId: string, commentId: string) {
   await deleteDoc(doc(db, 'challenges', challengeId, 'comments', commentId));
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function postCompletedChallenge(params: {
@@ -772,6 +872,7 @@ export async function postCompletedChallenge(params: {
     body: `${params.user.displayName || params.user.username} completed the challenge and earned ${totalReward} coins!`,
     url: '/#/challenges',
   });
+  invalidateQueryCache('challenges:activities:');
 }
 
 // Lets the author of a completed challenge edit its caption and who can see it
@@ -797,6 +898,7 @@ export async function updateChallengeCompletion(params: {
     groupId: audience.groupId,
     updatedAt: serverTimestamp(),
   });
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function legacyPostCompletedChallenge(params: {
@@ -926,6 +1028,7 @@ export async function createWagerChallenge(params: {
 
   // Award daily bonus for creating a challenge
   await awardDailyBonus(params.user, 'challenge');
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function updateWagerChallenge(params: {
@@ -985,6 +1088,7 @@ export async function updateWagerChallenge(params: {
       updatedAt: serverTimestamp(),
     });
   });
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function completeWagerChallenge(challenge: ChallengeActivity, user: UserProfile, proofImageUrl: string) {
@@ -1023,6 +1127,7 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
     body: `${user.displayName || user.username} completed your wager and earned ${reward} coins!`,
     url: '/#/challenges',
   });
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function failWagerChallenge(challenge: ChallengeActivity, user: UserProfile) {
@@ -1055,4 +1160,5 @@ export async function failWagerChallenge(challenge: ChallengeActivity, user: Use
     body: `The wager was closed by ${user.displayName || user.username}. Better luck next time!`,
     url: '/#/challenges',
   });
+  invalidateQueryCache('challenges:activities:');
 }

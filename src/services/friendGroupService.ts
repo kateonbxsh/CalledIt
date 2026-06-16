@@ -30,6 +30,7 @@ import type {
   UserProfile,
 } from '../types';
 import { createNotification } from './notificationService';
+import { invalidateQueryCache, readThroughCache } from './queryCache';
 
 async function resolveUids(usernames: string[]): Promise<string[]> {
   const results = await Promise.all(
@@ -60,19 +61,21 @@ export function sortFriendGroupsByLatestMessage(groups: FriendGroup[]) {
 }
 
 export async function listMyFriendGroups(user: UserProfile): Promise<FriendGroup[]> {
-  const groupsRef = collection(db, 'friendGroups');
-  const [createdSnap, memberSnap] = await Promise.all([
-    getDocs(query(groupsRef, where('creatorId', '==', user.uid), limit(50))),
-    getDocs(query(groupsRef, where('memberUids', 'array-contains', user.uid), limit(50))),
-  ]);
+  return readThroughCache(`groups:list:${user.uid}`, 20_000, async () => {
+    const groupsRef = collection(db, 'friendGroups');
+    const [createdSnap, memberSnap] = await Promise.all([
+      getDocs(query(groupsRef, where('creatorId', '==', user.uid), limit(50))),
+      getDocs(query(groupsRef, where('memberUids', 'array-contains', user.uid), limit(50))),
+    ]);
 
-  const map = new Map<string, FriendGroup>();
-  for (const snap of [createdSnap, memberSnap]) {
-    for (const d of snap.docs) {
-      map.set(d.id, { id: d.id, ...d.data() } as FriendGroup);
+    const map = new Map<string, FriendGroup>();
+    for (const snap of [createdSnap, memberSnap]) {
+      for (const d of snap.docs) {
+        map.set(d.id, { id: d.id, ...d.data() } as FriendGroup);
+      }
     }
-  }
-  return sortFriendGroupsByLatestMessage([...map.values()]);
+    return sortFriendGroupsByLatestMessage([...map.values()]);
+  });
 }
 
 export async function createFriendGroup(
@@ -94,6 +97,7 @@ export async function createFriendGroup(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  invalidateQueryCache('groups:list:');
   return ref.id;
 }
 
@@ -153,10 +157,13 @@ export async function updateFriendGroup(
     body: `${creator.displayName || creator.username} updated ${name.trim()}.`,
     url: '/#/groups',
   });
+  invalidateQueryCache('groups:list:');
+  invalidateQueryCache('challenges:activities:');
 }
 
 export async function deleteFriendGroup(groupId: string) {
   await deleteDoc(doc(db, 'friendGroups', groupId));
+  invalidateQueryCache('groups:list:');
 }
 
 // Any group member can set the shared group picture.
@@ -165,6 +172,7 @@ export async function setGroupPhoto(groupId: string, photoURL: string | null) {
     photoURL: photoURL || null,
     updatedAt: serverTimestamp(),
   });
+  invalidateQueryCache('groups:list:');
 }
 
 export type GroupMessagePage = {
@@ -251,6 +259,8 @@ export async function sendGroupMessage(
     body: `${user.displayName || user.username}: ${trimmed.slice(0, 140)}`,
     url: '/#/groups',
   });
+  invalidateQueryCache('groups:list:');
+  invalidateQueryCache('groupReads:');
 }
 
 export async function markGroupRead(groupId: string, userId: string) {
@@ -258,17 +268,20 @@ export async function markGroupRead(groupId: string, userId: string) {
     groupId,
     lastReadAt: serverTimestamp(),
   }, { merge: true });
+  invalidateQueryCache(`groupReads:${userId}`);
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('called-it:group-read'));
 }
 
 export async function listGroupReadStates(userId: string) {
-  const snap = await getDocs(query(collection(db, 'users', userId, 'groupReads'), limit(100)));
-  return new Map(
-    snap.docs.map((item) => [
-      item.id,
-      { groupId: item.id, ...item.data() } as GroupReadState,
-    ]),
-  );
+  return readThroughCache(`groupReads:${userId}`, 15_000, async () => {
+    const snap = await getDocs(query(collection(db, 'users', userId, 'groupReads'), limit(100)));
+    return new Map(
+      snap.docs.map((item) => [
+        item.id,
+        { groupId: item.id, ...item.data() } as GroupReadState,
+      ]),
+    );
+  });
 }
 
 export function groupHasUnread(group: FriendGroup, reads: Map<string, GroupReadState>, userId: string) {

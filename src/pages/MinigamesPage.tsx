@@ -8,6 +8,7 @@ import {
   Dice5,
   Flame,
   Gift,
+  Hash,
   MessageCircle,
   Plane,
   PlusCircle,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { MinesGame } from '../components/MinesGame';
+import { NumberGuessGame } from '../components/NumberGuessGame';
 import { PageHeader } from '../components/PageHeader';
 import { PlaneGame } from '../components/PlaneGame';
 import { RewardChest } from '../components/RewardChest';
@@ -31,6 +33,7 @@ import {
   chargeMinigameStake,
   chargePlaneStake,
   recordMinigameLoss,
+  settleCustomMinigameResult,
   claimChest,
   claimDailyForecast,
   getChestDefinitions,
@@ -148,6 +151,7 @@ export function MinigamesPage() {
   const [testPushSending, setTestPushSending] = useState(false);
   const [showPlane, setShowPlane] = useState(false);
   const [showMines, setShowMines] = useState(false);
+  const [showGuessing, setShowGuessing] = useState(false);
   const forecastSheet = useSwipeToDismiss(() => setForecastOpen(false), forecastOpen);
   const chestsSheet = useSwipeToDismiss(() => setChestsOpen(false), chestsOpen);
   const wheelSheet = useSwipeToDismiss(() => setWheelOpen(false), wheelOpen);
@@ -289,7 +293,7 @@ export function MinigamesPage() {
           </div>
           <p className="hidden text-xs font-semibold text-ink/45 sm:block">High-risk wins can spike ELO. Losses cost a little.</p>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           <button
             onClick={() => setShowPlane(true)}
             disabled={!profile}
@@ -317,6 +321,21 @@ export function MinigamesPage() {
               <h3 className="text-lg font-black">Mines</h3>
               <p className="mt-1 text-sm leading-5 text-ink/60">Reveal safe tiles to grow the multiplier, then cash out before a bomb takes the stake.</p>
               <span className="mt-3 inline-flex rounded-lg bg-coral px-3 py-1.5 text-xs font-black text-white">Play</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setShowGuessing(true)}
+            disabled={!profile}
+            className="group flex min-h-36 items-center gap-4 rounded-2xl border border-plum/20 bg-gradient-to-br from-plum/15 via-white to-sky/10 p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-plum/45 hover:shadow-lift active:scale-[.99] disabled:opacity-60"
+          >
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-plum text-white shadow-soft transition group-hover:rotate-[-6deg] group-hover:scale-105">
+              <Hash size={25} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-black">Number Guessing</h3>
+              <p className="mt-1 text-sm leading-5 text-ink/60">Chase the hidden number with higher or lower hints. Beat seven guesses to cash in, or bleed stake if you take too long.</p>
+              <span className="mt-3 inline-flex rounded-lg bg-plum px-3 py-1.5 text-xs font-black text-white">Play</span>
             </div>
           </button>
         </div>
@@ -721,6 +740,17 @@ export function MinigamesPage() {
           onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context })}
           onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context })}
           onClose={() => setShowMines(false)}
+        />
+      ) : null}
+
+      {showGuessing && profile ? (
+        <NumberGuessGame
+          coins={profile.coinBalance}
+          stakes={[1, 10, 50, 100, 250, 500]}
+          onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
+          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'guessing', ...context })}
+          onSettleCustom={async (params) => settleCustomMinigameResult(profile, params)}
+          onClose={() => setShowGuessing(false)}
         />
       ) : null}
     </>

@@ -144,7 +144,7 @@ export function ChallengesPage() {
     if (missingIds.length === 0) return;
     let cancelled = false;
     void Promise.all(missingIds.map(async (id) => {
-      const page = await listChallengeComments(id, null, 8);
+      const page = await listChallengeComments(id, null, 4);
       return [id, page.comments] as const;
     })).then((entries) => {
       if (cancelled) return;
