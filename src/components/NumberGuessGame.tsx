@@ -38,15 +38,13 @@ function midpoint(min: number, max: number) {
 }
 
 function multiplierForAttempt(attempt: number, variance: number) {
-  const binarySearchChance = 1 / (2 ** Math.max(0, OPTIMAL_GUESSES - attempt));
-  const base = 1 / binarySearchChance;
-  return Math.max(1.15, Math.min(64, base * variance));
+  const speed = clamp((OPTIMAL_GUESSES - attempt) / (OPTIMAL_GUESSES - 1), 0, 1);
+  const base = 1.08 + (speed ** 1.7) * 1.95;
+  return Math.max(1.05, Math.min(3.05, base * variance));
 }
 
 function refundRateForAttempts(attempts: number) {
-  const extra = Math.max(0, attempts - OPTIMAL_GUESSES);
-  const rates = [1, 0.84, 0.72, 0.58, 0.46, 0.34, 0.24, 0.15, 0.08];
-  return rates[Math.min(extra, rates.length - 1)];
+  return attempts <= OPTIMAL_GUESSES ? 1 : 0;
 }
 
 function riskLevelForAttempts(attempts: number) {
@@ -59,13 +57,7 @@ function riskLevelForAttempts(attempts: number) {
 
 function ratingDeltaForSlowSolve(stake: number, attempts: number) {
   const extra = Math.max(0, attempts - OPTIMAL_GUESSES);
-  const eligible = minigameAffectsRating({
-    game: 'guessing',
-    stake,
-    riskLevel: 0.38,
-  });
-  if (!eligible) return 0;
-  return extra >= 5 ? -2 : -1;
+  return -extra;
 }
 
 function ratingDeltaForFastSolve(stake: number, attempts: number) {
