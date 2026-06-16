@@ -15,6 +15,7 @@ type GuessEntry = {
 
 const GUESS_LIMIT = 100;
 const OPTIMAL_GUESSES = 7;
+const MAX_GUESSES = 10;
 function randomTarget() {
   return 1 + Math.floor(Math.random() * GUESS_LIMIT);
 }
@@ -39,8 +40,8 @@ function midpoint(min: number, max: number) {
 
 function multiplierForAttempt(attempt: number, variance: number) {
   const speed = clamp((OPTIMAL_GUESSES - attempt) / (OPTIMAL_GUESSES - 1), 0, 1);
-  const base = 1.08 + (speed ** 1.7) * 1.95;
-  return Math.max(1.05, Math.min(3.05, base * variance));
+  const base = 1.04 + (speed ** 1.9) * 1.36;
+  return Math.max(1.02, Math.min(2.3, base * variance));
 }
 
 function refundRateForAttempts(attempts: number) {
@@ -222,15 +223,15 @@ export function NumberGuessGame({
       }
 
       if (finalAttempts === OPTIMAL_GUESSES) {
-        const ratingDelta = minigameAffectsRating({ game: 'guessing', stake, riskLevel }) ? 1 : 0;
+        const payout = Math.round(stake * 0.5);
         const result = await onSettleCustom({
-          payout: stake,
-          ratingDelta,
-          historyDelta: 0,
-          reason: 'Number guessing break-even',
+          payout,
+          ratingDelta: 0,
+          historyDelta: payout - stake,
+          reason: 'Number guessing seven-guess finish',
         });
         setSettlement(result);
-        setFinalRefund(stake);
+        setFinalRefund(payout);
         setPhase('won');
         return;
       }
@@ -260,6 +261,10 @@ export function NumberGuessGame({
     const nextGuesses = [...guesses, { value, feedback }];
     setGuesses(nextGuesses);
     if (feedback === 'correct') {
+      void resolveWin(nextGuesses);
+      return;
+    }
+    if (nextGuesses.length >= MAX_GUESSES) {
       void resolveWin(nextGuesses);
       return;
     }
@@ -366,7 +371,7 @@ export function NumberGuessGame({
               <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-center">
                 <p className="text-2xs font-black uppercase text-white/40">Current multiplier</p>
                 <p className="mt-0.5 text-sm font-black sm:text-base">
-                  {currentAttempt < OPTIMAL_GUESSES ? `${currentMultiplier.toFixed(2)}x` : currentAttempt === OPTIMAL_GUESSES ? 'Back' : 'Refund'}
+                  {currentAttempt < OPTIMAL_GUESSES ? `${currentMultiplier.toFixed(2)}x` : currentAttempt === OPTIMAL_GUESSES ? 'Half back' : currentAttempt >= MAX_GUESSES ? 'Auto bust' : 'Bust'}
                 </p>
               </div>
             </div>
