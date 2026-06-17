@@ -1,14 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, Clock3, ImagePlus, MessageCircle, Pencil, Reply, Send, Target, Trash2, Trophy, Users, X, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Clock3, ImagePlus, Lock, MessageCircle, Pencil, Reply, Send, Target, Trash2, Trophy, Users, X, XCircle } from 'lucide-react';
 import { doc, getDoc, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
-import { RewardChest } from '../components/RewardChest';
 import { ZoomableImage } from '../components/Lightbox';
 import { StakeInput } from '../components/StakeInput';
+import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import { listMyFriendGroups } from '../services/friendGroupService';
@@ -71,7 +71,7 @@ export function ChallengesPage() {
   const [weeklyModalChallenge, setWeeklyModalChallenge] = useState<WeeklyChallengeDefinition | null>(null);
   const [proofByChallenge, setProofByChallenge] = useState<Record<string, string>>({});
   const [commentByChallenge, setCommentByChallenge] = useState<Record<string, string>>({});
-  const [weeklyReward, setWeeklyReward] = useState<{ coins: number; chest: number } | null>(null);
+  const [weeklyReward, setWeeklyReward] = useState<{ coins: number } | null>(null);
   const [editChallenge, setEditChallenge] = useState<ChallengeActivity | null>(null);
   const [editComment, setEditComment] = useState('');
   const [editVisibility, setEditVisibility] = useState<BetVisibility>('public');
@@ -81,6 +81,9 @@ export function ChallengesPage() {
   const [editWagerBody, setEditWagerBody] = useState('');
   const [editWagerDeadline, setEditWagerDeadline] = useState('');
   const [editStake, setEditStake] = useState(10);
+  const [editWagerVisibility, setEditWagerVisibility] = useState<BetVisibility>('public');
+  const [editWagerGroupId, setEditWagerGroupId] = useState('');
+  const [editWagerInvited, setEditWagerInvited] = useState<string[]>([]);
   const [commentChallenge, setCommentChallenge] = useState<ChallengeActivity | null>(null);
   const [challengeComments, setChallengeComments] = useState<ChallengeComment[]>([]);
   const [commentCursor, setCommentCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
@@ -129,7 +132,9 @@ export function ChallengesPage() {
   const completedWeeklyCount = weekly.filter((challenge) => completedWeeklyIds.has(challenge.id)).length;
 
   const visibleActivities = activities.filter((activity) => {
-    const matchesTopTab = topTab === 'wagers' ? activity.type === 'wager' : activity.type !== 'wager';
+    const matchesTopTab = topTab === 'wagers'
+      ? activity.type === 'wager' && activity.status === 'open'
+      : activity.type !== 'wager' || activity.status !== 'open';
     if (!matchesTopTab) return false;
     if (activeTab === 'all') return true;
     if (activeTab === 'private') return activity.visibility === 'private';
@@ -228,7 +233,7 @@ export function ChallengesPage() {
         groupId: postGroupId || undefined,
         groups,
       });
-      setWeeklyReward({ coins: challenge.reward, chest: challenge.chestReward });
+      setWeeklyReward({ coins: challenge.reward });
       setWeeklyModalChallenge(null);
       setWeeklyModalOpen(false);
       setProofByChallenge((current) => ({ ...current, [challenge.id]: '' }));
@@ -308,6 +313,9 @@ export function ChallengesPage() {
     setEditWagerBody(challenge.body ?? '');
     setEditWagerDeadline(datetimeLocalValue(challenge.deadline?.toDate() ?? null));
     setEditStake(challenge.stake ?? 10);
+    setEditWagerVisibility(challenge.visibility);
+    setEditWagerGroupId(challenge.groupId ?? '');
+    setEditWagerInvited(challenge.invitedUsernames ?? []);
   }
 
   async function saveWagerEdit() {
@@ -322,6 +330,10 @@ export function ChallengesPage() {
         body: editWagerBody || undefined,
         stake: editStake,
         deadline: new Date(editWagerDeadline),
+        visibility: editWagerGroupId ? 'private' : editWagerVisibility,
+        groupId: editWagerGroupId || undefined,
+        groups,
+        invitedUsernames: editWagerInvited,
       });
       setStakeEditChallenge(null);
       await load();
@@ -609,6 +621,25 @@ export function ChallengesPage() {
     );
   }
 
+  function renderAudiencePill(activity: ChallengeActivity, group?: FriendGroup | null) {
+    if (group) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-field py-0.5 pl-0.5 pr-2 font-bold text-ink/50">
+          {group.photoURL ? <img src={group.photoURL} alt="" className="h-4 w-4 rounded-full object-cover" /> : <Users size={11} className="ml-1" />} {group.name}
+        </span>
+      );
+    }
+    if (activity.visibility !== 'private') return null;
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-field px-2 py-0.5 font-bold text-ink/50">
+        <Lock size={11} className="shrink-0" />
+        <span className="truncate text-ink/45">
+          {[activity.creatorUsername, ...(activity.invitedUsernames ?? [])].map((username) => `@${username}`).join(', ')}
+        </span>
+      </span>
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -703,15 +734,18 @@ export function ChallengesPage() {
                 const canEditWager = activity.type === 'wager'
                   && activity.status === 'open'
                   && activity.creatorId === profile?.uid;
-                const actorId = activity.type === 'completion' ? (activity.completerId || activity.creatorId) : activity.creatorId;
-                const actorUsername = activity.type === 'completion'
+                const closedWager = activity.type === 'wager' && activity.status !== 'open';
+                const actorId = activity.type === 'completion' || (closedWager && activity.completerId)
+                  ? (activity.completerId || activity.creatorId)
+                  : activity.creatorId;
+                const actorUsername = activity.type === 'completion' || (closedWager && activity.completerUsername)
                   ? (activity.completerUsername || activity.creatorUsername)
                   : activity.creatorUsername;
-                const actorDisplayName = activity.type === 'completion'
+                const actorDisplayName = activity.type === 'completion' || (closedWager && activity.completerId)
                   ? (activity.completerDisplayName || activity.completerUsername || activity.creatorDisplayName || activity.creatorUsername)
                   : (activity.creatorDisplayName || activity.creatorUsername);
                 const recentComments = recentCommentsByChallenge[activity.id] ?? [];
-                if (activity.type === 'wager') {
+                if (activity.type === 'wager' && activity.status === 'open') {
                   const group = activity.groupId ? groups.find((item) => item.id === activity.groupId) : null;
                   const completionReward = (activity.stake ?? 0) + (activity.bonus ?? 0);
                   const completionOpen = completingWagerId === activity.id;
@@ -733,11 +767,7 @@ export function ChallengesPage() {
                               </Link>
                               <span className="font-semibold text-ink/35">@{activity.creatorUsername}</span>
                               <span className="font-semibold text-ink/35">{activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}</span>
-                              {group ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-field py-0.5 pl-0.5 pr-2 font-bold text-ink/50">
-                                  {group.photoURL ? <img src={group.photoURL} alt="" className="h-4 w-4 rounded-full object-cover" /> : <Users size={11} className="ml-1" />} {group.name}
-                                </span>
-                              ) : null}
+                              {renderAudiencePill(activity, group)}
                             </div>
                             <h2 className="mt-1.5 break-words text-lg font-black leading-snug [overflow-wrap:anywhere]">{activity.title}</h2>
                             {activity.body ? (
@@ -867,6 +897,20 @@ export function ChallengesPage() {
                   );
                 }
                 const completionGroup = activity.groupId ? groups.find((item) => item.id === activity.groupId) : null;
+                const activityIcon = activity.type === 'wager' ? Target : Trophy;
+                const ActivityIcon = activityIcon;
+                const activityTone = activity.type === 'wager'
+                  ? activity.status === 'failed' ? 'bg-coral/12 text-coral' : 'bg-citrus/12 text-citrus'
+                  : 'bg-mint/12 text-mint';
+                const coinsLabel = activity.type === 'wager'
+                  ? activity.status === 'failed' ? 'Refunded' : 'Coins earned'
+                  : 'Coins earned';
+                const coinsAmount = activity.type === 'wager'
+                  ? activity.status === 'failed' ? (activity.creatorRefund ?? 0) : (activity.stake ?? 0) + (activity.bonus ?? 0)
+                  : (activity.reward ?? 0) + (activity.chestReward ?? 0);
+                const timeLabel = activity.type === 'wager'
+                  ? activity.status === 'failed' ? 'Closed' : 'Completed'
+                  : 'Completed';
                 return (
                   <article
                     key={activity.id}
@@ -875,8 +919,8 @@ export function ChallengesPage() {
                   >
                     <div className="border-b border-line px-4 py-4 sm:px-5">
                       <div className="flex items-start gap-3">
-                        <div className="challenge-card-icon grid h-10 w-10 shrink-0 place-items-center rounded-md bg-mint/12 text-mint">
-                          <Trophy size={19} />
+                        <div className={`challenge-card-icon grid h-10 w-10 shrink-0 place-items-center rounded-md ${activityTone}`}>
+                          <ActivityIcon size={19} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
@@ -885,11 +929,7 @@ export function ChallengesPage() {
                             </Link>
                             <span className="font-semibold text-ink/35">@{actorUsername}</span>
                             <span className="font-semibold text-ink/35">{activity.createdAt ? relativeTime(activity.createdAt) : 'just now'}</span>
-                            {completionGroup ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-field py-0.5 pl-0.5 pr-2 font-bold text-ink/50">
-                                {completionGroup.photoURL ? <img src={completionGroup.photoURL} alt="" className="h-4 w-4 rounded-full object-cover" /> : <Users size={11} className="ml-1" />} {completionGroup.name}
-                              </span>
-                            ) : null}
+                            {renderAudiencePill(activity, completionGroup)}
                           </div>
                           <h2 className="mt-1.5 text-lg font-black leading-snug">{activity.title}</h2>
                           {activity.body ? (
@@ -917,18 +957,18 @@ export function ChallengesPage() {
 
                     <div className="grid gap-px bg-line sm:grid-cols-3">
                       <div className="bg-field/65 px-4 py-3">
-                        <p className="text-xs font-bold text-ink/40">Completed by</p>
+                        <p className="text-xs font-bold text-ink/40">{activity.type === 'wager' && activity.status === 'failed' ? 'Closed by' : 'Completed by'}</p>
                         <p className="mt-1 text-sm font-black">{actorDisplayName}</p>
                       </div>
                       <div className="bg-field/65 px-4 py-3">
-                        <p className="text-xs font-bold text-ink/40">Coins earned</p>
-                        <CoinAmount amount={(activity.reward ?? 0) + (activity.chestReward ?? 0)} className="mt-1 text-sm" />
+                        <p className="text-xs font-bold text-ink/40">{coinsLabel}</p>
+                        <CoinAmount amount={coinsAmount} className="mt-1 text-sm" />
                       </div>
                       <div className="bg-field/65 px-4 py-3">
-                        <p className="text-xs font-bold text-ink/40">Completed</p>
+                        <p className="text-xs font-bold text-ink/40">{timeLabel}</p>
                         <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-black">
                           <Clock3 size={14} className="text-ink/40" />
-                          {activity.completedAt ? relativeTime(activity.completedAt) : relativeTime(activity.createdAt)}
+                          {activity.completedAt ? relativeTime(activity.completedAt) : relativeTime(activity.updatedAt ?? activity.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -983,14 +1023,10 @@ export function ChallengesPage() {
                 Close
               </button>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="mt-4">
               <div className="rounded-md bg-field p-3">
-                <p className="text-xs font-bold text-ink/40">Coins</p>
+                <p className="text-xs font-bold text-ink/40">Reward</p>
                 <CoinAmount amount={weeklyModalChallenge.reward} className="mt-1 text-sm" />
-              </div>
-              <div className="rounded-md bg-field p-3">
-                <p className="text-xs font-bold text-ink/40">Bonus chest coins</p>
-                <CoinAmount amount={weeklyModalChallenge.chestReward} className="mt-1 text-sm" />
               </div>
             </div>
             <label className="mt-4 block text-sm font-medium">
@@ -1095,20 +1131,16 @@ export function ChallengesPage() {
                       <p className="text-2xl font-black">{activeWeekly.title}</p>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/65">{activeWeekly.body}</p>
                     </div>
-                    <div className="grid min-w-40 grid-cols-2 gap-2 sm:grid-cols-1">
+                    <div className="grid min-w-40 gap-2">
                       <div className="rounded-md bg-white p-3">
-                        <p className="text-xs font-bold text-ink/40">Coins</p>
+                        <p className="text-xs font-bold text-ink/40">Reward</p>
                         <CoinAmount amount={activeWeekly.reward} className="mt-1 text-sm" />
-                      </div>
-                      <div className="rounded-md bg-white p-3">
-                        <p className="text-xs font-bold text-ink/40">Bonus chest coins</p>
-                        <CoinAmount amount={activeWeekly.chestReward} className="mt-1 text-sm" />
                       </div>
                     </div>
                   </div>
                   <div className="mt-5 rounded-md border border-line bg-white p-4">
                     <p className="text-sm font-bold text-ink/70">
-                      Bonus chest coins are extra coins awarded with the challenge. They show in the completion popup as a chest reward.
+                      Complete the mission, upload proof, and collect the full reward.
                     </p>
                     <p className="mt-1 text-xs leading-5 text-ink/50">
                       You will choose public or friend-group visibility when you upload proof.
@@ -1131,17 +1163,15 @@ export function ChallengesPage() {
 {weeklyReward ? (
         <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/55 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-reward-pop rounded-md border border-line bg-white p-6 text-center shadow-lift">
-            <RewardChest open className="mx-auto mb-4 h-28 w-32" />
+            <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-2xl bg-citrus/12 text-citrus">
+              <Trophy size={34} />
+            </div>
             <h2 className="text-xl font-black">Challenge complete</h2>
-            <p className="mt-2 text-sm text-ink/60">Coins plus chest bonus unlocked.</p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            <p className="mt-2 text-sm text-ink/60">Reward added to your balance.</p>
+            <div className="mt-4">
               <div className="rounded-md bg-field p-3">
-                <p className="text-xs font-bold text-ink/40">Coins</p>
+                <p className="text-xs font-bold text-ink/40">Reward</p>
                 <CoinAmount amount={weeklyReward.coins} className="mt-1 justify-center text-sm" />
-              </div>
-              <div className="rounded-md bg-field p-3">
-                <p className="text-xs font-bold text-ink/40">Chest</p>
-                <CoinAmount amount={weeklyReward.chest} className="mt-1 justify-center text-sm" />
               </div>
             </div>
             <button
@@ -1248,6 +1278,42 @@ export function ChallengesPage() {
                   placeholder="What counts as proof?"
                 />
               </label>
+              <label className="block text-sm font-medium">
+                Visibility
+                <select
+                  className="mt-1 w-full min-w-0 rounded-xl border border-line bg-field px-3 py-2.5 outline-none focus:border-mint"
+                  value={editWagerGroupId || editWagerVisibility}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (value === 'public' || value === 'private') {
+                      setEditWagerVisibility(value as BetVisibility);
+                      setEditWagerGroupId('');
+                    } else {
+                      setEditWagerVisibility('private');
+                      setEditWagerGroupId(value);
+                    }
+                  }}
+                >
+                  <option value="public">Public</option>
+                  <option value="private">Private invitees</option>
+                  {groups.map((group) => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
+                </select>
+              </label>
+              {editWagerVisibility === 'private' && !editWagerGroupId ? (
+                <label className="block text-sm font-medium">
+                  Invite users
+                  <div className="mt-1">
+                    <UsernamePicker
+                      value={editWagerInvited}
+                      onChange={setEditWagerInvited}
+                      exclude={profile?.username ? [profile.username] : []}
+                      placeholder="Search usernames"
+                    />
+                  </div>
+                </label>
+              ) : null}
               <div className="min-w-0">
                 <StakeInput label="Stake" value={editStake} min={10} step={10} onChange={(value) => setEditStake(Math.max(10, Math.round(value)))} />
               </div>

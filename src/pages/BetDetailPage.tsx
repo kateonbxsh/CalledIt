@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { Check, ChevronDown, ChevronLeft, Pencil, Reply, RotateCcw, Trash2, Users, X } from 'lucide-react';
+import { Activity, Check, ChevronDown, ChevronLeft, Pencil, Reply, RotateCcw, Trash2, Users, X } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { ChanceChart } from '../components/ChanceChart';
 import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import {
   addBetComment,
+  addManualChanceSnapshot,
   amendBetResolution,
   deleteBet,
   deleteBetComment,
@@ -30,6 +31,7 @@ import {
 import { listMyFriendGroups } from '../services/friendGroupService';
 import type { Bet, BetComment, BetResolution, BetVisibility, ChanceSnapshot, CommentReplyPreview, FriendGroup, Prediction } from '../types';
 import { isClosestType } from '../utils/betTypes';
+import { calculatePredictionChangeFee } from '../utils/coins';
 import {
   closestDateDistance,
   closestDateGuessLabel,
@@ -114,22 +116,41 @@ function signedNumber(value: number) {
   return value > 0 ? `+${value}` : String(value);
 }
 
+// Renders picks with bold choices and plain separators: "A, B and/or C" (the
+// connector only joins the last two; commas join the rest).
+function renderPicks(parts: string[], connector: string) {
+  return parts.map((part, index) => (
+    <span key={`${part}-${index}`}>
+      {index > 0 ? (
+        <span className="font-normal text-ink/45">{index === parts.length - 1 ? ` ${connector} ` : ', '}</span>
+      ) : null}
+      <span className="font-bold text-ink/80">{part}</span>
+    </span>
+  ));
+}
+
 function predictionDetail(bet: Bet, prediction: Prediction) {
-  if (bet.type === 'closestNumber') return closestNumberGuessLabel(prediction.numericGuess);
-  if (bet.type === 'closestDate' || bet.type === 'closestHour') return closestGuessLabel(bet, prediction.dateGuess);
+  if (bet.type === 'closestNumber') return <span className="font-bold text-ink/80">{closestNumberGuessLabel(prediction.numericGuess)}</span>;
+  if (bet.type === 'closestDate' || bet.type === 'closestHour') return <span className="font-bold text-ink/80">{closestGuessLabel(bet, prediction.dateGuess)}</span>;
 
   const optionIds = prediction.optionIds?.length ? prediction.optionIds : [prediction.optionId];
   const labels = optionIds.map((optionId) => {
     const option = bet.options.find((item) => item.id === optionId);
     return option?.label ?? prediction.customOptionLabel ?? optionId;
   });
-  // Multiple picks read as "A and/or B" when several can win, else "A or B".
-  const separator = labels.length > 1 ? (bet.allowMultipleOutcomes ? ' and/or ' : ' or ') : ', ';
-  const label = labels.join(separator);
+  // "and/or" when several picks can all win, otherwise "or".
+  const connector = bet.allowMultipleOutcomes ? 'and/or' : 'or';
+  const picks = renderPicks(labels, connector);
   if (bet.type === 'sports' && prediction.scorePrediction) {
-    return `${label}, ${prediction.scorePrediction.home}-${prediction.scorePrediction.away}`;
+    return (
+      <span>
+        {picks}
+        <span className="font-normal text-ink/45">, </span>
+        <span className="font-bold text-ink/80">{prediction.scorePrediction.home}-{prediction.scorePrediction.away}</span>
+      </span>
+    );
   }
-  return label;
+  return <span>{picks}</span>;
 }
 
 function estimatedCoinOutcome(stake: number, chance: number) {
@@ -149,6 +170,9 @@ export function BetDetailPage() {
   const [bet, setBet] = useState<Bet | null>(null);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [snapshots, setSnapshots] = useState<ChanceSnapshot[]>([]);
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const [snapshotAt, setSnapshotAt] = useState('');
+  const [snapshotPct, setSnapshotPct] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<BetComment[]>([]);
   const [selected, setSelected] = useState('');
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
@@ -281,6 +305,22 @@ export function BetDetailPage() {
   }, [bet, myPrediction]);
 
   const closest = bet ? isClosestType(bet.type) : false;
+  // The fee the NEXT edit will actually cost (same formula the service charges),
+  // recomputed from the current stake/revision/chance — not the previous fee.
+  const projectedChangeFee = useMemo(() => {
+    if (!bet || !myPrediction) return 0;
+    const oldIds = myPrediction.optionIds?.length ? myPrediction.optionIds : [myPrediction.optionId];
+    const oldChance = oldIds.reduce((sum, id) => sum + chanceForOption(bet.chanceSummary, id), 0);
+    return calculatePredictionChangeFee({
+      previousStake: myPrediction.stake,
+      nextStake: stake,
+      revisionCount: myPrediction.revisionCount ?? 0,
+      betCreatedAtMs: bet.createdAt?.toMillis?.(),
+      deadlineMs: bet.deadline?.toMillis?.() ?? null,
+      nowMs: Date.now(),
+      currentChanceOfExistingPick: closest ? undefined : oldChance,
+    });
+  }, [bet, myPrediction, stake, closest]);
   const multiWinner = bet ? supportsMultipleWinners(bet) : false;
   const multiPrediction = bet ? supportsMultipleChoices(bet) : false;
   const canPredict = bet?.status === 'open';
@@ -481,6 +521,35 @@ export function BetDetailPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete bet.');
       setConfirmingDelete(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openSnapshot() {
+    if (!bet) return;
+    const pct: Record<string, number> = {};
+    bet.options.forEach((option) => {
+      const chance = bet.chanceSummary.find((s) => s.optionId === option.id)?.chance ?? 1 / Math.max(1, bet.options.length);
+      pct[option.id] = Math.round(chance * 100);
+    });
+    setSnapshotPct(pct);
+    setSnapshotAt(datetimeLocalValue(new Date()));
+    setSnapshotOpen(true);
+    setError('');
+  }
+
+  async function saveSnapshot() {
+    if (!bet) return;
+    const atMs = snapshotAt ? new Date(snapshotAt).getTime() : Date.now();
+    setBusy(true);
+    setError('');
+    try {
+      await addManualChanceSnapshot(bet, snapshotPct, atMs);
+      setSnapshotOpen(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add snapshot.');
     } finally {
       setBusy(false);
     }
@@ -805,12 +874,17 @@ export function BetDetailPage() {
               <Pencil size={17} /> Edit
             </button>
           ) : null}
+          {canEditBet && !closest ? (
+            <button onClick={openSnapshot} disabled={busy} className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold">
+              <Activity size={17} /> Snapshot
+            </button>
+          ) : null}
           {profile?.isAdmin && bet.status === 'resolved' ? (
             <button onClick={onReopen} disabled={busy} className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-4 py-2 text-sm font-semibold">
               <RotateCcw size={17} /> Reopen
             </button>
           ) : null}
-          {profile?.uid === bet.creatorId && (bet.predictionCount === 0 || bet.status === 'resolved') ? (
+          {profile?.uid === bet.creatorId ? (
             <button onClick={() => setConfirmingDelete(true)} disabled={busy} className="inline-flex items-center gap-2 rounded-md border border-coral/30 bg-white px-4 py-2 text-sm font-semibold text-coral">
               <Trash2 size={17} /> Delete
             </button>
@@ -966,7 +1040,26 @@ export function BetDetailPage() {
                           </div>
                           <p className="mt-0.5 truncate text-xs font-semibold text-ink/55">{predictionDetail(bet, prediction)}</p>
                         </div>
-                        <CoinAmount amount={prediction.stake} className="text-sm" />
+                        {bet.status === 'resolved' ? (
+                          <div className="text-right sm:min-w-28">
+                            <span className={`text-xs font-black ${
+                              prediction.status === 'refunded' ? 'text-ink/45' : prediction.correct ? 'text-mint' : 'text-coral'
+                            }`}>
+                              {prediction.status === 'refunded' ? 'Refunded' : prediction.correct ? 'Won' : 'Lost'}
+                            </span>
+                            <div className="mt-0.5 flex items-center justify-end gap-2">
+                              <CoinAmount amount={prediction.coinDelta ?? 0} className="text-xs" />
+                              {prediction.ratingDelta ? (
+                                <span className={`text-[11px] font-black ${prediction.ratingDelta > 0 ? 'text-mint' : 'text-coral'}`}>
+                                  {prediction.ratingDelta > 0 ? '+' : ''}{prediction.ratingDelta} ELO
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-ink/40">staked <CoinAmount amount={prediction.stake} className="text-[11px]" /></p>
+                          </div>
+                        ) : (
+                          <CoinAmount amount={prediction.stake} className="text-sm" />
+                        )}
                       </div>
                     ))}
                 </div>
@@ -995,7 +1088,7 @@ export function BetDetailPage() {
                     </span>
                   ) : (
                     <span className="inline-flex flex-wrap items-center gap-1">
-                      You picked <strong>{predictionDetail(bet, myPrediction)}</strong> with{' '}
+                      You picked {predictionDetail(bet, myPrediction)} with{' '}
                       <CoinAmount amount={myPrediction.stake} className="text-sm" />
                     </span>
                   )}
@@ -1322,7 +1415,7 @@ export function BetDetailPage() {
                     {myPrediction ? (
                       <div className="mt-1 flex items-center justify-between text-ink/45">
                         <span>Update fee</span>
-                        <CoinAmount amount={Math.max(1, myPrediction.lastChangeFee ?? 3)} className="text-xs" />
+                        <CoinAmount amount={projectedChangeFee} className="text-xs" />
                       </div>
                     ) : null}
                   </div>
@@ -1813,14 +1906,56 @@ export function BetDetailPage() {
         </div>
       ) : null}
 
+      {/* Manual chance snapshot modal */}
+      {snapshotOpen && bet ? (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
+            <h2 className="text-lg font-black">Add a chance snapshot</h2>
+            <p className="mt-1 text-sm text-ink/60">Pin what the chances were at a past moment. The graph eases through it toward the live, crowd-weighted chance.</p>
+            <label className="mt-3 block text-sm font-medium">
+              When
+              <input
+                type="datetime-local"
+                value={snapshotAt}
+                min={datetimeLocalValue(new Date(bet.createdAt.toMillis()))}
+                max={datetimeLocalValue(new Date())}
+                onChange={(e) => setSnapshotAt(e.target.value)}
+                className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2"
+              />
+            </label>
+            <div className="mt-3 space-y-2">
+              {bet.options.map((option) => (
+                <div key={option.id} className="flex items-center gap-3">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{option.label}</span>
+                  <input
+                    type="number" min={0} max={100}
+                    value={snapshotPct[option.id] ?? 0}
+                    onChange={(e) => setSnapshotPct((current) => ({ ...current, [option.id]: Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))) }))}
+                    className="w-20 rounded-md border border-line bg-field px-2 py-1.5 text-right"
+                  />
+                  <span className="text-sm text-ink/45">%</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-ink/45">Values are normalized — they currently total {Object.values(snapshotPct).reduce((sum, value) => sum + (value || 0), 0)}%.</p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setSnapshotOpen(false)} disabled={busy} className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 text-sm font-bold text-ink/70">Cancel</button>
+              <button type="button" onClick={saveSnapshot} disabled={busy} className="btn-special flex-1 rounded-md px-4 py-2.5 text-sm font-bold disabled:opacity-60">{busy ? 'Saving…' : 'Add snapshot'}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Delete confirm modal */}
       {confirmingDelete ? (
         <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/35 px-4 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-soft-enter rounded-md border border-line bg-white p-5 shadow-lift">
             <h2 className="text-lg font-black">Delete this bet?</h2>
             <p className="mt-2 text-sm text-ink/65">
-              The bet will be permanently removed and will no longer appear in any feed.
-              {bet.predictionCount > 0 ? ' Prediction records and any coin/rating changes already applied will remain.' : ''}
+              The bet will be permanently removed.
+              {bet.predictionCount > 0
+                ? ' Everyone who bet is refunded their stake, and any coin/ELO changes from a resolution are reversed.'
+                : ''}
             </p>
             <div className="mt-5 flex gap-2">
               <button type="button" onClick={() => setConfirmingDelete(false)} disabled={busy} className="flex-1 rounded-md border border-line bg-white px-4 py-3 text-sm font-bold text-ink/70">

@@ -45,13 +45,29 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
   // The curve ends exactly at "now" (or the resolve time), so its last point
   // equals the option breakdown rendered on the page.
   const lastMs = Math.max(startMs + 1, naturalEnd);
-  let snapshotIndex = 0;
-  let latestSummary = bet.options.map((option) => ({
-    optionId: option.id,
-    users: 0,
-    coins: 0,
-    chance: 1 / Math.max(1, bet.options.length),
-  }));
+  const neutral = bet.options.map((option) => ({ optionId: option.id, users: 0, coins: 0, chance: 1 / Math.max(1, bet.options.length) }));
+
+  // Anchors the curve passes through: every snapshot (including manual ones), plus a
+  // final anchor at "now" set to the live crowd chance — so manual/old points smoothly
+  // ease toward the people/coins/ELO-weighted chance instead of stepping.
+  const anchors = sortedSnapshots.map((snapshot) => ({ ms: asDate(snapshot.createdAt).getTime(), summary: snapshot.summary }));
+  if (anchors.length > 0 && lastMs > anchors[anchors.length - 1].ms) {
+    anchors.push({ ms: lastMs, summary: bet.chanceSummary });
+  }
+  function interpAt(t: number) {
+    if (anchors.length === 0) return neutral;
+    if (t <= anchors[0].ms) return anchors[0].summary;
+    if (t >= anchors[anchors.length - 1].ms) return anchors[anchors.length - 1].summary;
+    let i = 0;
+    while (i < anchors.length - 1 && anchors[i + 1].ms <= t) i += 1;
+    const a = anchors[i], b = anchors[i + 1];
+    const f = (t - a.ms) / Math.max(1, b.ms - a.ms);
+    return bet.options.map((option) => {
+      const av = a.summary.find((s) => s.optionId === option.id)?.chance ?? 0;
+      const bv = b.summary.find((s) => s.optionId === option.id)?.chance ?? 0;
+      return { optionId: option.id, users: 0, coins: 0, chance: av + (bv - av) * f };
+    });
+  }
 
   const dayTicks: number[] = [];
   for (let d = startMs; d <= lastMs; d += oneDay) dayTicks.push(d);
@@ -63,17 +79,10 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
 
   const data = [];
   for (const t of sampleTimes) {
-    while (
-      snapshotIndex < sortedSnapshots.length &&
-      asDate(sortedSnapshots[snapshotIndex].createdAt).getTime() <= t
-    ) {
-      latestSummary = sortedSnapshots[snapshotIndex].summary;
-      snapshotIndex += 1;
-    }
     const resolved = bet.status === 'resolved' && bet.resolvedAt && asDate(bet.resolvedAt).getTime() <= t;
     const displayed = displayChanceSummary({
       options: bet.options,
-      summary: latestSummary,
+      summary: interpAt(t),
       initialSummary: bet.initialChanceSummary,
       type: bet.type,
       createdAtMs,

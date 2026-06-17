@@ -56,6 +56,11 @@ export interface UserStats {
   chestsOpened?: number;
   challengesCompleted?: number;
   maxBalance?: number;
+  // Lifetime ELO *won* (sum of positive rating gains only — losses never subtract).
+  // This is the currency that unlocks challenge chests.
+  eloWon?: number;
+  // Best single-round multiplier reached across the arcade minigames.
+  bestMinigameMult?: number;
 }
 
 export interface BalanceSnapshot {
@@ -205,6 +210,7 @@ export interface ChanceSnapshot {
   betId: string;
   summary: ChanceOptionSummary[];
   createdAt: Timestamp;
+  manual?: boolean;
 }
 
 export interface BetComment {
@@ -342,7 +348,15 @@ export interface ChestDefinition {
   title: string;
   description: string;
   reward: number;
-  unlocked: boolean;
+  // Cumulative ELO won needed before the chest's challenge can be attempted.
+  eloRequired: number;
+  eloWon: number;
+  // The challenge condition itself.
+  goal: string;
+  current: number;
+  target: number;
+  unlocked: boolean; // eloWon >= eloRequired (attempt is available)
+  completed: boolean; // current >= target (challenge done)
   claimed: boolean;
 }
 

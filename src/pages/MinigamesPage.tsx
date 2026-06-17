@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Plane,
   PlusCircle,
+  CircleDot,
   ShieldCheck,
   Sparkles,
   Target,
@@ -24,6 +25,7 @@ import { MinesGame } from '../components/MinesGame';
 import { NumberGuessGame } from '../components/NumberGuessGame';
 import { PageHeader } from '../components/PageHeader';
 import { PlaneGame } from '../components/PlaneGame';
+import { PlinkoGame } from '../components/PlinkoGame';
 import { RewardChest } from '../components/RewardChest';
 import { useAuth } from '../contexts/AuthContext';
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
@@ -34,6 +36,7 @@ import {
   chargePlaneStake,
   recordMinigameLoss,
   settleCustomMinigameResult,
+  settleMinigameSession,
   claimChest,
   claimDailyForecast,
   getChestDefinitions,
@@ -127,6 +130,30 @@ function signedCoins(amount: number) {
   return amount > 0 ? `+${amount} coins` : amount < 0 ? `${amount} coins` : '0 coins';
 }
 
+function progressPercent(current: number, target: number) {
+  if (target <= 0) return 100;
+  return Math.max(0, Math.min(100, (current / target) * 100));
+}
+
+function compactNumber(value: number) {
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: value < 10 ? 1 : 0 }).format(Math.max(0, value));
+}
+
+type ChestDisplayItem = ChestDefinition & {
+  mystery: boolean;
+  sortBucket: number;
+  closeness: number;
+};
+
+const MIN_VISIBLE_CHESTS = 10;
+const REVEALED_LOCKED_CHEST_PROGRESS = 0.7;
+const MYSTERY_CHEST_PROGRESS = 0.25;
+
+function chestProgressRatio(current: number, target: number) {
+  if (target <= 0) return 1;
+  return Math.max(0, Math.min(1, current / target));
+}
+
 export function MinigamesPage() {
   const { profile } = useAuth();
   const [chests, setChests] = useState<ChestDefinition[]>([]);
@@ -140,6 +167,7 @@ export function MinigamesPage() {
   const [forecastOpen, setForecastOpen] = useState(false);
   const [wheelOpen, setWheelOpen] = useState(false);
   const [chestsOpen, setChestsOpen] = useState(false);
+  const [chestTab, setChestTab] = useState<'active' | 'opened'>('active');
   const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
   const [dailyBonusProgress, setDailyBonusProgress] = useState<any>({
     totalClaimed: 0,
@@ -152,12 +180,56 @@ export function MinigamesPage() {
   const [showPlane, setShowPlane] = useState(false);
   const [showMines, setShowMines] = useState(false);
   const [showGuessing, setShowGuessing] = useState(false);
+  const [showPlinko, setShowPlinko] = useState(false);
   const forecastSheet = useSwipeToDismiss(() => setForecastOpen(false), forecastOpen);
   const chestsSheet = useSwipeToDismiss(() => setChestsOpen(false), chestsOpen);
   const wheelSheet = useSwipeToDismiss(() => setWheelOpen(false), wheelOpen);
   const forecastAvailable = profile ? canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
   const wheelAvailable = profile ? canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
   const openableChests = chests.filter((chest) => chest.unlocked && !chest.claimed).length;
+  const claimableChests = chests.filter((chest) => chest.unlocked && chest.completed && !chest.claimed).length;
+  const visibleChests = useMemo<ChestDisplayItem[]>(() => {
+    const visible: ChestDisplayItem[] = [];
+    const backupMysteries: ChestDisplayItem[] = [];
+
+    chests.forEach((chest) => {
+      const eloRatio = chestProgressRatio(chest.eloWon, chest.eloRequired);
+      const missionRatio = chestProgressRatio(chest.current, chest.target);
+      const bestRatio = Math.max(eloRatio, missionRatio);
+      const reveal = chest.claimed || chest.unlocked || chest.completed || bestRatio >= REVEALED_LOCKED_CHEST_PROGRESS;
+      const mystery = !reveal && bestRatio >= MYSTERY_CHEST_PROGRESS;
+      const sortBucket = chest.claimed
+        ? 5
+        : chest.unlocked && chest.completed
+          ? 0
+          : chest.unlocked
+            ? 1
+            : reveal
+              ? 2
+              : 3;
+      const displayChest = { ...chest, mystery: !reveal, sortBucket, closeness: bestRatio };
+
+      if (reveal || mystery) visible.push(displayChest);
+      else backupMysteries.push(displayChest);
+    });
+
+    const next = visible.length >= MIN_VISIBLE_CHESTS
+      ? visible
+      : [...visible, ...backupMysteries.slice(0, MIN_VISIBLE_CHESTS - visible.length)];
+    return next.sort((left, right) => {
+      const bucketDiff = left.sortBucket - right.sortBucket;
+      if (bucketDiff !== 0) return bucketDiff;
+      if (left.sortBucket === 1 || left.sortBucket === 2 || left.sortBucket === 3) return right.closeness - left.closeness;
+      return left.eloRequired - right.eloRequired || left.reward - right.reward;
+    });
+  }, [chests]);
+  const activeChests = useMemo(() => visibleChests.filter((chest) => !chest.claimed), [visibleChests]);
+  const openedChests = useMemo(() => visibleChests.filter((chest) => chest.claimed), [visibleChests]);
+  const displayedChests = chestTab === 'opened' ? openedChests : activeChests;
+
+  useEffect(() => {
+    if (chestTab === 'opened' && openedChests.length === 0) setChestTab('active');
+  }, [chestTab, openedChests.length]);
 
   useEffect(() => {
     if (!profile) return;
@@ -293,7 +365,7 @@ export function MinigamesPage() {
           </div>
           <p className="hidden text-xs font-semibold text-ink/45 sm:block">High-risk wins can spike ELO. Losses cost a little.</p>
         </div>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <button
             onClick={() => setShowPlane(true)}
             disabled={!profile}
@@ -336,6 +408,21 @@ export function MinigamesPage() {
               <h3 className="text-lg font-black">Number Guessing</h3>
               <p className="mt-1 text-sm leading-5 text-ink/60">Chase the hidden number with higher or lower hints. Beat seven guesses to cash in, or bleed stake if you take too long.</p>
               <span className="mt-3 inline-flex rounded-lg bg-plum px-3 py-1.5 text-xs font-black text-white">Play</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setShowPlinko(true)}
+            disabled={!profile}
+            className="group flex min-h-36 items-center gap-4 rounded-2xl border border-plum/20 bg-gradient-to-br from-plum/15 via-white to-mint/10 p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-plum/45 hover:shadow-lift active:scale-[.99] disabled:opacity-60"
+          >
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-plum to-sky text-white shadow-soft transition group-hover:rotate-6 group-hover:scale-105">
+              <CircleDot size={25} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-black">Plinko Drop</h3>
+              <p className="mt-1 text-sm leading-5 text-ink/60">Drop chips through the board and chase rare edge buckets while the middle trims the stake.</p>
+              <span className="mt-3 inline-flex rounded-lg bg-gradient-to-br from-plum to-sky px-3 py-1.5 text-xs font-black text-white">Play</span>
             </div>
           </button>
         </div>
@@ -432,8 +519,8 @@ export function MinigamesPage() {
             id: 'chests',
             title: 'Chests',
             copy: 'Unlock milestone rewards through bets and challenges.',
-            status: openableChests > 0 ? `${openableChests} to open` : chests.length ? 'No open chests' : 'No chests',
-            statusClass: openableChests > 0 ? 'bg-sky/10 text-sky' : 'bg-field text-ink/45',
+            status: claimableChests > 0 ? `${claimableChests} ready` : openableChests > 0 ? `${openableChests} unlocked` : chests.length ? 'No open chests' : 'No chests',
+            statusClass: claimableChests > 0 ? 'bg-citrus/10 text-citrus' : openableChests > 0 ? 'bg-sky/10 text-sky' : 'bg-field text-ink/45',
             Icon: Gift,
             iconClass: 'bg-sky/10 text-sky',
             action: () => setChestsOpen(true),
@@ -532,16 +619,16 @@ export function MinigamesPage() {
       ) : null}
 
       {chestsOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 sm:grid sm:place-items-center sm:px-4 sm:backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:grid sm:place-items-center sm:p-4 sm:backdrop-blur-sm">
           <div
             {...chestsSheet.sheetProps}
-            className="flex max-h-[88dvh] w-full touch-pan-y flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-lift sm:max-w-2xl sm:rounded-2xl"
+            className="flex max-h-[calc(100dvh_-_1.5rem_-_env(safe-area-inset-bottom))] w-full touch-pan-y flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-lift sm:max-h-[88dvh] sm:max-w-2xl"
           >
             <div className="shrink-0 pt-2 sm:hidden">{chestsSheet.dragHandle}</div>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 pb-4 pt-4 sm:px-5 sm:pt-5">
               <div>
                 <h2 className="text-xl font-black">Reward chests</h2>
-                <p className="mt-1 text-sm text-ink/50">Complete milestones to unlock permanent one-time rewards.</p>
+                <p className="mt-1 text-sm text-ink/50">Earn ELO to unlock attempts, then finish each chest challenge.</p>
               </div>
               <button
                 type="button"
@@ -552,6 +639,35 @@ export function MinigamesPage() {
                 <X size={18} />
               </button>
             </div>
+            <div className="shrink-0 border-b border-line px-4 py-3 sm:px-5">
+              <div className="grid grid-cols-2 rounded-xl bg-field p-1">
+                <button
+                  type="button"
+                  onClick={() => setChestTab('active')}
+                  className={`rounded-lg px-3 py-2 text-xs font-black transition ${
+                    chestTab === 'active'
+                      ? 'bg-white text-ink shadow-soft'
+                      : 'text-ink/45 hover:text-ink/70'
+                  }`}
+                >
+                  Active
+                  <span className="ml-1 text-ink/35">{activeChests.length}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openedChests.length > 0 && setChestTab('opened')}
+                  disabled={openedChests.length === 0}
+                  className={`rounded-lg px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:text-ink/20 ${
+                    chestTab === 'opened'
+                      ? 'bg-white text-ink shadow-soft'
+                      : 'text-ink/45 hover:text-ink/70'
+                  }`}
+                >
+                  Opened
+                  <span className="ml-1 text-ink/35">{openedChests.length}</span>
+                </button>
+              </div>
+            </div>
             <div data-sheet-scroll className="grid min-h-0 gap-3 overflow-y-auto px-4 py-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] sm:grid-cols-2 sm:px-5 sm:pb-5">
               {chests.length === 0 ? (
                 <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
@@ -560,31 +676,82 @@ export function MinigamesPage() {
                     <p className="mt-2 text-sm font-bold text-ink/50">There are no chests right now.</p>
                   </div>
                 </div>
-              ) : chests.map((chest) => {
+              ) : displayedChests.length === 0 ? (
+                <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
+                  <div>
+                    <Gift size={28} className="mx-auto text-ink/25" />
+                    <p className="mt-2 text-sm font-bold text-ink/50">
+                      {chestTab === 'opened' ? 'No opened chests yet.' : 'No active chests right now.'}
+                    </p>
+                  </div>
+                </div>
+              ) : displayedChests.map((chest) => {
                 const opening = busy === `chest-${chest.id}` || openedChestId === chest.id;
+                const eloProgress = progressPercent(chest.eloWon, chest.eloRequired);
+                const challengeProgress = progressPercent(chest.current, chest.target);
+                const canOpen = chest.unlocked && chest.completed && !chest.claimed;
+                const status = chest.mystery ? 'Mystery' : chest.claimed ? 'Opened' : canOpen ? 'Ready' : chest.unlocked ? 'Challenge' : 'Locked';
                 return (
-                  <div key={chest.id} className="rounded-xl border border-line bg-field p-3">
+                  <div
+                    key={chest.id}
+                    className={`rounded-xl border p-3 transition ${
+                      canOpen
+                        ? 'border-citrus/35 bg-citrus/10 shadow-soft'
+                        : chest.claimed
+                          ? 'border-line bg-field opacity-70'
+                          : chest.unlocked
+                            ? 'border-sky/20 bg-sky/5'
+                            : chest.mystery
+                              ? 'border-line bg-[repeating-linear-gradient(135deg,#f7f9f8_0,#f7f9f8_10px,#eef3f1_10px,#eef3f1_20px)]'
+                              : 'border-line bg-field'
+                    }`}
+                  >
                     <div className="flex items-center gap-3">
                       <RewardChest open={opening} className="h-16 w-20 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-bold">{chest.title}</p>
+                          <div className="min-w-0">
+                            <p className="truncate font-bold">{chest.title}</p>
+                            <p className={`mt-0.5 text-2xs font-black uppercase ${canOpen ? 'text-citrus' : chest.unlocked ? 'text-sky' : chest.mystery ? 'text-plum/60' : 'text-ink/35'}`}>
+                              {status}
+                            </p>
+                          </div>
                           <CoinAmount amount={chest.reward} className="shrink-0 text-xs" />
                         </div>
-                        <p className="mt-0.5 text-xs leading-5 text-ink/50">{chest.description}</p>
+                        <p className="mt-0.5 text-xs leading-5 text-ink/50">{chest.mystery ? '????' : chest.description}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-black uppercase text-ink/40">
+                          <span>Unlock ELO</span>
+                          <span>{chest.mystery ? '?? / ??' : `${compactNumber(chest.eloWon)} / ${compactNumber(chest.eloRequired)}`}</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-white">
+                          <div className={`h-full rounded-full transition-all ${chest.mystery ? 'bg-line' : 'bg-sky'}`} style={{ width: `${chest.mystery ? 18 : eloProgress}%` }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-black uppercase text-ink/40">
+                          <span className="truncate">{chest.mystery ? '????' : chest.goal}</span>
+                          <span>{chest.mystery ? '?? / ??' : `${compactNumber(chest.current)} / ${compactNumber(chest.target)}`}</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-white">
+                          <div className={`h-full rounded-full transition-all ${chest.mystery ? 'bg-line' : 'bg-sky'}`} style={{ width: `${chest.mystery ? 18 : challengeProgress}%` }} />
+                        </div>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => openChest(chest.id)}
-                      disabled={!chest.unlocked || chest.claimed || !!busy}
+                      disabled={!canOpen || !!busy}
                       className={`mt-3 w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition disabled:opacity-45 ${
-                        chest.unlocked && !chest.claimed
+                        canOpen
                           ? 'border-sky bg-sky text-white shadow-soft hover:shadow-lift'
                           : 'border-line bg-white text-ink/60'
                       }`}
                     >
-                      {chest.claimed ? 'Opened' : chest.unlocked ? 'Open chest' : 'Locked'}
+                      {chest.mystery ? 'Keep playing' : chest.claimed ? 'Opened' : canOpen ? 'Open chest' : chest.unlocked ? 'Finish challenge' : 'Win more ELO'}
                     </button>
                   </div>
                 );
@@ -751,6 +918,15 @@ export function MinigamesPage() {
           onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'guessing', ...context })}
           onSettleCustom={async (params) => settleCustomMinigameResult(profile, params)}
           onClose={() => setShowGuessing(false)}
+        />
+      ) : null}
+
+      {showPlinko && profile ? (
+        <PlinkoGame
+          coins={profile.coinBalance}
+          stakes={[1, 10, 50, 100, 250, 500]}
+          onSettle={async (coinDelta, ratingDelta, bestMult) => { await settleMinigameSession(profile, { coinDelta, ratingDelta, bestMult, reason: 'Plinko' }); }}
+          onClose={() => setShowPlinko(false)}
         />
       ) : null}
     </>

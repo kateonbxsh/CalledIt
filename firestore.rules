@@ -319,7 +319,8 @@ service cloud.firestore {
             'customOptionLabel'
           ])
       );
-      allow delete: if false;
+      // The bet owner can delete predictions (used when deleting/refunding a bet).
+      allow delete: if isBetOwnerById(resource.data.betId);
     }
 
     match /users/{userId}/notificationTokens/{tokenId} {

@@ -30,14 +30,12 @@ export function ProfilePage() {
     }).finally(() => setLoading(false));
   }, [uid]);
 
+  // Use the authoritative all-time max from the user's stats (the balance history
+  // is capped, so its max isn't reliable); fall back to the current balance.
   const maximumBalance = useMemo(() => {
     if (!user) return 0;
-    return Math.max(
-      user.coinBalance,
-      user.stats.maxBalance ?? 0,
-      ...history.map((snapshot) => snapshot.balance),
-    );
-  }, [history, user]);
+    return Math.max(user.coinBalance, user.stats.maxBalance ?? 0);
+  }, [user]);
 
   if (loading) return <PageHeader title="Profile" description="Loading profile..." back />;
   if (!user) return <PageHeader title="Profile" description="This profile could not be found." back />;

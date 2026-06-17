@@ -9,8 +9,12 @@ const V0 = 480;
 const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 360, MAXVY = 260;
 const ANGLE_MIN = 20, ANGLE_MAX = 80;
 const CAM_OFF = 0.22;
-const MULT_K = 0.936, MULT_SCALE = 500, STAR_MULT = 0.14;
+// Multiplier ACCELERATES with distance (convex), because the farther you fly the
+// riskier the landing — a base-linear part plus a power term that ramps up far out.
+const MULT_SCALE = 600, MULT_LIN = 0.5, MULT_CURVE = 0.16, MULT_POW = 1.6, STAR_MULT = 0.14;
 const STAR_BOOST = 230, MISSILE_PUSH = 230, MISSILE_MULT_PENALTY = 0.015, FIRST_BOAT = 340;
+// Rare rainbow star: bigger lift, a speed burst, and a short missile-immunity window.
+const RAINBOW_CHANCE = 0.08, RAINBOW_LIFT = 430, RAINBOW_SPEED = 1.5, BUFF_DURATION = 3.6;
 
 const ASSET = (name: string) => `${import.meta.env.BASE_URL}plane-game/assets/${name}`;
 const ASSETS = {
@@ -25,7 +29,7 @@ type Result = { won: boolean; payout: number; mult: number; stars: number; ratin
 interface Plane { wx: number; y: number; vx: number; vy: number; w: number; h: number; frame: number; frameT: number; ang: number; }
 interface Boat { wx: number; w: number; h: number; deckFrac: number; img: HTMLImageElement; }
 interface Missile { wx: number; y: number; w: number; vx: number; hit: boolean; }
-interface Star { wx: number; y: number; w: number; t: number; got: boolean; }
+interface Star { wx: number; y: number; w: number; t: number; got: boolean; rainbow?: boolean; }
 interface Puff { x: number; y: number; t: number; life: number; s: number; }
 interface Pop { x: number; y: number; vx: number; vy: number; life: number; t: number; color: string; r: number; }
 
@@ -90,7 +94,7 @@ export function PlaneGame({
     window.addEventListener('resize', resize);
 
     let st: Phase = 'aim';
-    let mult = 1, starCount = 0, missilePenalty = 0, camX = 0;
+    let mult = 1, starCount = 0, missilePenalty = 0, camX = 0, buffT = 0;
     const plane: Plane = { wx: 0, y: 0, vx: 0, vy: 0, w: 80, h: 66, frame: 0, frameT: 0, ang: 0 };
     let boats: Boat[] = [], missiles: Missile[] = [], stars: Star[] = [], puffs: Puff[] = [], pops: Pop[] = [];
     let nextStarX = 0, nextMissileX = 0, nextBoatX = 0, landBoat: Boat | null = null;
@@ -107,10 +111,10 @@ export function PlaneGame({
 
     const sx = (wx: number) => wx - camX;
     const deckY = (b: Boat) => (waterLine - b.h * 0.62) + b.h * b.deckFrac;
-    const curMult = () => Math.max(
-      1,
-      1 + MULT_K * Math.log(1 + Math.max(0, plane.wx - launchX) / MULT_SCALE) + starCount * STAR_MULT - missilePenalty,
-    );
+    const curMult = () => {
+      const u = Math.max(0, plane.wx - launchX) / MULT_SCALE;
+      return Math.max(1, 1 + MULT_LIN * u + MULT_CURVE * Math.pow(u, MULT_POW) + starCount * STAR_MULT - missilePenalty);
+    };
 
     function stepGlide(o: { wx: number; y: number; vx: number; vy: number }, dt: number) {
       o.vy += GRAV * dt; o.vy *= Math.max(0, 1 - VDRAG * dt); o.vy = Math.min(MAXVY, o.vy);
@@ -122,7 +126,7 @@ export function PlaneGame({
     }
     function spawnAhead() {
       const front = camX + W * 1.9;
-      while (nextStarX < front) { stars.push({ wx: nextStarX, y: H * 0.14 + Math.random() * (waterLine - H * 0.14 - 120), w: 38, t: Math.random() * 6, got: false }); nextStarX += 150 + Math.random() * 150; }
+      while (nextStarX < front) { const rainbow = Math.random() < RAINBOW_CHANCE; stars.push({ wx: nextStarX, y: H * 0.14 + Math.random() * (waterLine - H * 0.14 - 120), w: rainbow ? 48 : 38, t: Math.random() * 6, got: false, rainbow }); nextStarX += 150 + Math.random() * 150; }
       while (nextMissileX < front) { missiles.push({ wx: nextMissileX, y: H * 0.14 + Math.random() * (waterLine - H * 0.14 - 70), w: 58, vx: -(70 + Math.random() * 120), hit: false }); nextMissileX += 130 + Math.random() * 150; }
       while (nextBoatX < front) {
         const r = Math.random();
@@ -136,12 +140,12 @@ export function PlaneGame({
 
     function toAim() {
       st = 'aim'; setPhase('aim');
-      plane.wx = launchX; plane.y = launchY; plane.vx = 0; plane.vy = 0; plane.ang = 0; mult = 1; starCount = 0; missilePenalty = 0;
+      plane.wx = launchX; plane.y = launchY; plane.vx = 0; plane.vy = 0; plane.ang = 0; mult = 1; starCount = 0; missilePenalty = 0; buffT = 0;
       boats = []; missiles = []; stars = []; puffs = []; pops = []; landBoat = null;
       camX = launchX - W * CAM_OFF;
     }
     function launch() {
-      mult = 1; starCount = 0; missilePenalty = 0;
+      mult = 1; starCount = 0; missilePenalty = 0; buffT = 0;
       plane.wx = launchX; plane.y = launchY; plane.ang = 0;
       const a = angleRef.current * Math.PI / 180; plane.vx = V0 * Math.cos(a); plane.vy = -V0 * Math.sin(a);
       boats = []; missiles = []; stars = []; puffs = []; pops = []; landBoat = null;
@@ -189,13 +193,32 @@ export function PlaneGame({
         stars = stars.filter((s) => s.wx > camX - 80 && !s.got);
         boats = boats.filter((b) => b.wx + b.w > camX - 40);
 
+        if (buffT > 0) { const prev = buffT; buffT = Math.max(0, buffT - dt); if (prev > 0 && buffT === 0) plane.vx /= RAINBOW_SPEED; } // restore normal speed when the buff ends
+
         const pr = plane.h * 0.40;
         for (const s of stars) { if (s.got) continue; if (Math.hypot(plane.wx - s.wx, plane.y - s.y) < pr + s.w * 0.45) {
-          s.got = true; starCount++; mult = curMult(); plane.vy -= STAR_BOOST; if (plane.vy < -V0) plane.vy = -V0;
-          spawnPops(sx(s.wx), s.y, '#ffd23f', 10); beep(990, .1, 'triangle', .05); } }
+          s.got = true;
+          if (s.rainbow) {
+            starCount += 2; mult = curMult();
+            plane.vy -= RAINBOW_LIFT; if (plane.vy < -V0 * 1.35) plane.vy = -V0 * 1.35;
+            if (buffT <= 0) plane.vx *= RAINBOW_SPEED; // apply the speed burst once (no stacking)
+            buffT = BUFF_DURATION;     // brief missile immunity
+            spawnPops(sx(s.wx), s.y, '#ff5db8', 8); spawnPops(sx(s.wx), s.y, '#5db8ff', 8); spawnPops(sx(s.wx), s.y, '#ffd23f', 8);
+            beep(660, .1, 'triangle', .06); setTimeout(() => beep(880, .1, 'triangle', .06), 70); setTimeout(() => beep(1175, .16, 'triangle', .06), 145);
+          } else {
+            starCount++; mult = curMult(); plane.vy -= STAR_BOOST; if (plane.vy < -V0) plane.vy = -V0;
+            spawnPops(sx(s.wx), s.y, '#ffd23f', 10); beep(990, .1, 'triangle', .05);
+          }
+        } }
         for (const m of missiles) { if (m.hit) continue; if (Math.hypot(plane.wx - m.wx, plane.y - m.y) < pr + m.w * 0.34) {
-          m.hit = true; missilePenalty += MISSILE_MULT_PENALTY; mult = curMult(); plane.vy += MISSILE_PUSH;
-          spawnPops(sx(m.wx), m.y, '#d8534f', 8); beep(300, .12, 'square', .05); } }
+          m.hit = true;
+          if (buffT > 0) { // immune — blast the missile away
+            spawnPops(sx(m.wx), m.y, '#7cffcb', 10); beep(720, .07, 'triangle', .045);
+          } else {
+            missilePenalty += MISSILE_MULT_PENALTY; mult = curMult(); plane.vy += MISSILE_PUSH;
+            spawnPops(sx(m.wx), m.y, '#d8534f', 8); beep(300, .12, 'square', .05);
+          }
+        } }
         missiles = missiles.filter((m) => !m.hit);
 
         const bottom = plane.y + plane.h * 0.34;
@@ -243,15 +266,32 @@ export function PlaneGame({
         ctx.fillStyle = '#f2c879'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('DECK', x + b.w / 2, dy - 19); ctx.restore(); }
     }
     function drawStars() { for (const s of stars) { if (s.got) continue; const x = sx(s.wx); if (x < -40 || x > W + 40) continue;
-      const bob = Math.sin(s.t * 3) * 4, sc = 1 + Math.sin(s.t * 5) * 0.06;
-      if (IMG.star.width) ctx.drawImage(IMG.star, x - s.w * sc / 2, s.y + bob - s.w * sc / 2, s.w * sc, s.w * sc); } }
+      const bob = Math.sin(s.t * 3) * 4, sc = 1 + Math.sin(s.t * 5) * (s.rainbow ? 0.14 : 0.06);
+      if (!IMG.star.width) continue;
+      if (s.rainbow) {
+        ctx.save();
+        ctx.filter = `hue-rotate(${Math.round(s.t * 220) % 360}deg) saturate(2.4)`;
+        ctx.shadowColor = 'rgba(255,255,255,0.8)'; ctx.shadowBlur = 14;
+        ctx.drawImage(IMG.star, x - s.w * sc / 2, s.y + bob - s.w * sc / 2, s.w * sc, s.w * sc);
+        ctx.restore();
+      } else {
+        ctx.drawImage(IMG.star, x - s.w * sc / 2, s.y + bob - s.w * sc / 2, s.w * sc, s.w * sc);
+      }
+    } }
     function drawMissiles() { for (const m of missiles) { const x = sx(m.wx); if (x < -60 || x > W + 60) continue;
       const mw = m.w, mh = m.w * 0.5; if (IMG.missile.width) ctx.drawImage(IMG.missile, x - mw / 2, m.y - mh / 2, mw, mh); } }
     function drawPuffs() { for (const p of puffs) { ctx.globalAlpha = (1 - p.t / p.life) * 0.5; if (IMG.puff.width) ctx.drawImage(IMG.puff, p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); } ctx.globalAlpha = 1; }
     function drawPops() { for (const p of pops) { ctx.globalAlpha = Math.max(0, 1 - p.t / p.life); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.28); ctx.fill(); } ctx.globalAlpha = 1; }
     function drawPlane() {
       const f = IMG['plane' + (plane.frame + 1)]; ctx.save(); ctx.translate(sx(plane.wx), plane.y); ctx.rotate(plane.ang);
-      if (f && f.width) ctx.drawImage(f, -plane.w / 2, -plane.h / 2, plane.w, plane.h); ctx.restore();
+      if (buffT > 0) {
+        // colorful, glowing plane while the rainbow buff is active
+        const hue = Math.round(performance.now() / 4) % 360;
+        ctx.shadowColor = `hsl(${hue},100%,60%)`; ctx.shadowBlur = 22;
+        ctx.filter = `hue-rotate(${hue}deg) saturate(2.2) brightness(1.15)`;
+      }
+      if (f && f.width) ctx.drawImage(f, -plane.w / 2, -plane.h / 2, plane.w, plane.h);
+      ctx.restore();
     }
     function drawAim() {
       const a = angleRef.current * Math.PI / 180;

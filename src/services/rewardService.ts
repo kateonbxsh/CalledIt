@@ -225,50 +225,144 @@ export function weeklyChallengesForUser(user: UserProfile, weekKey = currentWeek
     if (filler > 80) break;
   }
 
-  return [...picked.values()].slice(0, 10).map((challenge) => ({
-    ...challenge,
-    reward: challenge.reward * REWARD_MULTIPLIER,
-    chestReward: challenge.chestReward * REWARD_MULTIPLIER,
-  }));
+  return [...picked.values()].slice(0, 10).map((challenge) => {
+    const boostedReward = Math.ceil(((challenge.reward + challenge.chestReward) * 1.35) / 5) * 5;
+    return {
+      ...challenge,
+      reward: boostedReward * REWARD_MULTIPLIER,
+      chestReward: 0,
+    };
+  });
 }
 
-export const chestCatalog = [
-  {
-    id: 'getting-warm',
-    title: 'Getting Warm',
-    description: 'Resolve 3 predictions.',
-    reward: 100,
-    unlocked: (user: UserProfile) => user.stats.totalBets >= 3,
-  },
-  {
-    id: 'upset-artist',
-    title: 'Upset Artist',
-    description: 'Win an upset worth at least 60%.',
-    reward: 160,
-    unlocked: (user: UserProfile) => user.stats.bestUpsetWin >= 60,
-  },
-  {
-    id: 'steady-caller',
-    title: 'Steady Caller',
-    description: 'Win 5 predictions with at least 50% accuracy.',
-    reward: 220,
-    unlocked: (user: UserProfile) => user.stats.wins >= 5 && user.stats.accuracy >= 50,
-  },
-  {
-    id: 'challenge-sampler',
-    title: 'Challenge Sampler',
-    description: 'Complete 3 real-life challenges.',
-    reward: 180,
-    unlocked: (user: UserProfile) => (user.stats.challengesCompleted ?? 0) >= 3,
-  },
-  {
-    id: 'challenge-menace',
-    title: 'Challenge Menace',
-    description: 'Complete 10 real-life challenges.',
-    reward: 350,
-    unlocked: (user: UserProfile) => (user.stats.challengesCompleted ?? 0) >= 10,
-  },
-] as const;
+// A challenge chest: locked behind a cumulative-ELO-won gate (the attempt only
+// opens once you've *earned* that much ELO — losses never count), then claimable
+// when the challenge condition is met.
+export interface ChestSpec {
+  id: string;
+  title: string;
+  description: string;
+  reward: number; // pre-REWARD_MULTIPLIER
+  eloRequired: number;
+  goal: string;
+  target: number;
+  metric: (stats: UserProfile['stats']) => number;
+}
+
+function buildChestFamily(opts: {
+  prefix: string;
+  name: string;
+  metric: (stats: UserProfile['stats']) => number;
+  goal: (target: number) => string;
+  describe: (target: number) => string;
+  targets: number[];
+  eloBase: number;
+  eloStep: number;
+  rewardBase: number;
+  rewardStep: number;
+}): ChestSpec[] {
+  const hardStart = Math.max(3, Math.floor(opts.targets.length * 0.45));
+  return opts.targets.map((target, i) => {
+    const linearReward = opts.rewardBase + opts.rewardStep * i;
+    const hardTier = Math.max(0, i - hardStart + 1);
+    const hardMultiplier = hardTier > 0 ? 1 + (Math.pow(1.28, hardTier) - 1) * 1.15 : 1;
+    return {
+      id: `${opts.prefix}-${i + 1}`,
+      title: `${opts.name} ${i + 1}`,
+      description: opts.describe(target),
+      reward: Math.ceil((linearReward * hardMultiplier) / 50) * 50,
+      eloRequired: opts.eloBase + opts.eloStep * i,
+      goal: opts.goal(target),
+      target,
+      metric: opts.metric,
+    };
+  });
+}
+
+// ~100 chests across themed families. Each family escalates both the ELO needed to
+// unlock the attempt and the reward. Big-coin payouts (doubled by REWARD_MULTIPLIER).
+export const chestCatalog: ChestSpec[] = [
+  ...buildChestFamily({
+    prefix: 'upset', name: 'Upset Vault',
+    metric: (s) => s.bestUpsetWin,
+    goal: (t) => `Best upset ≥ ${t}%`,
+    describe: (t) => `Win a prediction where your pick had ≤ ${100 - t}% chance.`,
+    targets: [60, 65, 70, 74, 78, 82, 85, 88, 90, 92, 94, 96, 98],
+    eloBase: 60, eloStep: 130, rewardBase: 600, rewardStep: 450,
+  }),
+  ...buildChestFamily({
+    prefix: 'treasury', name: 'Treasury',
+    metric: (s) => s.maxBalance ?? 0,
+    goal: (t) => `Reach ${t.toLocaleString()} coins`,
+    describe: (t) => `Grow your balance to an all-time high of ${t.toLocaleString()} coins.`,
+    targets: [5000, 10000, 20000, 35000, 55000, 85000, 130000, 200000, 320000, 500000, 800000, 1250000],
+    eloBase: 80, eloStep: 150, rewardBase: 800, rewardStep: 700,
+  }),
+  ...buildChestFamily({
+    prefix: 'oracle', name: 'Oracle',
+    metric: (s) => s.wins,
+    goal: (t) => `Win ${t} predictions`,
+    describe: (t) => `Win a lifetime total of ${t} predictions.`,
+    targets: [25, 45, 70, 100, 140, 190, 260, 360, 500, 700, 1000],
+    eloBase: 70, eloStep: 140, rewardBase: 700, rewardStep: 600,
+  }),
+  ...buildChestFamily({
+    prefix: 'sharp', name: 'Sharpshooter',
+    metric: (s) => s.accuracy,
+    goal: (t) => `Hit ${t}% accuracy`,
+    describe: (t) => `Reach a lifetime prediction accuracy of ${t}%.`,
+    targets: [55, 58, 61, 64, 67, 70, 73, 76, 80, 85],
+    eloBase: 120, eloStep: 170, rewardBase: 900, rewardStep: 650,
+  }),
+  ...buildChestFamily({
+    prefix: 'marathon', name: 'Marathon',
+    metric: (s) => s.totalBets,
+    goal: (t) => `Resolve ${t} predictions`,
+    describe: (t) => `Resolve a lifetime total of ${t} predictions.`,
+    targets: [30, 60, 100, 160, 250, 400, 600, 900, 1300, 1800],
+    eloBase: 50, eloStep: 130, rewardBase: 600, rewardStep: 500,
+  }),
+  ...buildChestFamily({
+    prefix: 'arcade', name: 'Arcade Legend',
+    metric: (s) => s.bestMinigameMult ?? 0,
+    goal: (t) => `${t}× in a minigame`,
+    describe: (t) => `Cash out a single arcade round at a ${t}× multiplier or higher.`,
+    targets: [3, 5, 7, 10, 14, 18, 24, 30, 40, 55, 75, 100],
+    eloBase: 60, eloStep: 135, rewardBase: 750, rewardStep: 700,
+  }),
+  ...buildChestFamily({
+    prefix: 'daredevil', name: 'Daredevil',
+    metric: (s) => s.challengesCompleted ?? 0,
+    goal: (t) => `Complete ${t} challenges`,
+    describe: (t) => `Complete ${t} real-life challenges or wagers.`,
+    targets: [3, 6, 10, 15, 22, 30, 45, 60],
+    eloBase: 90, eloStep: 160, rewardBase: 800, rewardStep: 700,
+  }),
+  ...buildChestFamily({
+    prefix: 'collector', name: 'Collector',
+    metric: (s) => s.chestsOpened ?? 0,
+    goal: (t) => `Open ${t} chests`,
+    describe: (t) => `Open ${t} chests in total.`,
+    targets: [5, 10, 18, 28, 40, 55, 75, 100],
+    eloBase: 100, eloStep: 180, rewardBase: 1000, rewardStep: 900,
+  }),
+  ...buildChestFamily({
+    prefix: 'grandmaster', name: 'Grandmaster',
+    metric: (s) => s.eloWon ?? 0,
+    goal: (t) => `Earn ${t.toLocaleString()} ELO`,
+    describe: (t) => `Win a lifetime total of ${t.toLocaleString()} ELO.`,
+    targets: [300, 600, 1000, 1750, 2750, 4000, 6000, 9000, 13000, 18000],
+    eloBase: 250, eloStep: 0, rewardBase: 1200, rewardStep: 1100,
+  }),
+  ...buildChestFamily({
+    prefix: 'highroller', name: 'High Roller',
+    metric: (s) => s.coinsWon,
+    goal: (t) => `Win ${t.toLocaleString()} coins`,
+    describe: (t) => `Win a lifetime total of ${t.toLocaleString()} coins from predictions.`,
+    targets: [5000, 15000, 40000, 80000, 150000, 300000],
+    eloBase: 120, eloStep: 200, rewardBase: 1100, rewardStep: 1000,
+  }),
+];
 
 function dayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
@@ -359,29 +453,44 @@ export async function claimDailyForecast(user: UserProfile, mode: DailyForecastM
 
 export async function getChestDefinitions(user: UserProfile): Promise<ChestDefinition[]> {
   return readThroughCache(`rewards:chests:${user.uid}`, 20_000, async () => {
-    const snap = await getDocs(query(collection(db, 'rewardClaims'), where('userId', '==', user.uid), limit(100)));
+    const snap = await getDocs(query(
+      collection(db, 'rewardClaims'),
+      where('userId', '==', user.uid),
+      where('type', '==', 'chest'),
+      limit(150),
+    ));
     const claimed = new Set(
       snap.docs
         .map((item) => ({ id: item.id, ...item.data() }) as RewardClaim)
-        .filter((claim) => claim.type === 'chest')
         .map((claim) => claim.id.replace(`${user.uid}_chest_`, '')),
     );
 
-    return chestCatalog.map((chest) => ({
-      id: chest.id,
-      title: chest.title,
-      description: chest.description,
-      reward: chest.reward * REWARD_MULTIPLIER,
-      unlocked: chest.unlocked(user),
-      claimed: claimed.has(chest.id),
-    }));
+    const eloWon = user.stats.eloWon ?? 0;
+    return chestCatalog.map((chest) => {
+      const current = chest.metric(user.stats);
+      return {
+        id: chest.id,
+        title: chest.title,
+        description: chest.description,
+        reward: chest.reward * REWARD_MULTIPLIER,
+        eloRequired: chest.eloRequired,
+        eloWon,
+        goal: chest.goal,
+        current,
+        target: chest.target,
+        unlocked: eloWon >= chest.eloRequired,
+        completed: current >= chest.target,
+        claimed: claimed.has(chest.id),
+      };
+    });
   });
 }
 
 export async function claimChest(user: UserProfile, chestId: string) {
   const chest = chestCatalog.find((item) => item.id === chestId);
   if (!chest) throw new Error('Chest not found.');
-  if (!chest.unlocked(user)) throw new Error('Chest is still locked.');
+  if ((user.stats.eloWon ?? 0) < chest.eloRequired) throw new Error('Win more ELO to unlock this chest.');
+  if (chest.metric(user.stats) < chest.target) throw new Error('Challenge not completed yet.');
 
   const amount = chest.reward * REWARD_MULTIPLIER;
   const userRef = doc(db, 'users', user.uid);
@@ -394,6 +503,8 @@ export async function claimChest(user: UserProfile, chestId: string) {
     if (claimSnap.exists()) throw new Error('Chest already opened.');
     const current = userSnap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
+    if ((current.stats.eloWon ?? 0) < chest.eloRequired) throw new Error('Win more ELO to unlock this chest.');
+    if (chest.metric(current.stats) < chest.target) throw new Error('Challenge not completed yet.');
     transaction.set(claimRef, {
       userId: user.uid,
       username: user.username,
@@ -462,7 +573,7 @@ export interface MinigameWinResult {
 }
 
 export type MinigameOutcomeContext = {
-  game: 'mines' | 'plane' | 'guessing';
+  game: 'mines' | 'plane' | 'guessing' | 'plinko';
   stake: number;
   payout?: number;
   riskLevel?: number;
@@ -610,6 +721,7 @@ export async function awardMinigameWin(
   const payout = Math.max(0, Math.round(amount));
   if (payout === 0) return { payout: 0, ratingDelta: 0 };
   const ratingDelta = minigameWinDelta({ ...context, payout });
+  const mult = context.stake > 0 ? payout / context.stake : 0;
   const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
   const userRef = doc(db, 'users', user.uid);
   let committedRating = user.rating + ratingDelta;
@@ -623,6 +735,11 @@ export async function awardMinigameWin(
     committedBalance = current.coinBalance + payout;
     setBalanceInTransaction(transaction, userRef, current, current.coinBalance + payout, 'Minigame payout', {
       ...(ratingDelta > 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
+      stats: {
+        ...current.stats,
+        eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
+        bestMinigameMult: Math.max(current.stats.bestMinigameMult ?? 0, mult),
+      },
     });
   });
   if (ratingDelta !== 0) {
@@ -666,7 +783,13 @@ export async function settleCustomMinigameResult(
       current,
       nextBalance,
       params.reason ?? 'Minigame result',
-      ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {},
+      {
+        ...(ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
+        stats: {
+          ...current.stats,
+          eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
+        },
+      },
       false,
     );
     if (historyDelta !== 0) {
@@ -685,6 +808,64 @@ export async function settleCustomMinigameResult(
     await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
   }
   return { payout, ratingDelta };
+}
+
+// Batched settlement for fast arcade games (Plinko): the client accumulates the
+// net coin + ELO swing across many drops and flushes it in ONE transaction +
+// ONE balance-history entry, instead of reading/writing per chip.
+export async function settleMinigameSession(
+  user: UserProfile,
+  params: { coinDelta: number; ratingDelta?: number; reason?: string; bestMult?: number },
+): Promise<MinigameWinResult> {
+  const coinDelta = Math.round(params.coinDelta);
+  const ratingDelta = Math.round(params.ratingDelta ?? 0);
+  const bestMult = Math.max(0, params.bestMult ?? 0);
+  if (coinDelta === 0 && ratingDelta === 0 && bestMult === 0) return { payout: 0, ratingDelta: 0 };
+
+  const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
+  const userRef = doc(db, 'users', user.uid);
+  let committedRating = Math.max(0, user.rating + ratingDelta);
+  let committedBalance = Math.max(0, user.coinBalance + coinDelta);
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+    const current = snap.data() as UserProfile | undefined;
+    if (!current) throw new Error('Profile not found.');
+    const nextRating = Math.max(0, current.rating + ratingDelta);
+    const nextBalance = Math.max(0, current.coinBalance + coinDelta);
+    committedRating = nextRating;
+    committedBalance = nextBalance;
+    setBalanceInTransaction(
+      transaction,
+      userRef,
+      current,
+      nextBalance,
+      params.reason ?? 'Plinko session',
+      {
+        ...(ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
+        stats: {
+          ...current.stats,
+          eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
+          bestMinigameMult: Math.max(current.stats.bestMinigameMult ?? 0, bestMult),
+        },
+      },
+      false,
+    );
+    if (coinDelta !== 0) {
+      transaction.set(doc(collection(userRef, 'balanceHistory')), {
+        userId: user.uid,
+        balance: Math.max(0, Math.round(nextBalance)),
+        delta: coinDelta,
+        reason: params.reason ?? 'Plinko session',
+        createdAt: serverTimestamp(),
+      });
+    }
+  });
+
+  if (ratingDelta !== 0) {
+    invalidateQueryCache('users:leaderboard');
+    await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
+  }
+  return { payout: Math.max(0, coinDelta), ratingDelta };
 }
 
 export async function chargePlaneStake(user: UserProfile, stake: number) {
@@ -1038,6 +1219,10 @@ export async function updateWagerChallenge(params: {
   body?: string;
   stake: number;
   deadline: Date;
+  visibility: BetVisibility;
+  groupId?: string;
+  groups?: FriendGroup[];
+  invitedUsernames?: string[];
 }) {
   const { challenge, user, title, body, stake: nextStake, deadline } = params;
   if (challenge.type !== 'wager' || challenge.status !== 'open') throw new Error('Only open wagers can be edited.');
@@ -1054,6 +1239,10 @@ export async function updateWagerChallenge(params: {
   const deadlineChanged = !currentDeadline || Math.abs(currentDeadline.getTime() - deadline.getTime()) > 60 * 1000;
   if (deadlineChanged && deadline.getTime() < Date.now() + 7 * 24 * 60 * 60 * 1000) {
     throw new Error('A new wager deadline must be at least one week away.');
+  }
+  const audience = challengeAudience(params);
+  if (audience.visibility === 'private' && !audience.groupId && audience.invitedUsernames.length === 0) {
+    throw new Error('Invite at least one user for a private wager.');
   }
 
   const bonus = Math.max(5, Math.round(nextStake * 0.2)) * REWARD_MULTIPLIER;
@@ -1085,6 +1274,9 @@ export async function updateWagerChallenge(params: {
       stake: nextStake,
       bonus,
       deadline: Timestamp.fromDate(deadline),
+      visibility: audience.visibility,
+      invitedUsernames: audience.invitedUsernames,
+      groupId: audience.groupId,
       updatedAt: serverTimestamp(),
     });
   });

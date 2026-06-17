@@ -23,6 +23,7 @@ import type {
   CommentReplyPreview,
   BetOption,
   BetResolution,
+  ChanceOptionSummary,
   ChanceSnapshot,
   CreateBetInput,
   Prediction,
@@ -320,6 +321,31 @@ export async function listChanceSnapshots(betId: string) {
   return snap.docs
     .map((item) => ({ id: item.id, ...item.data() }) as ChanceSnapshot)
     .sort((left, right) => left.createdAt.toMillis() - right.createdAt.toMillis());
+}
+
+// The bet owner can pin an explicit chance reading at a past moment. It is stored
+// like any snapshot, so the chart smoothly interpolates through it toward the
+// current crowd chance instead of jumping.
+export async function addManualChanceSnapshot(
+  bet: Bet,
+  chanceByOptionId: Record<string, number>,
+  atMs: number,
+) {
+  const raw = bet.options.map((option) => ({ optionId: option.id, value: Math.max(0, chanceByOptionId[option.id] ?? 0) }));
+  const total = raw.reduce((sum, item) => sum + item.value, 0) || 1;
+  const summary: ChanceOptionSummary[] = raw.map((item) => ({
+    optionId: item.optionId,
+    users: 0,
+    coins: 0,
+    chance: item.value / total,
+  }));
+  const clampedMs = Math.min(Date.now(), Math.max(bet.createdAt.toMillis(), atMs));
+  await addDoc(collection(db, 'chanceSnapshots'), {
+    betId: bet.id,
+    summary,
+    manual: true,
+    createdAt: Timestamp.fromMillis(clampedMs),
+  });
 }
 
 export async function listCommentsForBet(betId: string) {
@@ -1006,6 +1032,7 @@ export async function resolveBet(bet: Bet, resolution: BetResolution, resolverUi
           correct: outcome.correct,
           coinsDelta: outcome.netCoinDelta,
           chosenChance: prediction.displayedChanceAtBetTime,
+          ratingDelta: outcome.ratingDelta,
         }),
       });
 
@@ -1148,6 +1175,7 @@ export async function amendBetResolution(bet: Bet, newResolution: BetResolution,
                 correct: outcome.correct,
                 coinsDelta: outcome.netCoinDelta,
                 chosenChance: prediction.displayedChanceAtBetTime,
+                ratingDelta: outcome.ratingDelta,
               }),
               finalPending: outcome.correct ? [] : restoredPending,
               status: (outcome.correct ? 'won' : 'lost') as 'won' | 'lost',

@@ -34,6 +34,8 @@ export const emptyStats: UserStats = {
   chestsOpened: 0,
   challengesCompleted: 0,
   maxBalance: 1000,
+  eloWon: 0,
+  bestMinigameMult: 0,
 };
 
 export async function createProfile(params: {
@@ -216,6 +218,7 @@ export function buildStatsAfterResolution(params: {
   correct: boolean;
   coinsDelta: number;
   chosenChance: number;
+  ratingDelta?: number;
 }) {
   const wins = params.stats.wins + (params.correct ? 1 : 0);
   const losses = params.stats.losses + (params.correct ? 0 : 1);
@@ -231,6 +234,8 @@ export function buildStatsAfterResolution(params: {
       : params.stats.bestUpsetWin,
     coinsWon: params.stats.coinsWon + Math.max(0, params.coinsDelta),
     coinsLost: params.stats.coinsLost + Math.max(0, -params.coinsDelta),
+    // Lifetime ELO won only ever grows (losses never subtract).
+    eloWon: (params.stats.eloWon ?? 0) + Math.max(0, Math.round(params.ratingDelta ?? 0)),
   };
 }
 

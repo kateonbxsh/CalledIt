@@ -135,6 +135,11 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
               {groupPhotoURL ? <img src={groupPhotoURL} alt="" className="h-4 w-4 rounded-full object-cover" /> : <Users size={11} className="ml-0.5" />}
               <span className="truncate">{groupName ?? 'Group'}</span>
             </span>
+          ) : bet.visibility === 'private' ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-field py-1 pl-2 pr-2.5 text-[11px] font-semibold text-ink/45">
+              <Lock size={11} className="shrink-0" />
+              <span className="truncate">{[bet.creatorUsername, ...(bet.invitedUsernames ?? [])].map((u) => `@${u}`).join(', ')}</span>
+            </span>
           ) : null}
           {prediction ? (
             <span className="ml-auto inline-flex items-center gap-1 font-semibold text-mint">
@@ -142,19 +147,6 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
             </span>
           ) : null}
         </div>
-        {bet.visibility === 'private' && !bet.groupId ? (
-          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold">
-            {(bet.invitedUsernames ?? []).slice(0, 4).map((username) => (
-              <span key={username} className="rounded-full bg-field px-2 py-1 text-ink/50">@{username}</span>
-            ))}
-            {(bet.invitedUsernames?.length ?? 0) > 4 ? (
-              <span className="rounded-full bg-field px-2 py-1 text-ink/45">+{(bet.invitedUsernames?.length ?? 0) - 4} invited</span>
-            ) : null}
-            {(bet.maskedUsernames?.length ?? 0) > 0 ? (
-              <span className="rounded-full bg-coral/10 px-2 py-1 text-coral">{bet.maskedUsernames!.length} masked</span>
-            ) : null}
-          </div>
-        ) : null}
       </div>
     </Link>
   );
