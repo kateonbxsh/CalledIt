@@ -265,15 +265,53 @@ export function PlaneGame({
         ctx.font = '800 12px Segoe UI'; const tw = ctx.measureText('DECK').width + 14; roundRect(x + b.w / 2 - tw / 2, dy - 28, tw, 18, 8); ctx.fill();
         ctx.fillStyle = '#f2c879'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('DECK', x + b.w / 2, dy - 19); ctx.restore(); }
     }
+    function starPath(cx: number, cy: number, outer: number, inner: number, rotation: number) {
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const angle = rotation - Math.PI / 2 + i * Math.PI / 5;
+        const radius = i % 2 === 0 ? outer : inner;
+        const px = cx + Math.cos(angle) * radius;
+        const py = cy + Math.sin(angle) * radius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    }
+    function drawRainbowStar(x: number, y: number, size: number, t: number) {
+      const radius = size / 2;
+      const hueShift = (t * 90) % 360;
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      for (let i = 0; i < 3; i++) {
+        ctx.strokeStyle = `hsl(${(hueShift + i * 120) % 360}, 95%, 62%)`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, radius * (0.58 + i * 0.18), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = `hsl(${hueShift}, 95%, 70%)`;
+      ctx.shadowBlur = 16;
+      const gradient = ctx.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
+      gradient.addColorStop(0, '#ff4f81');
+      gradient.addColorStop(0.25, '#ffd23f');
+      gradient.addColorStop(0.5, '#4fe08b');
+      gradient.addColorStop(0.75, '#46a7ff');
+      gradient.addColorStop(1, '#9b6dff');
+      starPath(x, y, radius * 0.52, radius * 0.23, t * 1.4);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.86)';
+      ctx.stroke();
+      ctx.restore();
+    }
     function drawStars() { for (const s of stars) { if (s.got) continue; const x = sx(s.wx); if (x < -40 || x > W + 40) continue;
       const bob = Math.sin(s.t * 3) * 4, sc = 1 + Math.sin(s.t * 5) * (s.rainbow ? 0.14 : 0.06);
       if (!IMG.star.width) continue;
       if (s.rainbow) {
-        ctx.save();
-        ctx.filter = `hue-rotate(${Math.round(s.t * 220) % 360}deg) saturate(2.4)`;
-        ctx.shadowColor = 'rgba(255,255,255,0.8)'; ctx.shadowBlur = 14;
-        ctx.drawImage(IMG.star, x - s.w * sc / 2, s.y + bob - s.w * sc / 2, s.w * sc, s.w * sc);
-        ctx.restore();
+        drawRainbowStar(x, s.y + bob, s.w * sc, s.t);
       } else {
         ctx.drawImage(IMG.star, x - s.w * sc / 2, s.y + bob - s.w * sc / 2, s.w * sc, s.w * sc);
       }
