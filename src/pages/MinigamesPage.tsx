@@ -30,7 +30,6 @@ import { RewardChest } from '../components/RewardChest';
 import { useAuth } from '../contexts/AuthContext';
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import {
-  awardPlaneWin,
   awardMinigameWin,
   chargeMinigameStake,
   chargePlaneStake,
@@ -893,8 +892,8 @@ export function MinigamesPage() {
           coins={profile.coinBalance}
           stakes={[1, 10, 50, 100, 250, 500]}
           onCharge={async (s) => { await chargePlaneStake(profile, s); return true; }}
-          onWin={async (p) => awardPlaneWin(profile, p)}
-          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'plane', stake: s, ...context })}
+          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'plane', ...context, balanceBefore: profile.coinBalance })}
+          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'plane', stake: s, ...context, balanceBefore: profile.coinBalance })}
           onClose={() => setShowPlane(false)}
         />
       ) : null}
@@ -904,8 +903,8 @@ export function MinigamesPage() {
           coins={profile.coinBalance}
           stakes={[1, 10, 50, 100, 250, 500]}
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
-          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context })}
-          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context })}
+          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context, balanceBefore: profile.coinBalance })}
+          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context, balanceBefore: profile.coinBalance })}
           onClose={() => setShowMines(false)}
         />
       ) : null}
@@ -915,7 +914,7 @@ export function MinigamesPage() {
           coins={profile.coinBalance}
           stakes={[1, 10, 50, 100, 250, 500]}
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
-          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'guessing', ...context })}
+          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'guessing', ...context, balanceBefore: profile.coinBalance })}
           onSettleCustom={async (params) => settleCustomMinigameResult(profile, params)}
           onClose={() => setShowGuessing(false)}
         />

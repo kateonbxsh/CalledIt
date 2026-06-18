@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowDown, ArrowUp, Hash, Minus, Plus, RotateCcw, Sparkles, X } from 'lucide-react';
 import type { MinigameWinResult } from '../services/rewardService';
-import { minigameAffectsRating } from '../services/rewardService';
+import { calculateMinigameLossDelta, calculateMinigameWinDelta } from '../services/rewardService';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 
@@ -56,21 +56,27 @@ function riskLevelForAttempts(attempts: number) {
   return 0.34;
 }
 
-function ratingDeltaForSlowSolve(stake: number, attempts: number) {
+function ratingDeltaForSlowSolve(stake: number, attempts: number, balanceBefore: number) {
   const extra = Math.max(0, attempts - OPTIMAL_GUESSES);
-  return -extra;
-}
-
-function ratingDeltaForFastSolve(stake: number, attempts: number) {
-  const riskLevel = riskLevelForAttempts(attempts);
-  const eligible = minigameAffectsRating({
+  const sharedLoss = calculateMinigameLossDelta({
     game: 'guessing',
     stake,
-    riskLevel,
+    balanceBefore,
+    riskLevel: riskLevelForAttempts(attempts),
+    blunder: attempts >= MAX_GUESSES,
   });
-  if (!eligible) return 0;
-  const speed = clamp((OPTIMAL_GUESSES - attempts) / (OPTIMAL_GUESSES - 1), 0, 1);
-  return clamp(Math.round(2 + (speed ** 1.18) * 14), 2, 16);
+  if (sharedLoss === 0) return 0;
+  return -Math.max(Math.abs(sharedLoss), extra);
+}
+
+function ratingDeltaForFastSolve(stake: number, attempts: number, balanceBefore: number, payout: number) {
+  return calculateMinigameWinDelta({
+    game: 'guessing',
+    stake,
+    payout,
+    balanceBefore,
+    riskLevel: riskLevelForAttempts(attempts),
+  });
 }
 
 export function NumberGuessGame({
@@ -212,7 +218,7 @@ export function NumberGuessGame({
         const payout = Math.round(stake * multiplier);
         const result = await onSettleCustom({
           payout,
-          ratingDelta: ratingDeltaForFastSolve(stake, finalAttempts),
+          ratingDelta: ratingDeltaForFastSolve(stake, finalAttempts, coins, payout),
           historyDelta: payout,
           reason: 'Number guessing fast solve',
         });
@@ -237,7 +243,7 @@ export function NumberGuessGame({
       }
 
       const refund = Math.round(stake * refundRateForAttempts(finalAttempts));
-      const ratingDelta = ratingDeltaForSlowSolve(stake, finalAttempts);
+      const ratingDelta = ratingDeltaForSlowSolve(stake, finalAttempts, coins);
       const result = await onSettleCustom({
         payout: refund,
         ratingDelta,

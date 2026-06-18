@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
+import { calculateMinigameLossDelta, calculateMinigameWinDelta } from '../services/rewardService';
 
 // 16 peg rows -> 17 buckets. Symmetric multipliers: a wide losing centre, modest
 // wins, rare big edges. The whole simulation runs in a FIXED virtual board and is
@@ -38,28 +39,34 @@ for (let row = FIRST_ROW; row < ROWS; row += 1) {
 const DIVIDERS: number[] = [];
 for (let k = 1; k <= ROWS; k += 1) DIVIDERS.push(k * PEG_GAP);
 
-type Chip = { id: number; stake: number; x: number; y: number; vx: number; vy: number; trail: { x: number; y: number }[]; landed: boolean; removeAt: number };
+type Chip = { id: number; stake: number; balanceBefore: number; x: number; y: number; vx: number; vy: number; trail: { x: number; y: number }[]; landed: boolean; removeAt: number };
 type Peg = { x: number; y: number; hit: number };
 type Pop = { x: number; y: number; text: string; color: string; t: number };
 type DropResult = { id: number; multiplier: number; net: number; ratingDelta: number };
 
 function bucketColor(m: number) { return m >= 4 ? '#7b5aa6' : m >= 2 ? '#3b75af' : m >= 1 ? '#2f7d63' : 'rgba(255,255,255,0.10)'; }
 
-// Win: rare ELO boost scaling with the multiplier and stake. Loss: smaller chance
-// of a small malus, scaled by how much was lost.
-function plinkoEloDelta(m: number, stake: number) {
-  const sf = Math.min(1, stake / 200);
+function plinkoRiskLevel(m: number) {
+  return Math.min(1, Math.max(0.18, Math.abs(m - 1) / 4.5));
+}
+
+function plinkoEloDelta(m: number, stake: number, balanceBefore: number) {
   if (m >= 1) {
-    const chance = Math.min(0.55, 0.03 * (m - 1) * sf + (m >= 4 ? 0.06 : 0));
-    if (Math.random() >= chance) return 0;
-    if (m >= 12) return 3 + (Math.random() < 0.4 ? 1 : 0);
-    if (m >= 4) return 2 + (Math.random() < 0.4 ? 1 : 0);
-    if (m >= 2) return 1 + (Math.random() < 0.3 ? 1 : 0);
-    return 1;
+    return calculateMinigameWinDelta({
+      game: 'plinko',
+      stake,
+      payout: Math.round(stake * m),
+      balanceBefore,
+      riskLevel: plinkoRiskLevel(m),
+    });
   }
-  const chance = Math.min(0.18, 0.18 * (1 - m) * sf);
-  if (Math.random() >= chance) return 0;
-  return m <= 0.2 && stake >= 100 ? -2 : -1;
+  return calculateMinigameLossDelta({
+    game: 'plinko',
+    stake,
+    balanceBefore,
+    riskLevel: plinkoRiskLevel(m),
+    blunder: m <= 0.2,
+  });
 }
 
 export function PlinkoGame({
@@ -84,7 +91,7 @@ export function PlinkoGame({
 
   const boardRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const spawnRef = useRef<((stake: number) => void) | null>(null);
+  const spawnRef = useRef<((stake: number, balanceBefore: number) => void) | null>(null);
 
   // ---- batched settlement: accumulate net coin/ELO and flush rarely (debounced) ----
   const onSettleRef = useRef(onSettle);
@@ -271,7 +278,7 @@ export function PlinkoGame({
       const m = MULTIPLIERS[bin] ?? 0;
       const payout = Math.round(chip.stake * m);
       const net = payout - chip.stake;
-      const ratingDelta = plinkoEloDelta(m, chip.stake);
+      const ratingDelta = plinkoEloDelta(m, chip.stake, chip.balanceBefore);
       bucketHit[bin] = 1;
       pops.push({ x: bin * PEG_GAP + PEG_GAP / 2, y: BUCKET_TOP_Y - 6, text: (net >= 0 ? '+' : '') + net, color: net >= 0 ? '#67c39a' : '#d95f46', t: 0 });
       setBalance((current) => Math.max(0, current + payout));
@@ -302,9 +309,9 @@ export function PlinkoGame({
       raf = busy ? requestAnimationFrame(step) : null;
     }
 
-    spawnRef.current = (dropStake: number) => {
+    spawnRef.current = (dropStake: number, balanceBefore: number) => {
       chips.push({
-        id: nextId++, stake: dropStake,
+        id: nextId++, stake: dropStake, balanceBefore: Math.max(dropStake, balanceBefore),
         x: VW / 2 + (Math.random() - 0.5) * PEG_GAP * 0.6,
         y: FIRST_PEG_Y - ROW_GAP * 0.8, vx: (Math.random() - 0.5) * 40, vy: 0,
         trail: [], landed: false, removeAt: 0,
@@ -325,11 +332,12 @@ export function PlinkoGame({
   function dropChip() {
     if (!canDrop) return;
     const dropStake = stake;
+    const balanceBefore = balance;
     setError('');
     setBalance((current) => Math.max(0, current - dropStake)); // optimistic; flushed in a batch
     setActiveDrops((current) => current + 1);
     accumulateRef.current(-dropStake, 0);
-    spawnRef.current?.(dropStake);
+    spawnRef.current?.(dropStake, balanceBefore);
   }
 
   function closeGame() {
@@ -381,15 +389,16 @@ export function PlinkoGame({
             ))}
           </div>
 
-          <div className="min-w-0">
+          <div className="min-h-[76px] min-w-0 sm:min-h-[96px]">
             <div className="mb-1.5 flex items-center justify-between text-xs font-bold text-white/40">
               <span>Recent drops</span>
               {activeDrops > 0 ? <span className="text-citrus">{activeDrops} dropping…</span> : null}
             </div>
             {recent.length === 0 ? (
-              <p className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-white/35">Your results will show up here.</p>
+              <p className="h-[42px] rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-white/35 sm:h-[62px]">Your results will show up here.</p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="max-h-[42px] overflow-y-auto pr-0.5 sm:max-h-[62px]">
+                <div className="flex flex-wrap gap-1.5">
                 {recent.map((item) => (
                   <span key={item.id} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-[11px] font-bold">
                     <span className={item.multiplier >= 1 ? 'text-mint' : 'text-white/45'}>{item.multiplier}x</span>
@@ -399,6 +408,7 @@ export function PlinkoGame({
                     ) : null}
                   </span>
                 ))}
+                </div>
               </div>
             )}
           </div>

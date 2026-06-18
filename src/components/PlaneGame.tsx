@@ -9,9 +9,9 @@ const V0 = 480;
 const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 360, MAXVY = 260;
 const ANGLE_MIN = 20, ANGLE_MAX = 80;
 const CAM_OFF = 0.22;
-// Multiplier ACCELERATES with distance (convex), because the farther you fly the
-// riskier the landing — a base-linear part plus a power term that ramps up far out.
-const MULT_SCALE = 600, MULT_LIN = 0.5, MULT_CURVE = 0.16, MULT_POW = 1.6, STAR_MULT = 0.14;
+// Distance reward grows quickly early, then tapers off. Stars are the high-risk
+// way to push the multiplier higher.
+const MULT_K = 0.72, MULT_SCALE = 500, STAR_MULT = 0.14;
 const STAR_BOOST = 230, MISSILE_PUSH = 230, MISSILE_MULT_PENALTY = 0.015, FIRST_BOAT = 340;
 // Rare rainbow star: bigger lift, a speed burst, and a short missile-immunity window.
 const RAINBOW_CHANCE = 0.08, RAINBOW_LIFT = 430, RAINBOW_SPEED = 1.5, BUFF_DURATION = 3.6;
@@ -39,7 +39,7 @@ export function PlaneGame({
   coins: number;
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
-  onWin: (payout: number) => Promise<MinigameWinResult>;
+  onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
   onLose: (stake: number, context: { riskLevel: number; blunder: boolean }) => Promise<MinigameWinResult | void> | void;
   onClose: () => void;
 }) {
@@ -112,8 +112,8 @@ export function PlaneGame({
     const sx = (wx: number) => wx - camX;
     const deckY = (b: Boat) => (waterLine - b.h * 0.62) + b.h * b.deckFrac;
     const curMult = () => {
-      const u = Math.max(0, plane.wx - launchX) / MULT_SCALE;
-      return Math.max(1, 1 + MULT_LIN * u + MULT_CURVE * Math.pow(u, MULT_POW) + starCount * STAR_MULT - missilePenalty);
+      const distance = Math.max(0, plane.wx - launchX);
+      return Math.max(1, 1 + MULT_K * Math.log(1 + distance / MULT_SCALE) + starCount * STAR_MULT - missilePenalty);
     };
 
     function stepGlide(o: { wx: number; y: number; vx: number; vy: number }, dt: number) {
@@ -157,13 +157,14 @@ export function PlaneGame({
     function finish(won: boolean, payout: number) {
       st = 'over'; setPhase('over');
       setResult({ won, payout, mult, stars: starCount });
+      const riskLevel = Math.min(1, Math.max(0.2, mult / 4.2 + starCount * 0.08));
       if (won && payout > 0) {
-        onWinRef.current(payout)
+        onWinRef.current(payout, { stake: stakeRef.current, riskLevel })
           .then((settled) => setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current))
           .catch(() => {});
       } else if (!won) {
         Promise.resolve(onLoseRef.current(stakeRef.current, {
-          riskLevel: Math.min(1, Math.max(0.2, mult / 4.2 + starCount * 0.08)),
+          riskLevel,
           blunder: mult < 1.12 && starCount === 0,
         }))
           .then((settled) => {

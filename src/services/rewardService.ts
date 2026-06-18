@@ -576,14 +576,24 @@ export type MinigameOutcomeContext = {
   game: 'mines' | 'plane' | 'guessing' | 'plinko';
   stake: number;
   payout?: number;
+  balanceBefore?: number;
   riskLevel?: number;
   blunder?: boolean;
 };
 
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+export function minigameStakeShare(context: MinigameOutcomeContext) {
+  const stake = Math.max(0, context.stake);
+  const balance = Math.max(stake, Math.round(context.balanceBefore ?? stake), 1);
+  return clamp01(stake / balance);
+}
+
 export function minigameAffectsRating(context: MinigameOutcomeContext) {
   const stake = Math.max(0, context.stake);
-  const risk = Math.max(0, context.riskLevel ?? 0.35);
-  return stake >= 10 && risk >= 0.35;
+  return stake >= 10 && minigameStakeShare(context) >= 0.08;
 }
 
 async function notifyLeaderboardMoveForUser(
@@ -640,22 +650,50 @@ async function notifyLeaderboardMoveForUser(
   });
 }
 
-function minigameWinDelta(context: MinigameOutcomeContext) {
+export function calculateMinigameWinDelta(context: MinigameOutcomeContext) {
   if (!minigameAffectsRating(context)) return 0;
-  const stakeWeight = Math.min(1, context.stake / 900);
-  const payoutWeight = Math.min(1, Math.max(context.payout ?? context.stake, context.stake) / Math.max(context.stake, 1) / 4.5);
-  const riskWeight = Math.min(1, Math.max(0, context.riskLevel ?? 0.35));
-  const score = stakeWeight * 0.42 + payoutWeight * 0.33 + riskWeight * 0.25;
-  if (score < 0.5) return 2;
-  if (score < 0.82) return 2;
-  if (score < 0.965) return 3;
-  return Math.random() < 0.16 ? 4 : 3;
+  const stake = Math.max(1, context.stake);
+  const stakeShare = minigameStakeShare(context);
+  const gameRisk = clamp01(context.riskLevel ?? 0.35);
+  const multiplier = Math.max(0, (context.payout ?? stake) / stake);
+  if (multiplier <= 1.02) return 0;
+
+  const shareScore = Math.pow(stakeShare, 0.62);
+  const multiplierScore = clamp01((multiplier - 1) / 5);
+  const score = shareScore * 0.62 + gameRisk * 0.22 + multiplierScore * 0.16;
+  let delta = Math.round(1 + score * 9);
+
+  const shareCap = stakeShare < 0.12
+    ? 1
+    : stakeShare < 0.2
+      ? 2
+      : stakeShare < 0.35
+        ? 4
+        : stakeShare < 0.6
+          ? 6
+          : stakeShare < 0.85
+            ? 8
+            : 10;
+  const stakeCap = stake < 20 ? 1 : stake < 50 ? 2 : stake < 100 ? 4 : stake < 250 ? 7 : 10;
+  return Math.max(0, Math.min(delta, shareCap, stakeCap));
+}
+
+export function calculateMinigameLossDelta(context: MinigameOutcomeContext) {
+  if (!minigameAffectsRating(context)) return 0;
+  const stake = Math.max(1, context.stake);
+  const stakeShare = minigameStakeShare(context);
+  let penalty = stakeShare >= 0.75 ? 3 : stakeShare >= 0.35 ? 2 : 1;
+  if (context.blunder && stakeShare >= 0.2) penalty += 1;
+  const stakeCap = stake < 50 ? 1 : stake < 100 ? 2 : 4;
+  return -Math.min(penalty, stakeCap);
+}
+
+function minigameWinDelta(context: MinigameOutcomeContext) {
+  return calculateMinigameWinDelta(context);
 }
 
 function minigameLossDelta(context: MinigameOutcomeContext) {
-  if (!minigameAffectsRating(context)) return 0;
-  if (!context.blunder) return -1;
-  return Math.random() < 0.18 ? -2 : -1;
+  return calculateMinigameLossDelta(context);
 }
 
 // Arcade games share one settlement path so their balance and rare ELO rewards
@@ -876,6 +914,7 @@ export async function awardPlaneWin(user: UserProfile, amount: number) {
   return awardMinigameWin(user, amount, {
     game: 'plane',
     stake: Math.max(1, Math.round(amount / 2.7)),
+    balanceBefore: user.coinBalance,
     riskLevel: 0.72,
   });
 }
