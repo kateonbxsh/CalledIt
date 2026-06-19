@@ -19,6 +19,7 @@ const HowToPlayPage = lazy(() => import('./pages/HowToPlayPage').then((module) =
 const InstallAppPage = lazy(() => import('./pages/InstallAppPage').then((module) => ({ default: module.InstallAppPage })));
 const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage').then((module) => ({ default: module.LeaderboardPage })));
 const MinigamesPage = lazy(() => import('./pages/MinigamesPage').then((module) => ({ default: module.MinigamesPage })));
+const MinigameAuditPage = lazy(() => import('./pages/MinigameAuditPage').then((module) => ({ default: module.MinigameAuditPage })));
 const MyBetsPage = lazy(() => import('./pages/MyBetsPage').then((module) => ({ default: module.MyBetsPage })));
 const PredictionHistoryPage = lazy(() => import('./pages/PredictionHistoryPage').then((module) => ({ default: module.PredictionHistoryPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
@@ -99,6 +100,7 @@ export function App() {
             <Route path="gifts" element={<GiftsPage />} />
             <Route path="challenges" element={<ChallengesPage />} />
             <Route path="minigames" element={<MinigamesPage />} />
+            <Route path="minigame-audit" element={<MinigameAuditPage />} />
             <Route path="create" element={<CreateBetPage />} />
             <Route path="create-wager" element={<CreateWagerPage />} />
             <Route path="bets/:betId" element={<BetDetailPage />} />

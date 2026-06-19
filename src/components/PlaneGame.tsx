@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 import type { MinigameWinResult } from '../services/rewardService';
+import { createMinigameSessionId, type MinigameAuditInput } from '../services/minigameAuditService';
 
 // ---- Tuning (mirrors the standalone plane-game) ----
 const V0 = 480;
@@ -34,13 +35,14 @@ interface Puff { x: number; y: number; t: number; life: number; s: number; }
 interface Pop { x: number; y: number; vx: number; vy: number; life: number; t: number; color: string; r: number; }
 
 export function PlaneGame({
-  coins, stakes, onCharge, onWin, onLose, onClose,
+  coins, stakes, onCharge, onWin, onLose, onAudit, onClose,
 }: {
   coins: number;
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
   onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
   onLose: (stake: number, context: { riskLevel: number; blunder: boolean }) => Promise<MinigameWinResult | void> | void;
+  onAudit: (event: MinigameAuditInput) => void;
   onClose: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -56,6 +58,8 @@ export function PlaneGame({
   const stakeRef = useRef(stake); stakeRef.current = stake;
   const onWinRef = useRef(onWin); onWinRef.current = onWin;
   const onLoseRef = useRef(onLose); onLoseRef.current = onLose;
+  const onAuditRef = useRef(onAudit); onAuditRef.current = onAudit;
+  const sessionIdRef = useRef('');
   const api = useRef<{ launch: () => void; playAgain: () => void } | null>(null);
 
   const canPlay = stake <= coins && stake >= 1;
@@ -65,7 +69,20 @@ export function PlaneGame({
     setErr(''); setBusy(true);
     try {
       const ok = await onCharge(stake);
-      if (ok) api.current?.launch();
+      if (ok) {
+        const sessionId = createMinigameSessionId('plane');
+        sessionIdRef.current = sessionId;
+        onAudit({
+          game: 'plane',
+          action: 'launched',
+          sessionId,
+          choice: `${angle} degree launch`,
+          stake,
+          multiplier: 1,
+          result: 'started',
+        });
+        api.current?.launch();
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not start.');
     } finally {
@@ -160,8 +177,27 @@ export function PlaneGame({
       const riskLevel = Math.min(1, Math.max(0.2, mult / 4.2 + starCount * 0.08));
       if (won && payout > 0) {
         onWinRef.current(payout, { stake: stakeRef.current, riskLevel })
-          .then((settled) => setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current))
-          .catch(() => {});
+          .then((settled) => {
+            setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current);
+            onAuditRef.current({
+              game: 'plane',
+              action: 'round_finished',
+              sessionId: sessionIdRef.current,
+              choice: `Landed with ${starCount} ${starCount === 1 ? 'star' : 'stars'}`,
+              stake: stakeRef.current,
+              payout: settled.payout,
+              multiplier: mult,
+              ratingDelta: settled.ratingDelta,
+              result: 'won',
+            });
+          })
+          .catch(() => {
+            onAuditRef.current({
+              game: 'plane', action: 'round_finished', sessionId: sessionIdRef.current,
+              choice: `Landed with ${starCount} ${starCount === 1 ? 'star' : 'stars'}`,
+              stake: stakeRef.current, payout, multiplier: mult, result: 'won',
+            });
+          });
       } else if (!won) {
         Promise.resolve(onLoseRef.current(stakeRef.current, {
           riskLevel,
@@ -171,8 +207,25 @@ export function PlaneGame({
             if (settled) {
               setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current);
             }
+            onAuditRef.current({
+              game: 'plane',
+              action: 'round_finished',
+              sessionId: sessionIdRef.current,
+              choice: `Crashed with ${starCount} ${starCount === 1 ? 'star' : 'stars'}`,
+              stake: stakeRef.current,
+              payout: 0,
+              multiplier: mult,
+              ratingDelta: settled?.ratingDelta ?? 0,
+              result: 'lost',
+            });
           })
-          .catch(() => {});
+          .catch(() => {
+            onAuditRef.current({
+              game: 'plane', action: 'round_finished', sessionId: sessionIdRef.current,
+              choice: `Crashed with ${starCount} ${starCount === 1 ? 'star' : 'stars'}`,
+              stake: stakeRef.current, payout: 0, multiplier: mult, result: 'lost',
+            });
+          });
       }
     }
     api.current = { launch, playAgain: toAim };

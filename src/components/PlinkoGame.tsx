@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 import { calculateMinigameLossDelta, calculateMinigameWinDelta } from '../services/rewardService';
+import { createMinigameSessionId, type MinigameAuditInput } from '../services/minigameAuditService';
 
 // 16 peg rows -> 17 buckets. Symmetric multipliers: a wide losing centre, modest
 // wins, rare big edges. The whole simulation runs in a FIXED virtual board and is
@@ -39,7 +40,7 @@ for (let row = FIRST_ROW; row < ROWS; row += 1) {
 const DIVIDERS: number[] = [];
 for (let k = 1; k <= ROWS; k += 1) DIVIDERS.push(k * PEG_GAP);
 
-type Chip = { id: number; stake: number; balanceBefore: number; x: number; y: number; vx: number; vy: number; trail: { x: number; y: number }[]; landed: boolean; removeAt: number };
+type Chip = { id: number; sessionId: string; stake: number; balanceBefore: number; x: number; y: number; vx: number; vy: number; trail: { x: number; y: number }[]; landed: boolean; removeAt: number };
 type Peg = { x: number; y: number; hit: number };
 type Pop = { x: number; y: number; text: string; color: string; t: number };
 type DropResult = { id: number; multiplier: number; net: number; ratingDelta: number };
@@ -73,12 +74,14 @@ export function PlinkoGame({
   coins,
   stakes,
   onSettle,
+  onAudit,
   onClose,
 }: {
   coins: number;
   stakes: number[];
   // Net coin + ELO swing for a batch of drops, flushed in one DB write.
   onSettle: (coinDelta: number, ratingDelta: number, bestMult: number) => Promise<void>;
+  onAudit: (event: MinigameAuditInput) => void;
   onClose: () => void;
 }) {
   const [stake, setStake] = useState(() => stakes.find((amount) => amount <= coins) ?? stakes[0]);
@@ -91,7 +94,9 @@ export function PlinkoGame({
 
   const boardRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const spawnRef = useRef<((stake: number, balanceBefore: number) => void) | null>(null);
+  const spawnRef = useRef<((stake: number, balanceBefore: number, sessionId: string) => void) | null>(null);
+  const onAuditRef = useRef(onAudit);
+  onAuditRef.current = onAudit;
 
   // ---- batched settlement: accumulate net coin/ELO and flush rarely (debounced) ----
   const onSettleRef = useRef(onSettle);
@@ -285,6 +290,17 @@ export function PlinkoGame({
       setRecent((current) => [{ id: chip.id, multiplier: m, net, ratingDelta }, ...current].slice(0, 12));
       setActiveDrops((current) => Math.max(0, current - 1));
       accumulateRef.current(payout, ratingDelta, m); // credit the win to the batched flush
+      onAuditRef.current({
+        game: 'plinko',
+        action: 'chip_settled',
+        sessionId: chip.sessionId,
+        choice: `Bucket ${bin + 1}`,
+        stake: chip.stake,
+        payout,
+        multiplier: m,
+        ratingDelta,
+        result: m >= 1 ? 'won' : 'lost',
+      });
     }
 
     let last = performance.now();
@@ -309,9 +325,9 @@ export function PlinkoGame({
       raf = busy ? requestAnimationFrame(step) : null;
     }
 
-    spawnRef.current = (dropStake: number, balanceBefore: number) => {
+    spawnRef.current = (dropStake: number, balanceBefore: number, sessionId: string) => {
       chips.push({
-        id: nextId++, stake: dropStake, balanceBefore: Math.max(dropStake, balanceBefore),
+        id: nextId++, sessionId, stake: dropStake, balanceBefore: Math.max(dropStake, balanceBefore),
         x: VW / 2 + (Math.random() - 0.5) * PEG_GAP * 0.6,
         y: FIRST_PEG_Y - ROW_GAP * 0.8, vx: (Math.random() - 0.5) * 40, vy: 0,
         trail: [], landed: false, removeAt: 0,
@@ -333,11 +349,20 @@ export function PlinkoGame({
     if (!canDrop) return;
     const dropStake = stake;
     const balanceBefore = balance;
+    const sessionId = createMinigameSessionId('plinko');
     setError('');
     setBalance((current) => Math.max(0, current - dropStake)); // optimistic; flushed in a batch
     setActiveDrops((current) => current + 1);
     accumulateRef.current(-dropStake, 0);
-    spawnRef.current?.(dropStake, balanceBefore);
+    onAudit({
+      game: 'plinko',
+      action: 'chip_dropped',
+      sessionId,
+      choice: 'Drop',
+      stake: dropStake,
+      result: 'started',
+    });
+    spawnRef.current?.(dropStake, balanceBefore, sessionId);
   }
 
   function closeGame() {

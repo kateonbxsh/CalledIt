@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Bomb, Gem, ShieldCheck, Sparkles, X } from 'lucide-react';
 import type { MinigameWinResult } from '../services/rewardService';
+import { createMinigameSessionId, type MinigameAuditInput } from '../services/minigameAuditService';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 
@@ -30,6 +31,7 @@ export function MinesGame({
   onCharge,
   onWin,
   onLose,
+  onAudit,
   onClose,
 }: {
   coins: number;
@@ -37,6 +39,7 @@ export function MinesGame({
   onCharge: (stake: number) => Promise<boolean>;
   onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
   onLose: (stake: number, context: { riskLevel: number; blunder: boolean }) => Promise<MinigameWinResult | void> | void;
+  onAudit: (event: MinigameAuditInput) => void;
   onClose: () => void;
 }) {
   const [size, setSize] = useState<3 | 5>(5);
@@ -49,6 +52,7 @@ export function MinesGame({
   const [error, setError] = useState('');
   const [settlement, setSettlement] = useState<MinigameWinResult | null>(null);
   const [lastCashout, setLastCashout] = useState(0);
+  const sessionIdRef = useRef('');
 
   const total = size * size;
   const safeTotal = total - bombCount;
@@ -65,10 +69,21 @@ export function MinesGame({
     try {
       const charged = await onCharge(stake);
       if (!charged) return;
+      const sessionId = createMinigameSessionId('mines');
+      sessionIdRef.current = sessionId;
       setBombs(shuffledBombs(total, bombCount));
       setRevealed(new Set());
       setSettlement(null);
       setPhase('playing');
+      onAudit({
+        game: 'mines',
+        action: 'round_started',
+        sessionId,
+        choice: `${size}x${size} board, ${bombCount} ${bombCount === 1 ? 'bomb' : 'bombs'}`,
+        stake,
+        multiplier: 1,
+        result: 'started',
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not start Mines.');
     } finally {
@@ -76,14 +91,27 @@ export function MinesGame({
     }
   }
 
-  async function settleWin(finalPayout: number) {
+  async function settleWin(finalPayout: number, action = 'cash_out', safeReveals = revealed.size) {
     setBusy(true);
     setPhase('won');
     try {
-      setSettlement(await onWin(finalPayout, {
+      const finalMultiplier = payoutMultiplier(total, bombCount, safeReveals);
+      const result = await onWin(finalPayout, {
         stake,
-        riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + revealed.size / Math.max(1, safeTotal * 1.4)),
-      }));
+        riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + safeReveals / Math.max(1, safeTotal * 1.4)),
+      });
+      setSettlement(result);
+      onAudit({
+        game: 'mines',
+        action,
+        sessionId: sessionIdRef.current,
+        choice: `${safeReveals} safe ${safeReveals === 1 ? 'tile' : 'tiles'}`,
+        stake,
+        payout: result.payout,
+        multiplier: finalMultiplier,
+        ratingDelta: result.ratingDelta,
+        result: 'won',
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The win could not be credited.');
     } finally {
@@ -94,14 +122,35 @@ export function MinesGame({
   function revealCell(index: number) {
     if (phase !== 'playing' || revealed.has(index) || busy) return;
     if (bombs.has(index)) {
-      setLastCashout(Math.round(stake * payoutMultiplier(total, bombCount, revealed.size)));
+      const finalMultiplier = payoutMultiplier(total, bombCount, revealed.size);
+      setLastCashout(Math.round(stake * finalMultiplier));
       setRevealed(new Set([...revealed, index]));
       setPhase('lost');
+      onAudit({
+        game: 'mines',
+        action: 'tile_revealed',
+        sessionId: sessionIdRef.current,
+        choice: `Tile ${index + 1}`,
+        stake,
+        multiplier: finalMultiplier,
+        result: 'mine',
+      });
       Promise.resolve(onLose(stake, {
         riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + revealed.size / Math.max(1, safeTotal * 1.4)),
         blunder: revealed.size <= 1,
       })).then((result) => {
         if (result) setSettlement(result);
+        onAudit({
+          game: 'mines',
+          action: 'round_lost',
+          sessionId: sessionIdRef.current,
+          choice: `Mine on tile ${index + 1} after ${revealed.size} safe ${revealed.size === 1 ? 'tile' : 'tiles'}`,
+          stake,
+          payout: 0,
+          multiplier: finalMultiplier,
+          ratingDelta: result?.ratingDelta ?? 0,
+          result: 'lost',
+        });
       }).catch(() => {});
       return;
     }
@@ -109,8 +158,18 @@ export function MinesGame({
     const next = new Set(revealed);
     next.add(index);
     setRevealed(next);
+    const nextMultiplier = payoutMultiplier(total, bombCount, next.size);
+    onAudit({
+      game: 'mines',
+      action: 'tile_revealed',
+      sessionId: sessionIdRef.current,
+      choice: `Tile ${index + 1}`,
+      stake,
+      multiplier: nextMultiplier,
+      result: 'safe',
+    });
     if (next.size === safeTotal) {
-      void settleWin(Math.round(stake * payoutMultiplier(total, bombCount, next.size)));
+      void settleWin(Math.round(stake * nextMultiplier), 'board_cleared', next.size);
     }
   }
 
@@ -120,6 +179,7 @@ export function MinesGame({
     setRevealed(new Set());
     setSettlement(null);
     setLastCashout(0);
+    sessionIdRef.current = '';
     setError('');
   }
 
