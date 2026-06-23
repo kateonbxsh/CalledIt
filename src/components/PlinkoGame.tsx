@@ -234,11 +234,11 @@ export function PlinkoGame({
       for (const chip of chips) {
         for (let i = 0; i < chip.trail.length; i += 1) {
           const p = chip.trail[i];
-          ctx.fillStyle = `rgba(111,121,216,${(i / chip.trail.length) * 0.26})`;
+          ctx.fillStyle = `rgba(63,148,115,${(i / chip.trail.length) * 0.26})`;
           ctx.beginPath(); ctx.arc(p.x, p.y, BALL_R * (0.45 + 0.5 * (i / chip.trail.length)), 0, Math.PI * 2); ctx.fill();
         }
         const g = ctx.createRadialGradient(chip.x - BALL_R * 0.3, chip.y - BALL_R * 0.3, BALL_R * 0.2, chip.x, chip.y, BALL_R);
-        g.addColorStop(0, '#9ec9ff'); g.addColorStop(1, '#6f5ca8');
+        g.addColorStop(0, '#9ae3c1'); g.addColorStop(1, '#3f9473');
         ctx.beginPath(); ctx.arc(chip.x, chip.y, BALL_R, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
         ctx.lineWidth = BALL_R * 0.15; ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.stroke();
       }
@@ -297,7 +297,7 @@ export function PlinkoGame({
       const net = payout - chip.stake;
       const ratingDelta = plinkoEloDelta(m, chip.stake, chip.balanceBefore);
       bucketHit[bin] = 1;
-      pops.push({ x: bin * PEG_GAP + PEG_GAP / 2, y: BUCKET_TOP_Y - 6, text: `${net >= 0 ? '+' : '-'}${Math.abs(net).toLocaleString()}€`, color: net >= 0 ? '#8f9cf0' : '#d95f46', t: 0 });
+      pops.push({ x: bin * PEG_GAP + PEG_GAP / 2, y: BUCKET_TOP_Y - 6, text: `${net >= 0 ? '+' : '-'}${Math.abs(net).toLocaleString()}€`, color: net >= 0 ? '#d49a25' : '#d95f46', t: 0 });
       setBalance((current) => Math.max(0, current + payout));
       setRecent((current) => [{ id: chip.id, multiplier: m, net, ratingDelta }, ...current].slice(0, 12));
       setActiveDrops((current) => Math.max(0, current - 1));
@@ -431,7 +431,7 @@ export function PlinkoGame({
                 {recent.map((item) => (
                   <span key={item.id} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-[11px] font-bold">
                     <span className={item.multiplier >= 1 ? 'text-mint' : 'text-white/45'}>{Number(item.multiplier.toFixed(1))}x</span>
-                    <span className={item.net >= 0 ? 'text-[#9aa5f2]' : 'text-coral'}>{item.net >= 0 ? '+' : '-'}{Math.abs(item.net).toLocaleString()}€</span>
+                    <span className={item.net >= 0 ? 'text-citrus' : 'text-coral'}>{item.net >= 0 ? '+' : '-'}{Math.abs(item.net).toLocaleString()}€</span>
                     {item.ratingDelta ? (
                       <span className={`text-[9px] font-black ${item.ratingDelta > 0 ? 'text-mint' : 'text-coral'}`}>{item.ratingDelta > 0 ? '▲' : '▼'}{Math.abs(item.ratingDelta)}</span>
                     ) : null}

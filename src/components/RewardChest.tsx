@@ -21,9 +21,9 @@ export function RewardChest({
     >
       {open ? (
         <div className="pointer-events-none absolute inset-0 z-20">
-          <span className="absolute left-[20%] top-[8%] grid h-6 w-6 animate-reward-pop place-items-center rounded-full border-2 border-white bg-[#6f79d8] text-xs font-black text-white shadow-soft">€</span>
-          <span className="absolute right-[17%] top-[18%] grid h-5 w-5 animate-reward-pop place-items-center rounded-full border-2 border-white bg-[#6f79d8] text-[10px] font-black text-white shadow-soft">€</span>
-          <span className="absolute left-[48%] top-[-4%] grid h-5 w-5 animate-reward-pop place-items-center rounded-full border-2 border-white bg-[#6f79d8] text-[10px] font-black text-white shadow-soft">€</span>
+          <span className="absolute left-[20%] top-[8%] grid h-6 w-6 animate-reward-pop place-items-center rounded-full border-2 border-white bg-citrus text-xs font-black text-white shadow-soft">€</span>
+          <span className="absolute right-[17%] top-[18%] grid h-5 w-5 animate-reward-pop place-items-center rounded-full border-2 border-white bg-citrus text-[10px] font-black text-white shadow-soft">€</span>
+          <span className="absolute left-[48%] top-[-4%] grid h-5 w-5 animate-reward-pop place-items-center rounded-full border-2 border-white bg-citrus text-[10px] font-black text-white shadow-soft">€</span>
         </div>
       ) : null}
       <img

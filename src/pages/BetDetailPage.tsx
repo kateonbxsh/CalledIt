@@ -1,12 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { Activity, Check, ChevronDown, ChevronLeft, Pencil, Reply, RotateCcw, Trash2, Users, X } from 'lucide-react';
+import { Activity, BadgeEuro, Check, ChevronDown, ChevronLeft, Pencil, Reply, RotateCcw, Trash2, Users, X } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { ChanceChart } from '../components/ChanceChart';
 import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
+import { FootballMatchCrests } from '../components/FootballMatchCrests';
 import { ZoomableImage } from '../components/Lightbox';
 import { StakeInput } from '../components/StakeInput';
 import { UsernamePicker } from '../components/UsernamePicker';
@@ -845,6 +846,8 @@ export function BetDetailPage() {
           </button>
           {bet.imageUrl ? (
             <ZoomableImage src={bet.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-md border border-line object-cover shadow-soft sm:h-20 sm:w-20" />
+          ) : bet.footballMatch ? (
+            <FootballMatchCrests match={bet.footballMatch} size="detail" />
           ) : null}
           <div className="min-w-0">
             <h1 className="break-words text-2xl font-black tracking-normal sm:text-3xl md:truncate">{bet.title}</h1>
@@ -1094,8 +1097,8 @@ export function BetDetailPage() {
                   )}
                 </div>
                 {(myPrediction.revisionCount ?? 0) > 0 ? (
-                  <p className="mt-2 pl-7 text-xs font-semibold text-mint/80">
-                    Updated {myPrediction.revisionCount}x - fees paid {(myPrediction.changeFeesPaid ?? 0).toLocaleString()}€
+                  <p className="mt-2 flex flex-wrap items-center gap-1 pl-7 text-xs font-semibold text-mint/80">
+                    Updated {myPrediction.revisionCount}x - fees paid <CoinAmount amount={myPrediction.changeFeesPaid ?? 0} className="text-xs" />
                   </p>
                 ) : null}
                 {bet.status === 'resolved' ? (
@@ -1418,9 +1421,11 @@ export function BetDetailPage() {
                         <CoinAmount amount={projectedChangeFee} className="text-xs" />
                       </div>
                     ) : null}
-                    <div className="mt-3 flex items-end justify-between gap-3 border-t border-line pt-3">
-                      <span className="text-base font-black text-ink">To win 💶</span>
-                      <CoinAmount amount={pendingEstimate.totalReturn} className="text-2xl font-black" />
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
+                      <span className="inline-flex items-center gap-1.5 text-base font-black text-ink">
+                        To win <BadgeEuro size={18} className="text-[#3f9473]" aria-hidden="true" />
+                      </span>
+                      <CoinAmount amount={pendingEstimate.totalReturn} tone="green" className="text-2xl font-black" />
                     </div>
                   </div>
                 ) : null}

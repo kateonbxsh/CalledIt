@@ -41,6 +41,9 @@ import { getFreshLeaderboard } from './userService';
 // Global buff applied to coin rewards across forecasts, chests, weekly
 // challenges and wager bonuses so the whole economy pays out more generously.
 export const REWARD_MULTIPLIER = 2;
+// Chests are long-term side rewards. Keep them below the larger timed/activity
+// reward scale so completing several nearby tiers cannot flood the economy.
+export const CHEST_REWARD_MULTIPLIER = 1;
 
 const SAFE_FORECAST_REWARD = 150;
 const SPICY_FORECAST_NOW = 50;
@@ -300,6 +303,7 @@ type ArcadeChestFamily = {
   growth: number;
   roundTo?: number;
   rewardBase?: number;
+  rewardGrowth?: number;
 };
 
 function buildArcadeChestFamily(family: ArcadeChestFamily): ChestSpec[] {
@@ -307,7 +311,7 @@ function buildArcadeChestFamily(family: ArcadeChestFamily): ChestSpec[] {
     id: `game-${family.prefix}-${index + 1}`,
     title: `${family.name} ${index + 1}`,
     description: family.describe(target),
-    reward: Math.ceil(((family.rewardBase ?? 500) * Math.pow(1.15, index)) / 50) * 50,
+    reward: Math.ceil(((family.rewardBase ?? 75) * Math.pow(family.rewardGrowth ?? 1.105, index)) / 25) * 25,
     eloRequired: Math.round((40 + index * 55 + Math.pow(index, 1.65) * 6) / 10) * 10,
     goal: family.goal(target),
     target,
@@ -317,49 +321,40 @@ function buildArcadeChestFamily(family: ArcadeChestFamily): ChestSpec[] {
 
 const arcadeChestFamilies: ArcadeChestFamily[] = [
   // Sky Landing: distance, stars, boat color, precision, and landing style.
-  { prefix: 'plane-total-km', name: 'Frequent Flyer', metric: (s) => s.arcade?.plane?.totalDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km total`, describe: (t) => `Accumulate ${t.toLocaleString()} kilometers in Sky Landing.`, start: 10, growth: 1.28, roundTo: 5 },
-  { prefix: 'plane-best-km', name: 'Long Haul', metric: (s) => s.arcade?.plane?.bestDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km in one run`, describe: (t) => `Reach ${t.toLocaleString()} kilometers in a single flight.`, start: 4, growth: 1.16, roundTo: 1, rewardBase: 700 },
-  { prefix: 'plane-stars', name: 'Star Cargo', metric: (s) => s.arcade?.plane?.stars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} stars`, describe: (t) => `Collect ${t.toLocaleString()} regular and special star points.`, start: 3, growth: 1.3 },
-  { prefix: 'plane-special-stars', name: 'Rainbow Pilot', metric: (s) => s.arcade?.plane?.specialStars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} special stars`, describe: (t) => `Catch ${t.toLocaleString()} rare rainbow stars.`, start: 1, growth: 1.3, rewardBase: 850 },
-  { prefix: 'plane-landings', name: 'Deck Regular', metric: (s) => s.arcade?.plane?.landings ?? 0, goal: (t) => `Land ${t.toLocaleString()} flights`, describe: (t) => `Complete ${t.toLocaleString()} successful boat landings.`, start: 2, growth: 1.27 },
-  { prefix: 'plane-red', name: 'Red Hull', metric: (s) => s.arcade?.plane?.redLandings ?? 0, goal: (t) => `Land on ${t.toLocaleString()} red boats`, describe: (t) => `Land safely on red boats ${t.toLocaleString()} times.`, start: 1, growth: 1.28, rewardBase: 650 },
-  { prefix: 'plane-edge', name: 'Deck Edge', metric: (s) => s.arcade?.plane?.edgeLandings ?? 0, goal: (t) => `Make ${t.toLocaleString()} edge landings`, describe: (t) => `Touch down within the outer 12% of a red, blue, or green deck ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 800 },
-  { prefix: 'plane-green-strip', name: 'Green Runway', metric: (s) => s.arcade?.plane?.fastGreenFullStripLandings ?? 0, goal: (t) => `Make ${t.toLocaleString()} full-strip green landings`, describe: (t) => `Land fast near the start of a green deck and use almost the full landing strip ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1000 },
+  { prefix: 'plane-total-km', name: 'Frequent Flyer', metric: (s) => s.arcade?.plane?.totalDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km total`, describe: (t) => `Accumulate ${t.toLocaleString()} kilometers in Sky Landing.`, start: 25, growth: 1.3, roundTo: 5, rewardBase: 60 },
+  { prefix: 'plane-best-km', name: 'Long Haul', metric: (s) => s.arcade?.plane?.bestDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km in one run`, describe: (t) => `Reach ${t.toLocaleString()} kilometers in a single flight.`, start: 3, growth: 1.18, roundTo: 1, rewardBase: 125 },
+  { prefix: 'plane-stars', name: 'Star Cargo', metric: (s) => s.arcade?.plane?.stars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} stars`, describe: (t) => `Collect ${t.toLocaleString()} regular and special star points.`, start: 25, growth: 1.3, roundTo: 5, rewardBase: 60 },
+  { prefix: 'plane-special-stars', name: 'Rainbow Pilot', metric: (s) => s.arcade?.plane?.specialStars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} special stars`, describe: (t) => `Catch ${t.toLocaleString()} rare rainbow stars.`, start: 2, growth: 1.3, rewardBase: 175 },
+  { prefix: 'plane-landings', name: 'Deck Regular', metric: (s) => s.arcade?.plane?.landings ?? 0, goal: (t) => `Land ${t.toLocaleString()} flights`, describe: (t) => `Complete ${t.toLocaleString()} successful boat landings.`, start: 10, growth: 1.28, roundTo: 2, rewardBase: 75 },
+  { prefix: 'plane-red', name: 'Red Hull', metric: (s) => s.arcade?.plane?.redLandings ?? 0, goal: (t) => `Land on ${t.toLocaleString()} red boats`, describe: (t) => `Land safely on red boats ${t.toLocaleString()} times.`, start: 5, growth: 1.3, rewardBase: 100 },
+  { prefix: 'plane-edge', name: 'Deck Edge', metric: (s) => s.arcade?.plane?.edgeLandings ?? 0, goal: (t) => `Make ${t.toLocaleString()} edge landings`, describe: (t) => `Touch down within the outer 12% of a red, blue, or green deck ${t.toLocaleString()} times.`, start: 2, growth: 1.32, rewardBase: 175 },
+  { prefix: 'plane-green-strip', name: 'Green Runway', metric: (s) => s.arcade?.plane?.fastGreenFullStripLandings ?? 0, goal: (t) => `Make ${t.toLocaleString()} full-strip green landings`, describe: (t) => `Land fast near the start of a green deck and use almost the full landing strip ${t.toLocaleString()} times.`, start: 2, growth: 1.34, rewardBase: 250 },
 
-  // Mines: play volume, safe picks, multiplier, and every full-board setup.
-  { prefix: 'mines-rounds', name: 'Mine Surveyor', metric: (s) => s.arcade?.mines?.rounds ?? 0, goal: (t) => `Play ${t.toLocaleString()} Mines rounds`, describe: (t) => `Start and settle ${t.toLocaleString()} Mines boards.`, start: 5, growth: 1.28 },
-  { prefix: 'mines-wins', name: 'Safe Exit', metric: (s) => s.arcade?.mines?.wins ?? 0, goal: (t) => `Cash out ${t.toLocaleString()} times`, describe: (t) => `Win or cash out safely from Mines ${t.toLocaleString()} times.`, start: 3, growth: 1.28 },
-  { prefix: 'mines-safe-tiles', name: 'Gem Digger', metric: (s) => s.arcade?.mines?.safeTiles ?? 0, goal: (t) => `Reveal ${t.toLocaleString()} safe tiles`, describe: (t) => `Reveal a lifetime total of ${t.toLocaleString()} safe Mines tiles.`, start: 12, growth: 1.3, roundTo: 5 },
-  { prefix: 'mines-best-mult', name: 'Deep Cashout', metric: (s) => s.arcade?.mines?.bestMultiplier ?? 0, goal: (t) => `Reach ${t.toFixed(1)}x in Mines`, describe: (t) => `Reach a ${t.toFixed(1)}x Mines multiplier in one round.`, start: 1.3, growth: 1.07, roundTo: 0.1, rewardBase: 700 },
-  { prefix: 'mines-3x3-3', name: 'Nine Cell Inferno', metric: (s) => s.arcade?.mines?.clears3x3ThreeBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 3x3 / 3-bomb boards`, describe: (t) => `Reveal every safe tile on a 3x3 board with three bombs ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 900 },
-  { prefix: 'mines-5x5-1', name: 'Wide Sweep', metric: (s) => s.arcade?.mines?.clears5x5OneBomb ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 1-bomb boards`, describe: (t) => `Fully clear a 5x5 board with one bomb ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 750 },
-  { prefix: 'mines-5x5-2', name: 'Double Hazard', metric: (s) => s.arcade?.mines?.clears5x5TwoBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 2-bomb boards`, describe: (t) => `Fully clear a 5x5 board with two bombs ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 900 },
-  { prefix: 'mines-5x5-3', name: 'Full Minefield', metric: (s) => s.arcade?.mines?.clears5x5ThreeBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 3-bomb boards`, describe: (t) => `Fully clear a 5x5 board with three bombs ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1100 },
+  // Mines only rewards meaningful risk or complete boards, never raw play volume.
+  { prefix: 'mines-best-mult', name: 'Deep Cashout', metric: (s) => s.arcade?.mines?.bestMultiplier ?? 0, goal: (t) => `Reach ${t.toFixed(1)}x in Mines`, describe: (t) => `Reach a ${t.toFixed(1)}x Mines multiplier in one round.`, start: 2, growth: 1.075, roundTo: 0.5, rewardBase: 125 },
+  { prefix: 'mines-3x3-3', name: 'Nine Cell Inferno', metric: (s) => s.arcade?.mines?.clears3x3ThreeBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 3x3 / 3-bomb boards`, describe: (t) => `Reveal every safe tile on a 3x3 board with three bombs ${t.toLocaleString()} times.`, start: 2, growth: 1.32, rewardBase: 225 },
+  { prefix: 'mines-5x5-1', name: 'Wide Sweep', metric: (s) => s.arcade?.mines?.clears5x5OneBomb ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 1-bomb boards`, describe: (t) => `Fully clear a 5x5 board with one bomb ${t.toLocaleString()} times.`, start: 2, growth: 1.32, rewardBase: 175 },
+  { prefix: 'mines-5x5-2', name: 'Double Hazard', metric: (s) => s.arcade?.mines?.clears5x5TwoBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 2-bomb boards`, describe: (t) => `Fully clear a 5x5 board with two bombs ${t.toLocaleString()} times.`, start: 2, growth: 1.33, rewardBase: 225 },
+  { prefix: 'mines-5x5-3', name: 'Full Minefield', metric: (s) => s.arcade?.mines?.clears5x5ThreeBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 3-bomb boards`, describe: (t) => `Fully clear a 5x5 board with three bombs ${t.toLocaleString()} times.`, start: 2, growth: 1.34, rewardBase: 275 },
 
-  // Number Guessing: one family per speed threshold, plus persistence.
-  { prefix: 'guess-rounds', name: 'Number Hunter', metric: (s) => s.arcade?.guessing?.rounds ?? 0, goal: (t) => `Play ${t.toLocaleString()} guessing rounds`, describe: (t) => `Settle ${t.toLocaleString()} Number Guessing rounds.`, start: 5, growth: 1.28 },
-  { prefix: 'guess-under-1', name: 'First Try', metric: (s) => s.arcade?.guessing?.winsUnder1 ?? 0, goal: (t) => `Win first-try ${t.toLocaleString()} times`, describe: (t) => `Guess the exact number on the first try ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 1600 },
-  { prefix: 'guess-under-2', name: 'Two Guesses', metric: (s) => s.arcade?.guessing?.winsUnder2 ?? 0, goal: (t) => `Win within 2 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within two guesses ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 1300 },
-  { prefix: 'guess-under-3', name: 'Three Guesses', metric: (s) => s.arcade?.guessing?.winsUnder3 ?? 0, goal: (t) => `Win within 3 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within three guesses ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 1100 },
-  { prefix: 'guess-under-4', name: 'Four Guesses', metric: (s) => s.arcade?.guessing?.winsUnder4 ?? 0, goal: (t) => `Win within 4 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within four guesses ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 900 },
-  { prefix: 'guess-under-5', name: 'Five Guesses', metric: (s) => s.arcade?.guessing?.winsUnder5 ?? 0, goal: (t) => `Win within 5 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within five guesses ${t.toLocaleString()} times.`, start: 2, growth: 1.29, rewardBase: 750 },
-  { prefix: 'guess-under-6', name: 'Six Guesses', metric: (s) => s.arcade?.guessing?.winsUnder6 ?? 0, goal: (t) => `Win within 6 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within six guesses ${t.toLocaleString()} times.`, start: 3, growth: 1.28, rewardBase: 650 },
-  { prefix: 'guess-under-7', name: 'Seven Guesses', metric: (s) => s.arcade?.guessing?.winsUnder7 ?? 0, goal: (t) => `Finish within 7 guesses ${t.toLocaleString()} times`, describe: (t) => `Find the number within seven guesses ${t.toLocaleString()} times.`, start: 5, growth: 1.27 },
+  // Number Guessing only rewards genuinely fast solves. Routine play and safe
+  // finishes already have their game payout and should not pay a second bonus.
+  { prefix: 'guess-under-1', name: 'First Try', metric: (s) => s.arcade?.guessing?.winsUnder1 ?? 0, goal: (t) => `Win first-try ${t.toLocaleString()} times`, describe: (t) => `Guess the exact number on the first try ${t.toLocaleString()} times.`, start: 1, growth: 1.34, rewardBase: 500 },
+  { prefix: 'guess-under-2', name: 'Two Guesses', metric: (s) => s.arcade?.guessing?.winsUnder2 ?? 0, goal: (t) => `Win within 2 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within two guesses ${t.toLocaleString()} times.`, start: 2, growth: 1.34, rewardBase: 350 },
+  { prefix: 'guess-under-3', name: 'Three Guesses', metric: (s) => s.arcade?.guessing?.winsUnder3 ?? 0, goal: (t) => `Win within 3 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within three guesses ${t.toLocaleString()} times.`, start: 3, growth: 1.34, rewardBase: 250 },
+  { prefix: 'guess-under-4', name: 'Four Guesses', metric: (s) => s.arcade?.guessing?.winsUnder4 ?? 0, goal: (t) => `Win within 4 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within four guesses ${t.toLocaleString()} times.`, start: 5, growth: 1.34, rewardBase: 175 },
 
-  // Plinko: volume, profitable buckets, rare hits, and edge travel.
-  { prefix: 'plinko-drops', name: 'Chip Rain', metric: (s) => s.arcade?.plinko?.drops ?? 0, goal: (t) => `Drop ${t.toLocaleString()} chips`, describe: (t) => `Complete ${t.toLocaleString()} Plinko drops.`, start: 10, growth: 1.3, roundTo: 5 },
-  { prefix: 'plinko-wins', name: 'Soft Landing', metric: (s) => s.arcade?.plinko?.wins ?? 0, goal: (t) => `Hit ${t.toLocaleString()} non-losing buckets`, describe: (t) => `Land in 1x-or-better Plinko buckets ${t.toLocaleString()} times.`, start: 5, growth: 1.29 },
-  { prefix: 'plinko-profit', name: 'Green Bucket', metric: (s) => s.arcade?.plinko?.profitableHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} profitable buckets`, describe: (t) => `Land above 1x in Plinko ${t.toLocaleString()} times.`, start: 3, growth: 1.3 },
-  { prefix: 'plinko-high', name: 'High Pocket', metric: (s) => s.arcade?.plinko?.highHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 3x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 3x ${t.toLocaleString()} times.`, start: 1, growth: 1.31, rewardBase: 850 },
-  { prefix: 'plinko-jackpot', name: 'Jackpot Rail', metric: (s) => s.arcade?.plinko?.jackpotHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 7x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 7x ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1200 },
-  { prefix: 'plinko-edge', name: 'Outer Rail', metric: (s) => s.arcade?.plinko?.edgeHits ?? 0, goal: (t) => `Reach an outer bucket ${t.toLocaleString()} times`, describe: (t) => `Reach either outermost Plinko bucket ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1400 },
-  { prefix: 'plinko-payout', name: 'Bucket Treasury', metric: (s) => s.arcade?.plinko?.totalPayout ?? 0, goal: (t) => `Collect ${t.toLocaleString()}€ from Plinko`, describe: (t) => `Accumulate ${t.toLocaleString()}€ in gross Plinko payouts.`, start: 500, growth: 1.3, roundTo: 100 },
-  { prefix: 'plinko-best', name: 'Multiplier Rail', metric: (s) => s.arcade?.plinko?.bestMultiplier ?? 0, goal: (t) => `Hit ${t.toFixed(1)}x in Plinko`, describe: (t) => `Reach a ${t.toFixed(1)}x effective Plinko multiplier.`, start: 1.5, growth: 1.07, roundTo: 0.1, rewardBase: 850 },
+  // Plinko chests are reserved for uncommon buckets. Drop count, ordinary wins,
+  // profitable hits, and gross turnover are deliberately excluded.
+  { prefix: 'plinko-high', name: 'High Pocket', metric: (s) => s.arcade?.plinko?.highHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 3x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 3x ${t.toLocaleString()} times.`, start: 3, growth: 1.34, rewardBase: 150 },
+  { prefix: 'plinko-jackpot', name: 'Jackpot Rail', metric: (s) => s.arcade?.plinko?.jackpotHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 7x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 7x ${t.toLocaleString()} times.`, start: 2, growth: 1.35, rewardBase: 250 },
+  { prefix: 'plinko-edge', name: 'Outer Rail', metric: (s) => s.arcade?.plinko?.edgeHits ?? 0, goal: (t) => `Reach an outer bucket ${t.toLocaleString()} times`, describe: (t) => `Reach either outermost Plinko bucket ${t.toLocaleString()} times.`, start: 2, growth: 1.35, rewardBase: 300 },
+  { prefix: 'plinko-best', name: 'Multiplier Rail', metric: (s) => s.arcade?.plinko?.bestMultiplier ?? 0, goal: (t) => `Hit ${t.toFixed(1)}x in Plinko`, describe: (t) => `Reach a ${t.toFixed(1)}x effective Plinko multiplier.`, start: 3.5, growth: 1.075, roundTo: 0.5, rewardBase: 150 },
 ];
 
 const arcadeChestCatalog = arcadeChestFamilies.flatMap(buildArcadeChestFamily);
 
-// Core prediction chests plus 1,024 generated minigame-specific challenges.
+// Core prediction chests plus hundreds of generated minigame challenges.
 export const chestCatalog: ChestSpec[] = [
   ...buildChestFamily({
     prefix: 'upset', name: 'Upset Vault',
@@ -386,44 +381,12 @@ export const chestCatalog: ChestSpec[] = [
     eloBase: 70, eloStep: 140, rewardBase: 700, rewardStep: 600,
   }),
   ...buildChestFamily({
-    prefix: 'sharp', name: 'Sharpshooter',
-    metric: (s) => s.accuracy,
-    goal: (t) => `Hit ${t}% accuracy`,
-    describe: (t) => `Reach a lifetime prediction accuracy of ${t}%.`,
-    targets: [55, 58, 61, 64, 67, 70, 73, 76, 80, 85],
-    eloBase: 120, eloStep: 170, rewardBase: 900, rewardStep: 650,
-  }),
-  ...buildChestFamily({
-    prefix: 'marathon', name: 'Marathon',
-    metric: (s) => s.totalBets,
-    goal: (t) => `Resolve ${t} predictions`,
-    describe: (t) => `Resolve a lifetime total of ${t} predictions.`,
-    targets: [30, 60, 100, 160, 250, 400, 600, 900, 1300, 1800],
-    eloBase: 50, eloStep: 130, rewardBase: 600, rewardStep: 500,
-  }),
-  ...buildChestFamily({
-    prefix: 'arcade', name: 'Arcade Legend',
-    metric: (s) => s.bestMinigameMult ?? 0,
-    goal: (t) => `${t}× in a minigame`,
-    describe: (t) => `Cash out a single arcade round at a ${t}× multiplier or higher.`,
-    targets: [3, 5, 7, 10, 14, 18, 24, 30, 40, 55, 75, 100],
-    eloBase: 60, eloStep: 135, rewardBase: 750, rewardStep: 700,
-  }),
-  ...buildChestFamily({
     prefix: 'daredevil', name: 'Daredevil',
     metric: (s) => s.challengesCompleted ?? 0,
     goal: (t) => `Complete ${t} challenges`,
     describe: (t) => `Complete ${t} real-life challenges or wagers.`,
     targets: [3, 6, 10, 15, 22, 30, 45, 60],
     eloBase: 90, eloStep: 160, rewardBase: 800, rewardStep: 700,
-  }),
-  ...buildChestFamily({
-    prefix: 'collector', name: 'Collector',
-    metric: (s) => s.chestsOpened ?? 0,
-    goal: (t) => `Open ${t} chests`,
-    describe: (t) => `Open ${t} chests in total.`,
-    targets: [5, 10, 18, 28, 40, 55, 75, 100],
-    eloBase: 100, eloStep: 180, rewardBase: 1000, rewardStep: 900,
   }),
   ...buildChestFamily({
     prefix: 'grandmaster', name: 'Grandmaster',
@@ -438,8 +401,8 @@ export const chestCatalog: ChestSpec[] = [
     metric: (s) => s.coinsWon,
     goal: (t) => `Win ${t.toLocaleString()}€`,
     describe: (t) => `Win a lifetime total of ${t.toLocaleString()}€ from predictions.`,
-    targets: [5000, 15000, 40000, 80000, 150000, 300000],
-    eloBase: 120, eloStep: 200, rewardBase: 1100, rewardStep: 1000,
+    targets: [15000, 40000, 80000, 150000, 300000],
+    eloBase: 250, eloStep: 250, rewardBase: 400, rewardStep: 700,
   }),
   ...arcadeChestCatalog,
 ];
@@ -552,7 +515,7 @@ export async function getChestDefinitions(user: UserProfile): Promise<ChestDefin
         id: chest.id,
         title: chest.title,
         description: chest.description,
-        reward: chest.reward * REWARD_MULTIPLIER,
+        reward: chest.reward * CHEST_REWARD_MULTIPLIER,
         eloRequired: chest.eloRequired,
         eloWon,
         goal: chest.goal,
@@ -572,7 +535,7 @@ export async function claimChest(user: UserProfile, chestId: string) {
   if ((user.stats.eloWon ?? 0) < chest.eloRequired) throw new Error('Win more ELO to unlock this chest.');
   if (chest.metric(user.stats) < chest.target) throw new Error('Challenge not completed yet.');
 
-  const amount = chest.reward * REWARD_MULTIPLIER;
+  const amount = chest.reward * CHEST_REWARD_MULTIPLIER;
   const userRef = doc(db, 'users', user.uid);
   const claimRef = rewardClaimRef(user.uid, `chest_${chest.id}`);
   await runTransaction(db, async (transaction) => {

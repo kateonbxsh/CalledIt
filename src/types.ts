@@ -142,6 +142,28 @@ export interface BetOption {
   createdBy?: string;
 }
 
+export interface FootballTeamLink {
+  id: number;
+  name: string;
+  shortName: string | null;
+  tla: string | null;
+  crest: string | null;
+}
+
+export interface FootballMatchLink {
+  provider: 'football-data.org';
+  matchId: number;
+  kickoff: string;
+  status: string;
+  matchday: number | null;
+  competitionId: number;
+  competitionName: string;
+  competitionCode: string | null;
+  competitionEmblem: string | null;
+  homeTeam: FootballTeamLink;
+  awayTeam: FootballTeamLink;
+}
+
 export interface ChanceOptionSummary {
   optionId: string;
   users: number;
@@ -167,6 +189,7 @@ export interface Bet {
   allowExactScore?: boolean;
   homeTeam?: string;
   awayTeam?: string;
+  footballMatch?: FootballMatchLink | null;
   imageUrl?: string;
   deadline?: Timestamp;
   // Before/After bets use this as their target; closest-hour bets use it as
@@ -303,6 +326,7 @@ export interface CreateBetInput {
   allowExactScore?: boolean;
   homeTeam?: string;
   awayTeam?: string;
+  footballMatch?: FootballMatchLink | null;
   imageUrl?: string;
   groupId?: string;
 }

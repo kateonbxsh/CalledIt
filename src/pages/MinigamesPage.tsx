@@ -147,6 +147,7 @@ type ChestDisplayItem = ChestDefinition & {
 };
 
 type ChestCategory = 'general' | 'plane' | 'mines' | 'guessing' | 'plinko';
+type ChestStage = 'ready' | 'progress' | 'locked';
 
 const CHEST_CATEGORY_ORDER: ChestCategory[] = ['general', 'plane', 'mines', 'guessing', 'plinko'];
 const CHEST_CATEGORY_META = {
@@ -163,6 +164,12 @@ function chestCategory(chestId: string): ChestCategory {
   if (chestId.startsWith('game-guess-')) return 'guessing';
   if (chestId.startsWith('game-plinko-')) return 'plinko';
   return 'general';
+}
+
+function chestStage(chest: ChestDisplayItem): ChestStage {
+  if (chest.unlocked && chest.completed) return 'ready';
+  if (chest.unlocked || chest.closeness >= MYSTERY_CHEST_PROGRESS) return 'progress';
+  return 'locked';
 }
 
 const MIN_VISIBLE_CHESTS = 10;
@@ -188,6 +195,8 @@ export function MinigamesPage() {
   const [wheelOpen, setWheelOpen] = useState(false);
   const [chestsOpen, setChestsOpen] = useState(false);
   const [chestTab, setChestTab] = useState<'active' | 'opened'>('active');
+  const [chestCategoryTab, setChestCategoryTab] = useState<ChestCategory>('general');
+  const [chestStageTab, setChestStageTab] = useState<ChestStage>('ready');
   const [rewardPopup, setRewardPopup] = useState<RewardPopupState | null>(null);
   const [dailyBonusProgress, setDailyBonusProgress] = useState<any>({
     totalClaimed: 0,
@@ -246,13 +255,37 @@ export function MinigamesPage() {
   const activeChests = useMemo(() => visibleChests.filter((chest) => !chest.claimed), [visibleChests]);
   const openedChests = useMemo(() => visibleChests.filter((chest) => chest.claimed), [visibleChests]);
   const displayedChests = chestTab === 'opened' ? openedChests : activeChests;
-  const displayedChestGroups = useMemo(() => CHEST_CATEGORY_ORDER
-    .map((category) => ({ category, chests: displayedChests.filter((chest) => chest.category === category) }))
-    .filter((group) => group.chests.length > 0), [displayedChests]);
+  const availableChestCategories = useMemo(() => CHEST_CATEGORY_ORDER.filter((category) => (
+    displayedChests.some((chest) => chest.category === category)
+  )), [displayedChests]);
+  const categoryChests = useMemo(() => displayedChests.filter((chest) => chest.category === chestCategoryTab), [displayedChests, chestCategoryTab]);
+  const stageCounts = useMemo(() => ({
+    ready: categoryChests.filter((chest) => chestStage(chest) === 'ready').length,
+    progress: categoryChests.filter((chest) => chestStage(chest) === 'progress').length,
+    locked: categoryChests.filter((chest) => chestStage(chest) === 'locked').length,
+  }), [categoryChests]);
+  const filteredDisplayedChests = useMemo(() => chestTab === 'opened'
+    ? categoryChests
+    : categoryChests.filter((chest) => chestStage(chest) === chestStageTab), [categoryChests, chestStageTab, chestTab]);
+  const displayedChestGroups = filteredDisplayedChests.length > 0
+    ? [{ category: chestCategoryTab, chests: filteredDisplayedChests }]
+    : [];
 
   useEffect(() => {
     if (chestTab === 'opened' && openedChests.length === 0) setChestTab('active');
   }, [chestTab, openedChests.length]);
+
+  useEffect(() => {
+    if (!availableChestCategories.includes(chestCategoryTab) && availableChestCategories[0]) {
+      setChestCategoryTab(availableChestCategories[0]);
+    }
+  }, [availableChestCategories, chestCategoryTab]);
+
+  useEffect(() => {
+    if (chestTab !== 'active' || stageCounts[chestStageTab] > 0) return;
+    const next = (['ready', 'progress', 'locked'] as ChestStage[]).find((stage) => stageCounts[stage] > 0);
+    if (next) setChestStageTab(next);
+  }, [chestStageTab, chestTab, stageCounts]);
 
   useEffect(() => {
     if (!profile) return;
@@ -470,7 +503,7 @@ export function MinigamesPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <Gift size={18} className="text-[#6f79d8]" />
+                <Gift size={18} className="text-citrus" />
                 <h3 className="font-black">Daily activity bonuses</h3>
               </div>
               <p className="mt-1 max-w-xl text-xs leading-5 text-ink/55">
@@ -478,12 +511,12 @@ export function MinigamesPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <div className="rounded-xl bg-[#6f79d8]/10 px-3 py-2">
-                <p className="text-2xs font-bold uppercase text-[#6f79d8]">Earned</p>
+              <div className="rounded-xl bg-citrus/10 px-3 py-2">
+                <p className="text-2xs font-bold uppercase text-citrus">Earned</p>
                 <CoinAmount amount={dailyBonusProgress.totalClaimed} className="text-sm" />
               </div>
-              <div className="rounded-xl bg-[#6f79d8]/10 px-3 py-2">
-                <p className="text-2xs font-bold uppercase text-[#6f79d8]">Left</p>
+              <div className="rounded-xl bg-citrus/10 px-3 py-2">
+                <p className="text-2xs font-bold uppercase text-citrus">Left</p>
                 <CoinAmount amount={dailyBonusProgress.potential} className="text-sm" />
               </div>
             </div>
@@ -525,7 +558,7 @@ export function MinigamesPage() {
             status: forecastAvailable ? 'Available now' : 'Cooling down',
             statusClass: forecastAvailable ? 'bg-mint/10 text-mint' : 'bg-field text-ink/45',
             Icon: BadgeEuro,
-            iconClass: 'bg-[#6f79d8]/10 text-[#6f79d8]',
+            iconClass: 'bg-citrus/10 text-citrus',
             action: () => setForecastOpen(true),
           },
           {
@@ -691,6 +724,46 @@ export function MinigamesPage() {
                 </button>
               </div>
             </div>
+            <div className="shrink-0 border-b border-line bg-white px-4 py-2.5 sm:px-5">
+              <div className="flex gap-2 overflow-x-auto pb-0.5">
+                {availableChestCategories.map((category) => {
+                  const meta = CHEST_CATEGORY_META[category];
+                  const CategoryIcon = meta.Icon;
+                  const count = displayedChests.filter((chest) => chest.category === category).length;
+                  const selectedCategory = chestCategoryTab === category;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => setChestCategoryTab(category)}
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-black transition ${selectedCategory ? `${meta.badge} ${meta.accent} border-current/20` : 'border-line bg-white text-ink/45'}`}
+                    >
+                      <CategoryIcon size={14} />
+                      {meta.label}
+                      <span className="opacity-55">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {chestTab === 'active' ? (
+                <div className="mt-2 flex gap-1 rounded-lg bg-field p-1">
+                  {([
+                    { id: 'ready', label: 'Ready' },
+                    { id: 'progress', label: 'In progress' },
+                    { id: 'locked', label: 'Locked' },
+                  ] as { id: ChestStage; label: string }[]).filter((item) => stageCounts[item.id] > 0).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setChestStageTab(item.id)}
+                      className={`flex-1 rounded-md px-2 py-1.5 text-2xs font-black transition ${chestStageTab === item.id ? 'bg-white text-ink shadow-soft' : 'text-ink/40'}`}
+                    >
+                      {item.label} <span className="opacity-50">{stageCounts[item.id]}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div data-sheet-scroll className="min-h-0 overflow-y-auto px-4 py-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] sm:px-5 sm:pb-5">
               {chests.length === 0 ? (
                 <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
@@ -699,7 +772,7 @@ export function MinigamesPage() {
                     <p className="mt-2 text-sm font-bold text-ink/50">There are no chests right now.</p>
                   </div>
                 </div>
-              ) : displayedChests.length === 0 ? (
+              ) : displayedChestGroups.length === 0 ? (
                 <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
                   <div>
                     <Gift size={28} className="mx-auto text-ink/25" />
@@ -891,13 +964,13 @@ export function MinigamesPage() {
             {rewardPopup.variant === 'chest' ? (
               <RewardChest open className="mx-auto mb-3 h-32 w-40" />
             ) : (
-              <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-[#6f79d8]/10">
-                {rewardPopup.variant === 'wheel' ? <Sparkles size={34} className="text-[#6f79d8]" /> : <BadgeEuro size={34} className="text-[#6f79d8]" />}
+              <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-citrus/10">
+                {rewardPopup.variant === 'wheel' ? <Sparkles size={34} className="text-citrus" /> : <BadgeEuro size={34} className="text-citrus" />}
               </div>
             )}
             <h2 className="text-xl font-black">{rewardPopup.title}</h2>
             <p className="mt-2 text-sm text-ink/60">{rewardPopup.detail}</p>
-            <p className={`mt-4 text-3xl font-black ${rewardPopup.amount < 0 ? 'text-rust' : 'text-[#6f79d8]'}`}>
+            <p className={`mt-4 text-3xl font-black ${rewardPopup.amount < 0 ? 'text-rust' : 'text-citrus'}`}>
               {signedCoins(rewardPopup.amount)}
             </p>
             <div className="mt-4 inline-flex rounded-md bg-field px-4 py-3">

@@ -29,14 +29,14 @@ export function StakeInput({
         <button
           type="button"
           onClick={() => onChange(Math.max(min, normalized - step))}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-lg font-black text-[#6f79d8] transition hover:bg-[#6f79d8]/10 active:scale-95"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-lg font-black text-citrus transition hover:bg-citrus/10 active:scale-95"
           aria-label={`Decrease ${label.toLowerCase()}`}
         >
           -
         </button>
-        <label className="flex h-11 min-w-0 flex-1 items-center justify-center gap-[0.18em] rounded-xl border border-[#6f79d8]/30 bg-[#6f79d8]/10 px-3 text-base font-black text-[#6f79d8] shadow-card focus-within:border-[#6f79d8]">
+        <label className="flex h-11 min-w-0 flex-1 items-center justify-center gap-[0.18em] rounded-xl border border-citrus/30 bg-citrus/10 px-3 text-base font-black text-citrus shadow-card focus-within:border-citrus">
           <input
-            className="min-w-0 max-w-[8ch] bg-transparent text-right text-base font-black text-[#6f79d8] outline-none"
+            className="min-w-0 max-w-[8ch] bg-transparent text-right text-base font-black text-citrus outline-none"
             type="number"
             min={min}
             value={text}
@@ -60,7 +60,7 @@ export function StakeInput({
         <button
           type="button"
           onClick={() => onChange(normalized + step)}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-lg font-black text-[#6f79d8] transition hover:bg-[#6f79d8]/10 active:scale-95"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-white text-lg font-black text-citrus transition hover:bg-citrus/10 active:scale-95"
           aria-label={`Increase ${label.toLowerCase()}`}
         >
           +

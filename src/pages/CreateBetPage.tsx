@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
+import { FootballMatchPicker } from '../components/FootballMatchPicker';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { createBet } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
-import type { BetOption, BetType, BetVisibility, FriendGroup } from '../types';
+import type { BetOption, BetType, BetVisibility, FootballMatchLink, FriendGroup } from '../types';
 import { betTypeOptions } from '../utils/betTypes';
 import { downscaleBetImage } from '../utils/image';
 
@@ -26,6 +27,11 @@ function endOfLocalDay(value: string) {
   return date;
 }
 
+function datetimeLocalValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 export function CreateBetPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -42,6 +48,7 @@ export function CreateBetPage() {
   const [multiOptions, setMultiOptions] = useState('Option A\nOption B\nOption C');
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
+  const [footballMatch, setFootballMatch] = useState<FootballMatchLink | null>(null);
   const [numberLine, setNumberLine] = useState('');
   const [targetDate, setTargetDate] = useState('');
   const [eventMightNotHappen, setEventMightNotHappen] = useState(false);
@@ -178,6 +185,7 @@ export function CreateBetPage() {
           allowExactScore,
           homeTeam,
           awayTeam,
+          footballMatch,
           imageUrl,
           groupId: selectedGroupId || undefined,
         },
@@ -327,14 +335,32 @@ export function CreateBetPage() {
           ) : null}
           {type === 'sports' ? (
             <div className="space-y-3">
+              <FootballMatchPicker
+                selectedMatchId={footballMatch?.matchId}
+                onSelect={(match) => {
+                  const home = match.homeTeam.shortName || match.homeTeam.name;
+                  const away = match.awayTeam.shortName || match.awayTeam.name;
+                  setFootballMatch(match);
+                  setHomeTeam(home);
+                  setAwayTeam(away);
+                  setAllowDraw(true);
+                  setTitle(`Who will win: ${home} vs ${away}?`);
+                  setCategory((current) => current || 'Football');
+                  setDescription((current) => current || [
+                    match.competitionName,
+                    match.matchday ? `Matchday ${match.matchday}` : '',
+                  ].filter(Boolean).join(' · '));
+                  setDeadline(datetimeLocalValue(new Date(match.kickoff)));
+                }}
+              />
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm font-medium">
                   Team/Player 1
-                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} placeholder="e.g., Manchester United" required />
+                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={homeTeam} onChange={(e) => { setHomeTeam(e.target.value); setFootballMatch(null); }} placeholder="e.g., Manchester United" required />
                 </label>
                 <label className="block text-sm font-medium">
                   Team/Player 2
-                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} placeholder="e.g., Liverpool" required />
+                  <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={awayTeam} onChange={(e) => { setAwayTeam(e.target.value); setFootballMatch(null); }} placeholder="e.g., Liverpool" required />
                 </label>
               </div>
               <label className="flex items-center gap-2 text-sm">

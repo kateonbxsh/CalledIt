@@ -1,6 +1,7 @@
 import { CheckCircle2, Lock, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CoinAmount } from './CoinAmount';
+import { FootballMatchCrests } from './FootballMatchCrests';
 import type { Bet, Prediction } from '../types';
 import { betTypeMeta, betTypeLabel, isClosestType } from '../utils/betTypes';
 import { closestDateGuessLabel, closestHourGuessLabel } from '../utils/closestGuess';
@@ -55,12 +56,17 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
         {/* Header: thumbnail + title */}
         <div className="flex items-start gap-3">
           {/* Image or type icon — same size */}
-          <div className={`shrink-0 h-10 w-10 overflow-hidden rounded-xl ${bet.imageUrl ? '' : meta.bg} grid place-items-center`}>
-            {bet.imageUrl
-              ? <img src={bet.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-              : <TypeIcon size={18} className={meta.color} />
-            }
-          </div>
+          {bet.imageUrl ? (
+            <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl">
+              <img src={bet.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+            </div>
+          ) : bet.footballMatch ? (
+            <FootballMatchCrests match={bet.footballMatch} />
+          ) : (
+            <div className={`grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl ${meta.bg}`}>
+              <TypeIcon size={18} className={meta.color} />
+            </div>
+          )}
 
           {/* Title + meta */}
           <div className="min-w-0 flex-1">

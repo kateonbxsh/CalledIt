@@ -1,0 +1,17 @@
+{
+  "name": "called-it-football-worker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cached football-data.org fixture gateway for Called It.",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js",
+    "check": "node --check worker.js",
+    "pm2:start": "pm2 start worker.js --name called-it-football",
+    "pm2:logs": "pm2 logs called-it-football"
+  },
+  "dependencies": {
+    "pm2": "^5.4.3"
+  }
+}
+

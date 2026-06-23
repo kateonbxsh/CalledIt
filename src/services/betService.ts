@@ -141,6 +141,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     allowExactScore: input.allowExactScore ?? false,
     homeTeam: input.homeTeam?.trim() || null,
     awayTeam: input.awayTeam?.trim() || null,
+    footballMatch: input.type === 'sports' ? (input.footballMatch ?? null) : null,
     imageUrl: input.imageUrl || null,
     groupId: input.groupId ?? null,
     creatorId: creator.uid,

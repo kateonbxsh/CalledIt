@@ -158,7 +158,7 @@ export function ClosestDistributionChart({ bet, predictions }: { bet: Bet; predi
                 <div className="rounded-md border border-line bg-white px-2.5 py-1.5 text-xs shadow-soft">
                   <p className="font-semibold text-ink">{formatX(point.x)}</p>
                   <p className="text-ink/60">{pct < 10 ? pct.toFixed(1) : Math.round(pct)}% chance</p>
-                  <p className="text-ink/45">{point.users} {point.users === 1 ? 'person' : 'people'} · <span className="font-bold text-[#6f79d8]">{(point.coins ?? 0).toLocaleString()}€</span></p>
+                  <p className="text-ink/45">{point.users} {point.users === 1 ? 'person' : 'people'} · <span className="font-bold text-citrus">{(point.coins ?? 0).toLocaleString()}€</span></p>
                 </div>
               );
             }}

@@ -423,7 +423,7 @@ export function PlaneGame({
           <h1 className="text-xl font-black">Sky Landing</h1>
         </div>
         <div className="flex items-center gap-2">
-          <div className="rounded-xl border border-white bg-white px-3 py-2 shadow-card">
+          <div className="rounded-xl border border-transparent bg-transparent px-3 py-2">
             <CoinAmount amount={Math.round(coins)} className="text-sm" />
           </div>
           <button
