@@ -34,9 +34,9 @@ export function StakeInput({
         >
           -
         </button>
-        <label className="flex h-11 min-w-0 flex-1 items-center justify-center gap-[0.18em] rounded-xl border border-citrus/30 bg-citrus/10 px-3 text-base font-black text-citrus shadow-card focus-within:border-citrus">
+        <label className="relative flex h-11 min-w-0 flex-1 items-center rounded-xl border border-citrus/30 bg-citrus/10 px-3 text-base font-black text-citrus shadow-card focus-within:border-citrus">
           <input
-            className="min-w-0 max-w-[8ch] bg-transparent text-right text-base font-black text-citrus outline-none"
+            className="min-w-0 w-full bg-transparent px-8 text-center text-base font-black text-citrus outline-none"
             type="number"
             min={min}
             value={text}
@@ -55,7 +55,7 @@ export function StakeInput({
             }}
             aria-label={label}
           />
-          <span aria-hidden="true">€</span>
+          <span className="pointer-events-none absolute right-3" aria-hidden="true">€</span>
         </label>
         <button
           type="button"

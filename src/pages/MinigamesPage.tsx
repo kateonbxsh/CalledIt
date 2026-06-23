@@ -36,6 +36,7 @@ import {
   recordMinigameLoss,
   settleCustomMinigameResult,
   settleMinigameSession,
+  claimAllChests,
   claimChest,
   claimDailyForecast,
   getChestDefinitions,
@@ -201,8 +202,8 @@ export function MinigamesPage() {
   const [dailyBonusProgress, setDailyBonusProgress] = useState<any>({
     totalClaimed: 0,
     bonuses: [],
-    potential: 3700,
-    bonusAmounts: { bet: 1200, challenge: 1200, prediction: 800, comment: 500 },
+    potential: 3400,
+    bonusAmounts: { bet: 1200, challenge: 1200, prediction: 800, comment: 200 },
     claimedTypes: [],
   });
   const [testPushSending, setTestPushSending] = useState(false);
@@ -216,7 +217,9 @@ export function MinigamesPage() {
   const forecastAvailable = profile ? canClaimSixHourReward(profile.lastDailyForecastAt?.toDate?.() ?? null) : false;
   const wheelAvailable = profile ? canClaimSixHourReward(profile.lastWheelSpinAt?.toDate?.() ?? null) : false;
   const openableChests = chests.filter((chest) => chest.unlocked && !chest.claimed).length;
-  const claimableChests = chests.filter((chest) => chest.unlocked && chest.completed && !chest.claimed).length;
+  const claimableChestItems = chests.filter((chest) => chest.unlocked && chest.completed && !chest.claimed);
+  const claimableChests = claimableChestItems.length;
+  const claimableChestReward = claimableChestItems.reduce((sum, chest) => sum + chest.reward, 0);
   const visibleChests = useMemo<ChestDisplayItem[]>(() => {
     const visible: ChestDisplayItem[] = [];
     const backupMysteries: ChestDisplayItem[] = [];
@@ -295,8 +298,8 @@ export function MinigamesPage() {
       setDailyBonusProgress({
         totalClaimed: 0,
         bonuses: [],
-        potential: 3700,
-        bonusAmounts: { bet: 1200, challenge: 1200, prediction: 800, comment: 500 },
+        potential: 3400,
+        bonusAmounts: { bet: 1200, challenge: 1200, prediction: 800, comment: 200 },
         claimedTypes: [],
       });
     });
@@ -361,6 +364,30 @@ export function MinigamesPage() {
       setChests(await getChestDefinitions(profile));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Chest unavailable.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function openAllReadyChests() {
+    if (!profile || claimableChestItems.length === 0) return;
+    setBusy('chest-all');
+    setMessage('');
+    setOpenedChestId('');
+    try {
+      const reward = await claimAllChests(profile, claimableChestItems.map((chest) => chest.id));
+      if (reward.count === 0) throw new Error('Those chests have already been opened.');
+      setMessage(`${reward.count} chests opened: +${reward.amount.toLocaleString()} euros.`);
+      setChestsOpen(false);
+      setRewardPopup({
+        title: `${reward.count} chests opened`,
+        amount: reward.amount,
+        detail: 'The combined chest reward was added to your balance.',
+        variant: 'chest',
+      });
+      setChests(await getChestDefinitions(profile));
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not open the ready chests.');
     } finally {
       setBusy('');
     }
@@ -686,14 +713,26 @@ export function MinigamesPage() {
                 <h2 className="text-xl font-black">Reward chests</h2>
                 <p className="mt-1 text-sm text-ink/50">Earn ELO to unlock attempts, then finish each chest challenge.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setChestsOpen(false)}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field text-ink/60 transition hover:bg-line"
-                aria-label="Close chests"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                {claimableChests > 0 ? (
+                  <button
+                    type="button"
+                    onClick={openAllReadyChests}
+                    disabled={!!busy}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-mint px-3 text-xs font-black text-white transition active:scale-95 disabled:opacity-45"
+                  >
+                    {busy === 'chest-all' ? 'Opening...' : <>Open all <CoinAmount amount={claimableChestReward} className="text-xs !text-white" /></>}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setChestsOpen(false)}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field text-ink/60 transition hover:bg-line"
+                  aria-label="Close chests"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <div className="shrink-0 border-b border-line px-4 py-3 sm:px-5">
               <div className="grid grid-cols-2 rounded-xl bg-field p-1">

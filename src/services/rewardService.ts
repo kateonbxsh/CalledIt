@@ -567,6 +567,73 @@ export async function claimChest(user: UserProfile, chestId: string) {
   return { amount, label: chest.title };
 }
 
+export async function claimAllChests(user: UserProfile, chestIds: string[]) {
+  const uniqueIds = [...new Set(chestIds)];
+  const requested = uniqueIds
+    .map((id) => chestCatalog.find((chest) => chest.id === id))
+    .filter((chest): chest is ChestSpec => Boolean(chest));
+  const chunks: ChestSpec[][] = [];
+  for (let index = 0; index < requested.length; index += 100) {
+    chunks.push(requested.slice(index, index + 100));
+  }
+
+  let amount = 0;
+  let count = 0;
+  for (const chunk of chunks) {
+    const settled = await runTransaction(db, async (transaction) => {
+      const userRef = doc(db, 'users', user.uid);
+      const claimRefs = chunk.map((chest) => rewardClaimRef(user.uid, `chest_${chest.id}`));
+      const [userSnap, ...claimSnaps] = await Promise.all([
+        transaction.get(userRef),
+        ...claimRefs.map((claimRef) => transaction.get(claimRef)),
+      ]);
+      const current = userSnap.data() as UserProfile | undefined;
+      if (!current) throw new Error('Profile not found.');
+
+      const claimable = chunk.filter((chest, index) => (
+        !claimSnaps[index].exists()
+        && (current.stats.eloWon ?? 0) >= chest.eloRequired
+        && chest.metric(current.stats) >= chest.target
+      ));
+      if (claimable.length === 0) return { amount: 0, count: 0 };
+
+      const chunkAmount = claimable.reduce(
+        (sum, chest) => sum + chest.reward * CHEST_REWARD_MULTIPLIER,
+        0,
+      );
+      for (const chest of claimable) {
+        transaction.set(rewardClaimRef(user.uid, `chest_${chest.id}`), {
+          userId: user.uid,
+          username: user.username,
+          type: 'chest',
+          label: chest.title,
+          amount: chest.reward * CHEST_REWARD_MULTIPLIER,
+          createdAt: serverTimestamp(),
+        });
+      }
+      setBalanceInTransaction(
+        transaction,
+        userRef,
+        current,
+        current.coinBalance + chunkAmount,
+        `${claimable.length} reward chests opened`,
+        {
+          stats: {
+            ...current.stats,
+            chestsOpened: (current.stats.chestsOpened ?? 0) + claimable.length,
+          },
+        },
+      );
+      return { amount: chunkAmount, count: claimable.length };
+    });
+    amount += settled.amount;
+    count += settled.count;
+  }
+
+  invalidateQueryCache(`rewards:chests:${user.uid}`);
+  return { amount, count };
+}
+
 export const wheelRewards = [
   { amount: 350, label: '+350€' },
   { amount: -70, label: '-70€' },

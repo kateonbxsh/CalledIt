@@ -29,6 +29,7 @@ function statusLabel(bet: Bet) {
 
 export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Bet; prediction?: Prediction; groupName?: string; groupPhotoURL?: string }) {
   const isOpen = bet.status === 'open';
+  const isAwaitingResolve = bet.status === 'locked';
   const meta = betTypeMeta[bet.type];
   const TypeIcon = meta.icon;
   const projectedSummary = displayChanceSummary({
@@ -50,7 +51,11 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
   return (
     <Link
       to={`/bets/${bet.id}`}
-      className="animate-soft-enter block overflow-hidden rounded-2xl border border-line bg-white shadow-soft transition duration-200 hover:-translate-y-0.5 hover:border-ink/20 hover:shadow-lift"
+      className={`animate-soft-enter block overflow-hidden rounded-2xl border shadow-soft transition duration-200 hover:-translate-y-0.5 hover:shadow-lift ${
+        isAwaitingResolve
+          ? 'border-plum/35 bg-plum/[0.07] hover:border-plum/55'
+          : 'border-line bg-white hover:border-ink/20'
+      }`}
     >
       <div className="p-4">
         {/* Header: thumbnail + title */}

@@ -15,7 +15,7 @@ const BONUS_AMOUNTS = {
   bet: 1200,       // Create a bet
   challenge: 1200, // Create a challenge/wager
   prediction: 800, // Make a prediction
-  comment: 500,    // Comment on a bet
+  comment: 200,    // Comment on a bet
 };
 
 function getTodayUTC(): string {

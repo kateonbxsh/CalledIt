@@ -116,6 +116,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     throw new Error('Closest-hour bets need a guessing day.');
   }
   const now = serverTimestamp();
+  const normalizedMaskedUsernames = normalizeUsernames(input.maskedUsernames ?? []);
   const initialTotal = input.options.reduce(
     (sum, option) => sum + Math.max(0, input.initialChances?.[option.id] ?? 1),
     0,
@@ -133,7 +134,7 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     description: input.description?.trim() || null,
     visibility: input.visibility,
     invitedUsernames: normalizeUsernames(input.invitedUsernames),
-    maskedUsernames: normalizeUsernames(input.maskedUsernames ?? []),
+    maskedUsernames: normalizedMaskedUsernames,
     options: input.options,
     allowMultipleChoices: input.allowMultipleChoices ?? false,
     allowMultipleOutcomes: input.allowMultipleOutcomes ?? false,
@@ -166,9 +167,11 @@ export async function createBet(input: CreateBetInput, creator: UserProfile) {
     updatedAt: now,
   });
   const targetUids = input.visibility === 'public'
-    ? [ALL_ENABLED_TARGET_UID]
+    // A broadcast cannot exclude selected users. Skip it when masks are present
+    // so a hidden subject never receives a notification revealing the bet.
+    ? normalizedMaskedUsernames.length ? [] : [ALL_ENABLED_TARGET_UID]
     : await (async () => {
-      const masked = new Set(normalizeUsernames(input.maskedUsernames ?? []));
+      const masked = new Set(normalizedMaskedUsernames);
       const maskedUids = new Set(masked.size ? await uidsForUsernames([...masked]) : []);
       const privateTargets = await uidsForUsernames(
         normalizeUsernames(input.invitedUsernames).filter((name) => !masked.has(name)),

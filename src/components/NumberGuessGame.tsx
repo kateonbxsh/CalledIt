@@ -40,7 +40,7 @@ function midpoint(min: number, max: number) {
 }
 
 function multiplierForAttempt(attempt: number, stake: number, balanceBefore: number) {
-  const baseByAttempt = [0, 10, 5, 2.8, 1.6, 1, 1, 0.15];
+  const baseByAttempt = [0, 10, 5, 2.8, 1.6, 1.15, 1, 0.15];
   const base = baseByAttempt[attempt] ?? 0;
   return minigameRewardMultiplier(base, stake, balanceBefore);
 }

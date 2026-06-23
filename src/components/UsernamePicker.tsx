@@ -12,6 +12,7 @@ export function UsernamePicker({
   placeholder = 'Search usernames',
   maxSelections,
   disabled = false,
+  onSelectUser,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
@@ -20,6 +21,7 @@ export function UsernamePicker({
   placeholder?: string;
   maxSelections?: number;
   disabled?: boolean;
+  onSelectUser?: (user: UserProfile) => void;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserProfile[]>([]);
@@ -62,10 +64,11 @@ export function UsernamePicker({
     };
   }, [allowedSet, excluded, normalizedValue, query]);
 
-  function add(username: string) {
+  function add(username: string, user?: UserProfile) {
     const normalized = username.trim().toLowerCase();
     if (!normalized || normalizedValue.includes(normalized) || excluded.has(normalized) || (allowedSet && !allowedSet.has(normalized))) return;
     onChange(maxSelections === 1 ? [normalized] : [...normalizedValue, normalized].slice(0, maxSelections));
+    if (user) onSelectUser?.(user);
     setQuery('');
     setResults([]);
   }
@@ -96,7 +99,7 @@ export function UsernamePicker({
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                if (results[0]) add(results[0].username);
+                if (results[0]) add(results[0].username, results[0]);
               }
             }}
             placeholder={maxSelections !== undefined && normalizedValue.length >= maxSelections ? '' : normalizedValue.length ? 'Add another' : placeholder}
@@ -111,7 +114,7 @@ export function UsernamePicker({
               type="button"
               onPointerDown={(event) => {
                 event.preventDefault();
-                add(user.username);
+                add(user.username, user);
               }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-field active:bg-field"
               style={{ WebkitTouchCallout: 'none' }}

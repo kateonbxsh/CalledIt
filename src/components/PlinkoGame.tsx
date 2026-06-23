@@ -29,7 +29,7 @@ const BUCKET_BOTTOM = VH * 0.99;
 const BUCKET_TOP_Y = BUCKET_BOTTOM - PEG_GAP * 0.9; // wide & short docks
 const BIN_FLOOR_Y = BUCKET_BOTTOM - BALL_R - 2;
 
-const GRAVITY = 2600, RESTITUTION = 0.32, SUBSTEPS = 4, CENTER_PULL = 0.7, HDRAG = 1.1;
+const GRAVITY = 2600, RESTITUTION = 0.32, SUBSTEPS = 4, CENTER_PULL = 0.95, HDRAG = 1.1;
 
 const BASE_PEGS: { x: number; y: number }[] = [];
 for (let row = FIRST_ROW; row < ROWS; row += 1) {

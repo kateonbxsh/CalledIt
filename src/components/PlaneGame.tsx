@@ -10,8 +10,8 @@ const V0 = 480;
 const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 360, MAXVY = 260;
 const ANGLE_MIN = 20, ANGLE_MAX = 80;
 const CAM_OFF = 0.22;
-// Distance contributes at a fixed rate: no early spike and no late acceleration.
-const KM_PER_WORLD_UNIT = 0.001, MULT_PER_KM = 0.8, STAR_MULT = 0.14;
+// Distance starts close to linear, then tapers gently on very long flights.
+const KM_PER_WORLD_UNIT = 0.001, MULT_PER_KM = 0.74, DISTANCE_DECEL_KM = 12, STAR_MULT = 0.14;
 const STAR_BOOST = 230, MISSILE_PUSH = 230, MISSILE_MULT_PENALTY = 0.015, FIRST_BOAT = 340;
 // Rare rainbow star: bigger lift, a speed burst, and a short missile-immunity window.
 const RAINBOW_CHANCE = 0.08, RAINBOW_LIFT = 430, RAINBOW_SPEED = 1.5, BUFF_DURATION = 3.6;
@@ -118,7 +118,8 @@ export function PlaneGame({
     const deckY = (b: Boat) => (waterLine - b.h * 0.62) + b.h * b.deckFrac;
     const distanceKm = () => Math.max(0, plane.wx - launchX) * KM_PER_WORLD_UNIT;
     const curMult = () => {
-      const baseMultiplier = 1 + distanceKm() * MULT_PER_KM + starCount * STAR_MULT;
+      const distanceBonus = MULT_PER_KM * DISTANCE_DECEL_KM * Math.log1p(distanceKm() / DISTANCE_DECEL_KM);
+      const baseMultiplier = 1 + distanceBonus + starCount * STAR_MULT;
       return Math.max(1, minigameRewardMultiplier(baseMultiplier, stakeRef.current, balanceBeforeRef.current) - missilePenalty);
     };
 
