@@ -445,57 +445,6 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /minigameEvents/{eventId} {
-      allow read: if signedIn() && username() == 'xaouab';
-      allow create: if signedIn()
-        && request.resource.data.keys().hasAll([
-          'userId',
-          'username',
-          'displayName',
-          'game',
-          'action',
-          'sessionId',
-          'createdAt'
-        ])
-        && request.resource.data.keys().hasOnly([
-          'userId',
-          'username',
-          'displayName',
-          'game',
-          'action',
-          'sessionId',
-          'choice',
-          'result',
-          'stake',
-          'payout',
-          'multiplier',
-          'ratingDelta',
-          'createdAt'
-        ])
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.username == username()
-        && request.resource.data.displayName == me().data.displayName
-        && request.resource.data.game in ['mines', 'plane', 'guessing', 'plinko']
-        && request.resource.data.action is string
-        && request.resource.data.action.size() > 0
-        && request.resource.data.action.size() <= 60
-        && request.resource.data.sessionId is string
-        && request.resource.data.sessionId.size() > 0
-        && request.resource.data.sessionId.size() <= 160
-        && (!request.resource.data.keys().hasAny(['choice']) || (
-          request.resource.data.choice is string && request.resource.data.choice.size() <= 240
-        ))
-        && (!request.resource.data.keys().hasAny(['result']) || (
-          request.resource.data.result is string && request.resource.data.result.size() <= 40
-        ))
-        && (!request.resource.data.keys().hasAny(['stake']) || request.resource.data.stake is number)
-        && (!request.resource.data.keys().hasAny(['payout']) || request.resource.data.payout is number)
-        && (!request.resource.data.keys().hasAny(['multiplier']) || request.resource.data.multiplier is number)
-        && (!request.resource.data.keys().hasAny(['ratingDelta']) || request.resource.data.ratingDelta is number)
-        && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
-    }
-
     match /rewardClaims/{claimId} {
       allow get: if signedIn() && (
         claimId.matches('^' + request.auth.uid + '_.*') ||

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   BadgeDollarSign,
@@ -43,7 +43,6 @@ import {
   wheelRewards,
 } from '../services/rewardService';
 import { getDailyBonusProgress } from '../services/bonusService';
-import { logMinigameEvent, type MinigameAuditInput } from '../services/minigameAuditService';
 import { sendTestPushToAllUsers } from '../services/notificationService';
 import type { ChestDefinition, DailyForecastMode } from '../types';
 import { canClaimSixHourReward } from '../utils/coins';
@@ -181,10 +180,6 @@ export function MinigamesPage() {
   const [showMines, setShowMines] = useState(false);
   const [showGuessing, setShowGuessing] = useState(false);
   const [showPlinko, setShowPlinko] = useState(false);
-  const recordMinigameAudit = useCallback((event: MinigameAuditInput) => {
-    if (!profile) return;
-    void logMinigameEvent(profile, event).catch(() => {});
-  }, [profile]);
   const forecastSheet = useSwipeToDismiss(() => setForecastOpen(false), forecastOpen);
   const chestsSheet = useSwipeToDismiss(() => setChestsOpen(false), chestsOpen);
   const wheelSheet = useSwipeToDismiss(() => setWheelOpen(false), wheelOpen);
@@ -899,7 +894,6 @@ export function MinigamesPage() {
           onCharge={async (s) => { await chargePlaneStake(profile, s); return true; }}
           onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'plane', ...context, balanceBefore: profile.coinBalance })}
           onLose={async (s, context) => recordMinigameLoss(profile, { game: 'plane', stake: s, ...context, balanceBefore: profile.coinBalance })}
-          onAudit={recordMinigameAudit}
           onClose={() => setShowPlane(false)}
         />
       ) : null}
@@ -911,7 +905,6 @@ export function MinigamesPage() {
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
           onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context, balanceBefore: profile.coinBalance })}
           onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context, balanceBefore: profile.coinBalance })}
-          onAudit={recordMinigameAudit}
           onClose={() => setShowMines(false)}
         />
       ) : null}
@@ -923,7 +916,6 @@ export function MinigamesPage() {
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
           onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'guessing', ...context, balanceBefore: profile.coinBalance })}
           onSettleCustom={async (params) => settleCustomMinigameResult(profile, params)}
-          onAudit={recordMinigameAudit}
           onClose={() => setShowGuessing(false)}
         />
       ) : null}
@@ -933,7 +925,6 @@ export function MinigamesPage() {
           coins={profile.coinBalance}
           stakes={[1, 10, 50, 100, 250, 500]}
           onSettle={async (coinDelta, ratingDelta, bestMult) => { await settleMinigameSession(profile, { coinDelta, ratingDelta, bestMult, reason: 'Plinko' }); }}
-          onAudit={recordMinigameAudit}
           onClose={() => setShowPlinko(false)}
         />
       ) : null}

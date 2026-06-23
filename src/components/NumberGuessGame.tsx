@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { ArrowDown, ArrowUp, Hash, Minus, Plus, RotateCcw, Sparkles, X } from 'lucide-react';
 import type { MinigameWinResult } from '../services/rewardService';
 import { calculateMinigameLossDelta, calculateMinigameWinDelta } from '../services/rewardService';
-import { createMinigameSessionId, type MinigameAuditInput } from '../services/minigameAuditService';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 
@@ -86,7 +85,6 @@ export function NumberGuessGame({
   onCharge,
   onWin,
   onSettleCustom,
-  onAudit,
   onClose,
 }: {
   coins: number;
@@ -94,7 +92,6 @@ export function NumberGuessGame({
   onCharge: (stake: number) => Promise<boolean>;
   onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
   onSettleCustom: (params: { payout: number; ratingDelta?: number; historyDelta?: number; reason?: string }) => Promise<MinigameWinResult>;
-  onAudit: (event: MinigameAuditInput) => void;
   onClose: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>('setup');
@@ -109,7 +106,6 @@ export function NumberGuessGame({
   const [roundVariance, setRoundVariance] = useState(1);
   const knobDragRef = useRef<{ pointerId: number; angle: number } | null>(null);
   const knobRemainderRef = useRef(0);
-  const sessionIdRef = useRef('');
 
   const { min: currentMin, max: currentMax } = boundsFromGuesses(guesses);
   const suggestedGuess = midpoint(currentMin, currentMax);
@@ -198,25 +194,13 @@ export function NumberGuessGame({
     try {
       const charged = await onCharge(stake);
       if (!charged) return;
-      const nextTarget = randomTarget();
-      const sessionId = createMinigameSessionId('guessing');
-      sessionIdRef.current = sessionId;
-      setTarget(nextTarget);
+      setTarget(randomTarget());
       setGuesses([]);
       setSettlement(null);
       setFinalRefund(0);
       setGuessText('50');
       setRoundVariance(0.94 + Math.random() * 0.14);
       setPhase('playing');
-      onAudit({
-        game: 'guessing',
-        action: 'round_started',
-        sessionId,
-        choice: 'Range 1-100',
-        stake,
-        multiplier: 1,
-        result: 'started',
-      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not start.');
     } finally {
@@ -241,17 +225,6 @@ export function NumberGuessGame({
         setSettlement(result);
         setFinalRefund(result.payout);
         setPhase('won');
-        onAudit({
-          game: 'guessing',
-          action: 'round_settled',
-          sessionId: sessionIdRef.current,
-          choice: `Target ${target}; solved in ${finalAttempts} guesses`,
-          stake,
-          payout: result.payout,
-          multiplier,
-          ratingDelta: result.ratingDelta,
-          result: 'won',
-        });
         return;
       }
 
@@ -266,17 +239,6 @@ export function NumberGuessGame({
         setSettlement(result);
         setFinalRefund(payout);
         setPhase('won');
-        onAudit({
-          game: 'guessing',
-          action: 'round_settled',
-          sessionId: sessionIdRef.current,
-          choice: `Target ${target}; solved in ${finalAttempts} guesses`,
-          stake,
-          payout: result.payout,
-          multiplier: 0.5,
-          ratingDelta: result.ratingDelta,
-          result: 'partial',
-        });
         return;
       }
 
@@ -291,17 +253,6 @@ export function NumberGuessGame({
       setSettlement(result);
       setFinalRefund(refund);
       setPhase('lost');
-      onAudit({
-        game: 'guessing',
-        action: 'round_settled',
-        sessionId: sessionIdRef.current,
-        choice: `Target ${target}; ${finalAttempts} guesses`,
-        stake,
-        payout: result.payout,
-        multiplier: stake > 0 ? result.payout / stake : 0,
-        ratingDelta: result.ratingDelta,
-        result: 'lost',
-      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not settle.');
     } finally {
@@ -315,17 +266,6 @@ export function NumberGuessGame({
     const feedback: GuessFeedback = value < target ? 'higher' : value > target ? 'lower' : 'correct';
     const nextGuesses = [...guesses, { value, feedback }];
     setGuesses(nextGuesses);
-    onAudit({
-      game: 'guessing',
-      action: 'guess_submitted',
-      sessionId: sessionIdRef.current,
-      choice: `${value} - ${feedback}`,
-      stake,
-      multiplier: feedback === 'correct' && nextGuesses.length < OPTIMAL_GUESSES
-        ? multiplierForAttempt(nextGuesses.length, roundVariance)
-        : undefined,
-      result: feedback,
-    });
     if (feedback === 'correct') {
       void resolveWin(nextGuesses);
       return;
@@ -351,7 +291,6 @@ export function NumberGuessGame({
     setGuessText('50');
     knobDragRef.current = null;
     knobRemainderRef.current = 0;
-    sessionIdRef.current = '';
   }
 
   const displayGuess = Number.isFinite(parsedGuess) ? clamp(parsedGuess, currentMin, currentMax) : suggestedGuess;

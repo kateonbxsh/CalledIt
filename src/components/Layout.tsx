@@ -8,7 +8,6 @@ import {
   History,
   Home,
   LogOut,
-  ListChecks,
   Medal,
   Trophy,
   User,
@@ -311,9 +310,6 @@ export function Layout() {
               }
             />
           ))}
-          {profile?.username === 'xaouab' ? (
-            <NavItem to="/minigame-audit" label="Game Audit" icon={ListChecks} />
-          ) : null}
           <div className="relative pt-2 hidden lg:block">
             <button
               onClick={() => setActionMenuOpen((open) => !open)}
@@ -446,11 +442,6 @@ export function Layout() {
           <Link to="/how-to-play" className="block rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
             How to Play
           </Link>
-          {profile?.username === 'xaouab' ? (
-            <Link to="/minigame-audit" className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
-              <ListChecks size={15} /> Game Audit
-            </Link>
-          ) : null}
           {showInstallNav ? (
             <Link to="/install" className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-ink" onClick={() => setProfileMenuOpen(false)}>
               <Download size={15} /> Install App
