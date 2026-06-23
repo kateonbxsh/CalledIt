@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
-import { calculateMinigameLossDelta, calculateMinigameWinDelta } from '../services/rewardService';
+import { calculateMinigameLossDelta, calculateMinigameWinDelta, minigameRewardMultiplier, type MinigameAchievement } from '../services/rewardService';
 
 // 16 peg rows -> 17 buckets. Symmetric multipliers: a wide losing centre, modest
 // wins, rare big edges. The whole simulation runs in a FIXED virtual board and is
@@ -11,7 +11,7 @@ import { calculateMinigameLossDelta, calculateMinigameWinDelta } from '../servic
 const ROWS = 16;
 const BUCKETS = ROWS + 1;
 const FIRST_ROW = 3; // drop the narrow top rows so the chip free-falls first
-const MULTIPLIERS = [14, 7, 3, 1.6, 1, 0.6, 0.4, 0.3, 0.2, 0.3, 0.4, 0.6, 1, 1.6, 3, 7, 14];
+const BASE_MULTIPLIERS = [16, 8, 4, 2, 1.5, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 1, 1.5, 2, 4, 8, 16];
 
 // Wider-than-tall virtual board so it fills the width on mobile and the multiplier
 // docks come out wide & short instead of long & thin.
@@ -29,7 +29,7 @@ const BUCKET_BOTTOM = VH * 0.99;
 const BUCKET_TOP_Y = BUCKET_BOTTOM - PEG_GAP * 0.9; // wide & short docks
 const BIN_FLOOR_Y = BUCKET_BOTTOM - BALL_R - 2;
 
-const GRAVITY = 2600, RESTITUTION = 0.32, SUBSTEPS = 4, CENTER_PULL = 3.0, HDRAG = 1.1;
+const GRAVITY = 2600, RESTITUTION = 0.32, SUBSTEPS = 4, CENTER_PULL = 0.7, HDRAG = 1.1;
 
 const BASE_PEGS: { x: number; y: number }[] = [];
 for (let row = FIRST_ROW; row < ROWS; row += 1) {
@@ -43,8 +43,13 @@ type Chip = { id: number; stake: number; balanceBefore: number; x: number; y: nu
 type Peg = { x: number; y: number; hit: number };
 type Pop = { x: number; y: number; text: string; color: string; t: number };
 type DropResult = { id: number; multiplier: number; net: number; ratingDelta: number };
+type PlinkoAchievement = Extract<MinigameAchievement, { game: 'plinko' }>;
 
 function bucketColor(m: number) { return m >= 4 ? '#7b5aa6' : m >= 2 ? '#3b75af' : m >= 1 ? '#2f7d63' : 'rgba(255,255,255,0.10)'; }
+
+function plinkoMultiplier(base: number, stake: number, balanceBefore: number) {
+  return Math.max(0, Math.round(minigameRewardMultiplier(base, stake, balanceBefore) * 2) / 2);
+}
 
 function plinkoRiskLevel(m: number) {
   return Math.min(1, Math.max(0.18, Math.abs(m - 1) / 4.5));
@@ -78,7 +83,7 @@ export function PlinkoGame({
   coins: number;
   stakes: number[];
   // Net coin + ELO swing for a batch of drops, flushed in one DB write.
-  onSettle: (coinDelta: number, ratingDelta: number, bestMult: number) => Promise<void>;
+  onSettle: (coinDelta: number, ratingDelta: number, bestMult: number, achievement: PlinkoAchievement) => Promise<void>;
   onClose: () => void;
 }) {
   const [stake, setStake] = useState(() => stakes.find((amount) => amount <= coins) ?? stakes[0]);
@@ -92,6 +97,8 @@ export function PlinkoGame({
   const boardRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const spawnRef = useRef<((stake: number, balanceBefore: number) => void) | null>(null);
+  const stakeRef = useRef(stake); stakeRef.current = stake;
+  const balanceRef = useRef(balance); balanceRef.current = balance;
 
   // ---- batched settlement: accumulate net coin/ELO and flush rarely (debounced) ----
   const onSettleRef = useRef(onSettle);
@@ -99,15 +106,24 @@ export function PlinkoGame({
   const pendingCoin = useRef(0);
   const pendingElo = useRef(0);
   const pendingBestMult = useRef(0);
+  const pendingAchievement = useRef<PlinkoAchievement>({
+    game: 'plinko', drops: 0, wins: 0, profitableHits: 0,
+    highHits: 0, jackpotHits: 0, edgeHits: 0, totalPayout: 0, bestMultiplier: 0,
+  });
   const flushTimer = useRef<number | null>(null);
   const lastFlush = useRef(Date.now());
 
   function flush() {
     if (flushTimer.current !== null) { clearTimeout(flushTimer.current); flushTimer.current = null; }
     const coin = pendingCoin.current, elo = pendingElo.current, bestMult = pendingBestMult.current;
+    const achievement = pendingAchievement.current;
     pendingCoin.current = 0; pendingElo.current = 0; pendingBestMult.current = 0; lastFlush.current = Date.now();
-    if (coin !== 0 || elo !== 0 || bestMult > 0) {
-      onSettleRef.current(coin, elo, bestMult).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not save your coins.'));
+    pendingAchievement.current = {
+      game: 'plinko', drops: 0, wins: 0, profitableHits: 0,
+      highHits: 0, jackpotHits: 0, edgeHits: 0, totalPayout: 0, bestMultiplier: 0,
+    };
+    if (coin !== 0 || elo !== 0 || bestMult > 0 || achievement.drops > 0) {
+      onSettleRef.current(coin, elo, bestMult, achievement).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not save your euros.'));
     }
   }
   const flushRef = useRef(flush);
@@ -191,7 +207,7 @@ export function PlinkoGame({
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const bandH = BUCKET_BOTTOM - BUCKET_TOP_Y;
       for (let k = 0; k < BUCKETS; k += 1) {
-        const m = MULTIPLIERS[k];
+        const m = plinkoMultiplier(BASE_MULTIPLIERS[k], stakeRef.current, balanceRef.current);
         const x0 = k * PEG_GAP;
         const hit = bucketHit[k];
         const lift = hit * 5;
@@ -200,7 +216,7 @@ export function PlinkoGame({
         if (hit > 0) { ctx.globalAlpha = hit * 0.5; ctx.fillStyle = '#fff'; roundRect(x0 + 1, BUCKET_TOP_Y - lift, PEG_GAP - 2, bandH, 6); ctx.fill(); ctx.globalAlpha = 1; }
         ctx.fillStyle = m >= 1 ? '#fff' : 'rgba(255,255,255,0.6)';
         ctx.font = `900 ${13 * (1 + hit * 0.25)}px Segoe UI, sans-serif`;
-        ctx.fillText(m + 'x', x0 + PEG_GAP / 2, (BUCKET_TOP_Y - lift) + bandH / 2);
+        ctx.fillText(`${Number(m.toFixed(2))}x`, x0 + PEG_GAP / 2, (BUCKET_TOP_Y - lift) + bandH / 2);
       }
 
       // pegs
@@ -218,11 +234,11 @@ export function PlinkoGame({
       for (const chip of chips) {
         for (let i = 0; i < chip.trail.length; i += 1) {
           const p = chip.trail[i];
-          ctx.fillStyle = `rgba(212,154,37,${(i / chip.trail.length) * 0.26})`;
+          ctx.fillStyle = `rgba(111,121,216,${(i / chip.trail.length) * 0.26})`;
           ctx.beginPath(); ctx.arc(p.x, p.y, BALL_R * (0.45 + 0.5 * (i / chip.trail.length)), 0, Math.PI * 2); ctx.fill();
         }
         const g = ctx.createRadialGradient(chip.x - BALL_R * 0.3, chip.y - BALL_R * 0.3, BALL_R * 0.2, chip.x, chip.y, BALL_R);
-        g.addColorStop(0, '#ffe39a'); g.addColorStop(1, '#d49a25');
+        g.addColorStop(0, '#9ec9ff'); g.addColorStop(1, '#6f5ca8');
         ctx.beginPath(); ctx.arc(chip.x, chip.y, BALL_R, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
         ctx.lineWidth = BALL_R * 0.15; ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.stroke();
       }
@@ -275,15 +291,28 @@ export function PlinkoGame({
     }
 
     function settle(chip: Chip, bin: number) {
-      const m = MULTIPLIERS[bin] ?? 0;
+      const baseMultiplier = BASE_MULTIPLIERS[bin] ?? 0;
+      const m = plinkoMultiplier(baseMultiplier, chip.stake, chip.balanceBefore);
       const payout = Math.round(chip.stake * m);
       const net = payout - chip.stake;
       const ratingDelta = plinkoEloDelta(m, chip.stake, chip.balanceBefore);
       bucketHit[bin] = 1;
-      pops.push({ x: bin * PEG_GAP + PEG_GAP / 2, y: BUCKET_TOP_Y - 6, text: (net >= 0 ? '+' : '') + net, color: net >= 0 ? '#67c39a' : '#d95f46', t: 0 });
+      pops.push({ x: bin * PEG_GAP + PEG_GAP / 2, y: BUCKET_TOP_Y - 6, text: `${net >= 0 ? '+' : '-'}${Math.abs(net).toLocaleString()}€`, color: net >= 0 ? '#8f9cf0' : '#d95f46', t: 0 });
       setBalance((current) => Math.max(0, current + payout));
       setRecent((current) => [{ id: chip.id, multiplier: m, net, ratingDelta }, ...current].slice(0, 12));
       setActiveDrops((current) => Math.max(0, current - 1));
+      const pending = pendingAchievement.current;
+      pendingAchievement.current = {
+        game: 'plinko',
+        drops: pending.drops + 1,
+        wins: pending.wins + (m >= 1 ? 1 : 0),
+        profitableHits: pending.profitableHits + (m > 1 ? 1 : 0),
+        highHits: pending.highHits + (m >= 3 ? 1 : 0),
+        jackpotHits: pending.jackpotHits + (m >= 7 ? 1 : 0),
+        edgeHits: pending.edgeHits + (bin === 0 || bin === BUCKETS - 1 ? 1 : 0),
+        totalPayout: pending.totalPayout + payout,
+        bestMultiplier: Math.max(pending.bestMultiplier, m),
+      };
       accumulateRef.current(payout, ratingDelta, m); // credit the win to the batched flush
     }
 
@@ -374,7 +403,7 @@ export function PlinkoGame({
             <div className="min-w-0 flex-1 rounded-xl bg-white p-1.5 text-ink">
               <StakeInput label="Stake" value={stake} min={1} step={10} onChange={(value) => setStake(Math.max(1, Math.min(Math.floor(balance) || 1, Math.round(value))))} />
             </div>
-            <button type="button" onClick={dropChip} disabled={!canDrop} aria-label={`Drop a ${stake} coin chip`}
+            <button type="button" onClick={dropChip} disabled={!canDrop} aria-label={`Drop a ${stake.toLocaleString()}€ chip`}
               className="shrink-0 rounded-xl bg-gradient-to-br from-plum to-sky px-6 text-base font-black text-white shadow-lift transition active:scale-[.97] disabled:opacity-45">
               {balance < 1 ? 'Broke' : 'Drop'}
             </button>
@@ -392,7 +421,7 @@ export function PlinkoGame({
           <div className="min-h-[76px] min-w-0 sm:min-h-[96px]">
             <div className="mb-1.5 flex items-center justify-between text-xs font-bold text-white/40">
               <span>Recent drops</span>
-              {activeDrops > 0 ? <span className="text-citrus">{activeDrops} dropping…</span> : null}
+              {activeDrops > 0 ? <span className="text-mint">{activeDrops} dropping…</span> : null}
             </div>
             {recent.length === 0 ? (
               <p className="h-[42px] rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-white/35 sm:h-[62px]">Your results will show up here.</p>
@@ -401,8 +430,8 @@ export function PlinkoGame({
                 <div className="flex flex-wrap gap-1.5">
                 {recent.map((item) => (
                   <span key={item.id} className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-[11px] font-bold">
-                    <span className={item.multiplier >= 1 ? 'text-mint' : 'text-white/45'}>{item.multiplier}x</span>
-                    <span className={item.net >= 0 ? 'text-mint' : 'text-coral'}>{item.net >= 0 ? '+' : ''}{item.net}</span>
+                    <span className={item.multiplier >= 1 ? 'text-mint' : 'text-white/45'}>{Number(item.multiplier.toFixed(1))}x</span>
+                    <span className={item.net >= 0 ? 'text-[#9aa5f2]' : 'text-coral'}>{item.net >= 0 ? '+' : '-'}{Math.abs(item.net).toLocaleString()}€</span>
                     {item.ratingDelta ? (
                       <span className={`text-[9px] font-black ${item.ratingDelta > 0 ? 'text-mint' : 'text-coral'}`}>{item.ratingDelta > 0 ? '▲' : '▼'}{Math.abs(item.ratingDelta)}</span>
                     ) : null}

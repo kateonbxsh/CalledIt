@@ -3,15 +3,15 @@ import { X } from 'lucide-react';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 import type { MinigameWinResult } from '../services/rewardService';
+import { minigameRewardMultiplier, type MinigameAchievement } from '../services/rewardService';
 
 // ---- Tuning (mirrors the standalone plane-game) ----
 const V0 = 480;
 const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 360, MAXVY = 260;
 const ANGLE_MIN = 20, ANGLE_MAX = 80;
 const CAM_OFF = 0.22;
-// Distance reward grows quickly early, then tapers off. Stars are the high-risk
-// way to push the multiplier higher.
-const MULT_K = 0.72, MULT_SCALE = 500, STAR_MULT = 0.14;
+// Distance contributes at a fixed rate: no early spike and no late acceleration.
+const KM_PER_WORLD_UNIT = 0.001, MULT_PER_KM = 0.8, STAR_MULT = 0.14;
 const STAR_BOOST = 230, MISSILE_PUSH = 230, MISSILE_MULT_PENALTY = 0.015, FIRST_BOAT = 340;
 // Rare rainbow star: bigger lift, a speed burst, and a short missile-immunity window.
 const RAINBOW_CHANCE = 0.08, RAINBOW_LIFT = 430, RAINBOW_SPEED = 1.5, BUFF_DURATION = 3.6;
@@ -24,10 +24,12 @@ const ASSETS = {
 };
 
 type Phase = 'aim' | 'flying' | 'landing' | 'falling' | 'over';
-type Result = { won: boolean; payout: number; mult: number; stars: number; ratingDelta?: number } | null;
+type Result = { won: boolean; payout: number; mult: number; stars: number; distanceKm: number; ratingDelta?: number } | null;
+type PlaneAchievement = Extract<MinigameAchievement, { game: 'plane' }>;
+type PlaneOutcomeContext = { stake: number; balanceBefore: number; riskLevel: number; achievement: PlaneAchievement };
 
 interface Plane { wx: number; y: number; vx: number; vy: number; w: number; h: number; frame: number; frameT: number; ang: number; }
-interface Boat { wx: number; w: number; h: number; deckFrac: number; img: HTMLImageElement; }
+interface Boat { wx: number; w: number; h: number; deckFrac: number; color: 'red' | 'blue' | 'green'; img: HTMLImageElement; }
 interface Missile { wx: number; y: number; w: number; vx: number; hit: boolean; }
 interface Star { wx: number; y: number; w: number; t: number; got: boolean; rainbow?: boolean; }
 interface Puff { x: number; y: number; t: number; life: number; s: number; }
@@ -39,8 +41,8 @@ export function PlaneGame({
   coins: number;
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
-  onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
-  onLose: (stake: number, context: { riskLevel: number; blunder: boolean }) => Promise<MinigameWinResult | void> | void;
+  onWin: (payout: number, context: PlaneOutcomeContext) => Promise<MinigameWinResult>;
+  onLose: (stake: number, context: Omit<PlaneOutcomeContext, 'stake'> & { blunder: boolean }) => Promise<MinigameWinResult | void> | void;
   onClose: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -54,6 +56,7 @@ export function PlaneGame({
   // refs the rAF loop / handlers read so they always see the latest
   const angleRef = useRef(angle); angleRef.current = angle;
   const stakeRef = useRef(stake); stakeRef.current = stake;
+  const balanceBeforeRef = useRef(coins);
   const onWinRef = useRef(onWin); onWinRef.current = onWin;
   const onLoseRef = useRef(onLose); onLoseRef.current = onLose;
   const api = useRef<{ launch: () => void; playAgain: () => void } | null>(null);
@@ -64,6 +67,7 @@ export function PlaneGame({
     if (!canPlay || busy) return;
     setErr(''); setBusy(true);
     try {
+      balanceBeforeRef.current = coins;
       const ok = await onCharge(stake);
       if (ok) api.current?.launch();
     } catch (e) {
@@ -94,10 +98,11 @@ export function PlaneGame({
     window.addEventListener('resize', resize);
 
     let st: Phase = 'aim';
-    let mult = 1, starCount = 0, missilePenalty = 0, camX = 0, buffT = 0;
+    let mult = 1, starCount = 0, specialStarCount = 0, missilePenalty = 0, camX = 0, buffT = 0;
     const plane: Plane = { wx: 0, y: 0, vx: 0, vy: 0, w: 80, h: 66, frame: 0, frameT: 0, ang: 0 };
     let boats: Boat[] = [], missiles: Missile[] = [], stars: Star[] = [], puffs: Puff[] = [], pops: Pop[] = [];
     let nextStarX = 0, nextMissileX = 0, nextBoatX = 0, landBoat: Boat | null = null;
+    let landingSpeed = 0, landingStartProgress = 0, edgeLanding = false;
 
     let actx: AudioContext | null = null;
     const beep = (f: number, d: number, type: OscillatorType = 'sine', v = 0.05) => {
@@ -111,9 +116,10 @@ export function PlaneGame({
 
     const sx = (wx: number) => wx - camX;
     const deckY = (b: Boat) => (waterLine - b.h * 0.62) + b.h * b.deckFrac;
+    const distanceKm = () => Math.max(0, plane.wx - launchX) * KM_PER_WORLD_UNIT;
     const curMult = () => {
-      const distance = Math.max(0, plane.wx - launchX);
-      return Math.max(1, 1 + MULT_K * Math.log(1 + distance / MULT_SCALE) + starCount * STAR_MULT - missilePenalty);
+      const baseMultiplier = 1 + distanceKm() * MULT_PER_KM + starCount * STAR_MULT;
+      return Math.max(1, minigameRewardMultiplier(baseMultiplier, stakeRef.current, balanceBeforeRef.current) - missilePenalty);
     };
 
     function stepGlide(o: { wx: number; y: number; vx: number; vy: number }, dt: number) {
@@ -130,22 +136,23 @@ export function PlaneGame({
       while (nextMissileX < front) { missiles.push({ wx: nextMissileX, y: H * 0.14 + Math.random() * (waterLine - H * 0.14 - 70), w: 58, vx: -(70 + Math.random() * 120), hit: false }); nextMissileX += 130 + Math.random() * 150; }
       while (nextBoatX < front) {
         const r = Math.random();
-        let w: number, h: number, deckFrac: number, img: HTMLImageElement;
-        if (r < 0.12) { w = 460; h = w * (150 / 460); deckFrac = 0.52; img = IMG.boatLong; }   // rare long ship
-        else if (r < 0.56) { w = 330; h = w * (140 / 300); deckFrac = 0.50; img = IMG.boatLarge; }
-        else { w = 250; h = w * (120 / 200); deckFrac = 0.47; img = IMG.boatSmall; }
-        boats.push({ wx: nextBoatX, w, h, deckFrac, img }); nextBoatX += w + (60 + Math.random() * 170);
+        let w: number, h: number, deckFrac: number, color: Boat['color'], img: HTMLImageElement;
+        if (r < 0.12) { w = 460; h = w * (150 / 460); deckFrac = 0.52; color = 'green'; img = IMG.boatLong; }   // rare long ship
+        else if (r < 0.56) { w = 330; h = w * (140 / 300); deckFrac = 0.50; color = 'blue'; img = IMG.boatLarge; }
+        else { w = 250; h = w * (120 / 200); deckFrac = 0.47; color = 'red'; img = IMG.boatSmall; }
+        boats.push({ wx: nextBoatX, w, h, deckFrac, color, img }); nextBoatX += w + (60 + Math.random() * 170);
       }
     }
 
     function toAim() {
       st = 'aim'; setPhase('aim');
-      plane.wx = launchX; plane.y = launchY; plane.vx = 0; plane.vy = 0; plane.ang = 0; mult = 1; starCount = 0; missilePenalty = 0; buffT = 0;
+      plane.wx = launchX; plane.y = launchY; plane.vx = 0; plane.vy = 0; plane.ang = 0; mult = 1; starCount = 0; specialStarCount = 0; missilePenalty = 0; buffT = 0;
       boats = []; missiles = []; stars = []; puffs = []; pops = []; landBoat = null;
       camX = launchX - W * CAM_OFF;
     }
     function launch() {
-      mult = 1; starCount = 0; missilePenalty = 0; buffT = 0;
+      mult = 1; starCount = 0; specialStarCount = 0; missilePenalty = 0; buffT = 0;
+      landingSpeed = 0; landingStartProgress = 0; edgeLanding = false;
       plane.wx = launchX; plane.y = launchY; plane.ang = 0;
       const a = angleRef.current * Math.PI / 180; plane.vx = V0 * Math.cos(a); plane.vy = -V0 * Math.sin(a);
       boats = []; missiles = []; stars = []; puffs = []; pops = []; landBoat = null;
@@ -156,16 +163,34 @@ export function PlaneGame({
     }
     function finish(won: boolean, payout: number) {
       st = 'over'; setPhase('over');
-      setResult({ won, payout, mult, stars: starCount });
+      const finalDistanceKm = distanceKm();
+      const deckLeft = landBoat ? landBoat.wx + landBoat.w * 0.08 : 0;
+      const deckRight = landBoat ? landBoat.wx + landBoat.w * 0.92 : 1;
+      const landingEndProgress = landBoat ? (plane.wx - deckLeft) / Math.max(1, deckRight - deckLeft) : 0;
+      const fastGreenFullStrip = Boolean(
+        won && landBoat?.color === 'green' && landingSpeed >= 240
+        && landingStartProgress <= 0.3 && landingEndProgress >= 0.75,
+      );
+      const achievement: PlaneAchievement = {
+        game: 'plane',
+        distanceKm: Number(finalDistanceKm.toFixed(2)),
+        stars: starCount,
+        specialStars: specialStarCount,
+        landed: won,
+        ...(won && landBoat ? { boatColor: landBoat.color, edgeLanding, fastGreenFullStrip } : {}),
+      };
+      setResult({ won, payout, mult, stars: starCount, distanceKm: finalDistanceKm });
       const riskLevel = Math.min(1, Math.max(0.2, mult / 4.2 + starCount * 0.08));
       if (won && payout > 0) {
-        onWinRef.current(payout, { stake: stakeRef.current, riskLevel })
+        onWinRef.current(payout, { stake: stakeRef.current, balanceBefore: balanceBeforeRef.current, riskLevel, achievement })
           .then((settled) => setResult((current) => current ? { ...current, ratingDelta: settled.ratingDelta } : current))
           .catch(() => {});
       } else if (!won) {
         Promise.resolve(onLoseRef.current(stakeRef.current, {
+          balanceBefore: balanceBeforeRef.current,
           riskLevel,
           blunder: mult < 1.12 && starCount === 0,
+          achievement,
         }))
           .then((settled) => {
             if (settled) {
@@ -200,7 +225,7 @@ export function PlaneGame({
         for (const s of stars) { if (s.got) continue; if (Math.hypot(plane.wx - s.wx, plane.y - s.y) < pr + s.w * 0.45) {
           s.got = true;
           if (s.rainbow) {
-            starCount += 2; mult = curMult();
+            starCount += 2; specialStarCount++; mult = curMult();
             plane.vy -= RAINBOW_LIFT; if (plane.vy < -V0 * 1.35) plane.vy = -V0 * 1.35;
             if (buffT <= 0) plane.vx *= RAINBOW_SPEED; // apply the speed burst once (no stacking)
             buffT = BUFF_DURATION;     // brief missile immunity
@@ -225,6 +250,10 @@ export function PlaneGame({
         const bottom = plane.y + plane.h * 0.34;
         for (const b of boats) { const dy = deckY(b), left = b.wx + b.w * 0.08, right = b.wx + b.w * 0.92;
           if (plane.wx > left && plane.wx < right && plane.vy >= 0 && bottom >= dy - 14 && bottom <= dy + 26) {
+            const progress = (plane.wx - left) / Math.max(1, right - left);
+            landingSpeed = plane.vx;
+            landingStartProgress = progress;
+            edgeLanding = Math.min(progress, 1 - progress) <= 0.12;
             landBoat = b; plane.y = dy - plane.h * 0.34; plane.vy = 0; st = 'landing'; setPhase('landing'); beep(520, .08); break; } }
         if (st === 'flying' && bottom >= waterLine + 4) finish(false, 0);
       } else if (st === 'landing' && landBoat) {
@@ -347,7 +376,9 @@ export function PlaneGame({
       drawPlane(); drawPops();
       plane.frameT += 1 / 60; if (plane.frameT > 0.05) { plane.frame = (plane.frame + 1) % 3; plane.frameT = 0; }
       if (st === 'flying' || st === 'landing') { ctx.save(); ctx.textAlign = 'center'; ctx.font = `900 56px ${appFontFamily}`;
-        ctx.fillStyle = 'rgba(47,125,99,0.26)'; ctx.fillText(mult.toFixed(2) + '×', W / 2, H * 0.22); ctx.restore(); }
+        ctx.fillStyle = 'rgba(47,125,99,0.26)'; ctx.fillText(mult.toFixed(2) + '×', W / 2, H * 0.22);
+        ctx.font = `800 17px ${appFontFamily}`; ctx.fillStyle = 'rgba(22,61,49,0.48)';
+        ctx.fillText(`${distanceKm().toFixed(1)} km`, W / 2, H * 0.22 + 28); ctx.restore(); }
     }
 
     // ---- aim drag: grab anywhere in the sky and slide up/down ----
@@ -392,7 +423,7 @@ export function PlaneGame({
           <h1 className="text-xl font-black">Sky Landing</h1>
         </div>
         <div className="flex items-center gap-2">
-          <div className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 backdrop-blur">
+          <div className="rounded-xl border border-white bg-white px-3 py-2 shadow-card">
             <CoinAmount amount={Math.round(coins)} className="text-sm" />
           </div>
           <button
@@ -445,7 +476,7 @@ export function PlaneGame({
 
           <button onClick={handleLaunch} disabled={!canPlay || busy}
             className="mx-auto w-full max-w-md rounded-xl bg-sky px-4 py-3.5 text-base font-black text-white shadow-lift transition active:scale-[.99] disabled:opacity-50">
-            {busy ? 'Launching…' : coins < 1 ? 'Not enough coins' : <>Launch for <CoinAmount amount={stake} className="text-base" /></>}
+            {busy ? 'Launching…' : coins < 1 ? 'Not enough euros' : <>Launch for <CoinAmount amount={stake} className="text-base" /></>}
           </button>
         </div>
       )}
@@ -455,13 +486,13 @@ export function PlaneGame({
         <div className="absolute inset-0 grid place-items-center bg-black/55 px-5 backdrop-blur-sm">
           <div className="w-full max-w-sm animate-soft-enter rounded-2xl border border-white/10 bg-[#172337] p-6 text-center text-white shadow-lift">
             <h2 className="text-2xl font-black">{result.won ? `Landed at ${result.mult.toFixed(2)}×` : 'Crashed'}</h2>
-            <p className={`my-2 text-4xl font-black ${result.won ? 'text-mint' : 'text-coral'}`}>
-              {result.won ? '+' : '-'}{result.won ? Math.round(result.payout) : stake}
+            <p className="my-2 text-4xl font-black">
+              <CoinAmount amount={result.won ? Math.round(result.payout) : -stake} className="text-4xl" />
             </p>
             <p className="mb-4 text-sm text-white/55">
               {result.won
-                ? `Stopped safely on deck with ${result.stars} stars.`
-                : 'Into the sea. Try a different angle next time.'}
+                ? `Stopped safely after ${result.distanceKm.toFixed(1)} km with ${result.stars} stars.`
+                : `Into the sea after ${result.distanceKm.toFixed(1)} km. Try a different angle next time.`}
             </p>
             {result.ratingDelta ? (
               <p className={`mb-4 rounded-xl px-3 py-2 text-sm font-black ${

@@ -439,7 +439,7 @@ export async function placePrediction(input: PredictionInput) {
       : null;
     if (bet.status !== 'open') throw new Error('This bet is not open.');
     if (bet.deadline && Timestamp.now().toMillis() >= bet.deadline.toMillis()) throw new Error('The deadline has passed.');
-    if (input.stake < 10) throw new Error('Minimum stake is 10 coins.');
+    if (input.stake < 10) throw new Error('Minimum stake is 10€.');
     if (bet.type === 'closestHour') {
       const guess = input.dateGuess ? new Date(input.dateGuess) : null;
       const target = bet.targetDate?.toDate?.() ?? null;
@@ -613,7 +613,7 @@ export async function placePrediction(input: PredictionInput) {
         })
       : 0;
     const balanceDelta = previousStake - input.stake - changeFee;
-    if (user.coinBalance + previousStake < input.stake + changeFee) throw new Error('Insufficient coins.');
+    if (user.coinBalance + previousStake < input.stake + changeFee) throw new Error('Insufficient euros.');
 
     const predictionPayload = {
       betId: bet.id,
@@ -737,8 +737,8 @@ export async function placePrediction(input: PredictionInput) {
       type: existingPrediction ? 'prediction_updated' : 'bet_joined',
       targetUids,
       body: existingPrediction
-        ? `${user.displayName || user.username} updated ${bet.title} with ${input.stake} coins${optionLabels ? ` on ${optionLabels}` : ''}.`
-        : `${user.displayName || user.username} bet ${input.stake} coins on ${bet.title}${optionLabels ? ` (${optionLabels})` : ''}.`,
+        ? `${user.displayName || user.username} updated ${bet.title} with ${input.stake.toLocaleString()}€${optionLabels ? ` on ${optionLabels}` : ''}.`
+        : `${user.displayName || user.username} bet ${input.stake.toLocaleString()}€ on ${bet.title}${optionLabels ? ` (${optionLabels})` : ''}.`,
     };
   });
 

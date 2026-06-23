@@ -1095,7 +1095,7 @@ export function BetDetailPage() {
                 </div>
                 {(myPrediction.revisionCount ?? 0) > 0 ? (
                   <p className="mt-2 pl-7 text-xs font-semibold text-mint/80">
-                    Updated {myPrediction.revisionCount}x - fees paid {myPrediction.changeFeesPaid ?? 0} coins
+                    Updated {myPrediction.revisionCount}x - fees paid {(myPrediction.changeFeesPaid ?? 0).toLocaleString()}€
                   </p>
                 ) : null}
                 {bet.status === 'resolved' ? (
@@ -1108,7 +1108,7 @@ export function BetDetailPage() {
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between">
-                      <span>Net coins</span>
+                      <span>Net euros</span>
                       <CoinAmount amount={myPrediction.coinDelta ?? 0} className="text-xs" />
                     </div>
                     <div className="mt-1 flex items-center justify-between">
@@ -1418,6 +1418,10 @@ export function BetDetailPage() {
                         <CoinAmount amount={projectedChangeFee} className="text-xs" />
                       </div>
                     ) : null}
+                    <div className="mt-3 flex items-end justify-between gap-3 border-t border-line pt-3">
+                      <span className="text-base font-black text-ink">To win 💶</span>
+                      <CoinAmount amount={pendingEstimate.totalReturn} className="text-2xl font-black" />
+                    </div>
                   </div>
                 ) : null}
 
@@ -1872,8 +1876,8 @@ export function BetDetailPage() {
             <h2 className="text-lg font-black">{amending ? 'Amend this resolution?' : 'Resolve this bet?'}</h2>
             <p className="mt-2 text-sm leading-6 text-ink/65">
               {amending
-                ? 'This reverses the previous payouts, ELO and coin changes, then re-applies them for the corrected outcome.'
-                : 'This will close the bet, mark predictions as won or lost, and apply ELO and coin changes.'}
+                ? 'This reverses the previous payouts, ELO and balance changes, then re-applies them for the corrected outcome.'
+                : 'This will close the bet, mark predictions as won or lost, and apply ELO and balance changes.'}
             </p>
             <div className="mt-4 rounded-md bg-field p-3 text-sm">
               {closest ? (

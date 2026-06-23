@@ -28,6 +28,7 @@ import type {
   FriendGroup,
   RewardClaim,
   UserProfile,
+  UserStats,
 } from '../types';
 import { ALL_ENABLED_TARGET_UID, createNotification, uidsForUsernames } from './notificationService';
 import { awardDailyBonus } from './bonusService';
@@ -41,14 +42,14 @@ import { getFreshLeaderboard } from './userService';
 // challenges and wager bonuses so the whole economy pays out more generously.
 export const REWARD_MULTIPLIER = 2;
 
-const SAFE_FORECAST_REWARD = 60 * REWARD_MULTIPLIER;
-const SPICY_FORECAST_NOW = 20 * REWARD_MULTIPLIER;
-const SPICY_FORECAST_BONUS = 120 * REWARD_MULTIPLIER;
+const SAFE_FORECAST_REWARD = 150;
+const SPICY_FORECAST_NOW = 50;
+const SPICY_FORECAST_BONUS = 300;
 function forecastReward(mode: DailyForecastMode) {
   const rewards: Record<DailyForecastMode, { amount: number; label: string; spicyBonus?: number }> = {
     safe: { amount: SAFE_FORECAST_REWARD, label: 'Safe daily forecast' },
-    random: { amount: (10 + Math.floor(Math.random() * 91)) * REWARD_MULTIPLIER, label: 'Random refill' },
-    chaos: { amount: [-20, 5, 130][Math.floor(Math.random() * 3)] * REWARD_MULTIPLIER, label: 'Chaos refill' },
+    random: { amount: 25 + Math.floor(Math.random() * 216), label: 'Random refill' },
+    chaos: { amount: [-40, 15, 320][Math.floor(Math.random() * 3)], label: 'Chaos refill' },
     spicy: { amount: SPICY_FORECAST_NOW, label: 'Spicy daily forecast', spicyBonus: SPICY_FORECAST_BONUS },
   };
   return rewards[mode];
@@ -279,8 +280,86 @@ function buildChestFamily(opts: {
   });
 }
 
-// ~100 chests across themed families. Each family escalates both the ELO needed to
-// unlock the attempt and the reward. Big-coin payouts (doubled by REWARD_MULTIPLIER).
+function scaledTargets(start: number, growth: number, roundTo = 1, count = 32) {
+  const targets: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const rounded = Math.ceil((start * Math.pow(growth, index)) / roundTo) * roundTo;
+    const previous = targets[index - 1] ?? 0;
+    targets.push(Number(Math.max(rounded, previous + roundTo).toFixed(roundTo < 1 ? 2 : 0)));
+  }
+  return targets;
+}
+
+type ArcadeChestFamily = {
+  prefix: string;
+  name: string;
+  metric: (stats: UserStats) => number;
+  goal: (target: number) => string;
+  describe: (target: number) => string;
+  start: number;
+  growth: number;
+  roundTo?: number;
+  rewardBase?: number;
+};
+
+function buildArcadeChestFamily(family: ArcadeChestFamily): ChestSpec[] {
+  return scaledTargets(family.start, family.growth, family.roundTo).map((target, index) => ({
+    id: `game-${family.prefix}-${index + 1}`,
+    title: `${family.name} ${index + 1}`,
+    description: family.describe(target),
+    reward: Math.ceil(((family.rewardBase ?? 500) * Math.pow(1.15, index)) / 50) * 50,
+    eloRequired: Math.round((40 + index * 55 + Math.pow(index, 1.65) * 6) / 10) * 10,
+    goal: family.goal(target),
+    target,
+    metric: family.metric,
+  }));
+}
+
+const arcadeChestFamilies: ArcadeChestFamily[] = [
+  // Sky Landing: distance, stars, boat color, precision, and landing style.
+  { prefix: 'plane-total-km', name: 'Frequent Flyer', metric: (s) => s.arcade?.plane?.totalDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km total`, describe: (t) => `Accumulate ${t.toLocaleString()} kilometers in Sky Landing.`, start: 10, growth: 1.28, roundTo: 5 },
+  { prefix: 'plane-best-km', name: 'Long Haul', metric: (s) => s.arcade?.plane?.bestDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km in one run`, describe: (t) => `Reach ${t.toLocaleString()} kilometers in a single flight.`, start: 4, growth: 1.16, roundTo: 1, rewardBase: 700 },
+  { prefix: 'plane-stars', name: 'Star Cargo', metric: (s) => s.arcade?.plane?.stars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} stars`, describe: (t) => `Collect ${t.toLocaleString()} regular and special star points.`, start: 3, growth: 1.3 },
+  { prefix: 'plane-special-stars', name: 'Rainbow Pilot', metric: (s) => s.arcade?.plane?.specialStars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} special stars`, describe: (t) => `Catch ${t.toLocaleString()} rare rainbow stars.`, start: 1, growth: 1.3, rewardBase: 850 },
+  { prefix: 'plane-landings', name: 'Deck Regular', metric: (s) => s.arcade?.plane?.landings ?? 0, goal: (t) => `Land ${t.toLocaleString()} flights`, describe: (t) => `Complete ${t.toLocaleString()} successful boat landings.`, start: 2, growth: 1.27 },
+  { prefix: 'plane-red', name: 'Red Hull', metric: (s) => s.arcade?.plane?.redLandings ?? 0, goal: (t) => `Land on ${t.toLocaleString()} red boats`, describe: (t) => `Land safely on red boats ${t.toLocaleString()} times.`, start: 1, growth: 1.28, rewardBase: 650 },
+  { prefix: 'plane-edge', name: 'Deck Edge', metric: (s) => s.arcade?.plane?.edgeLandings ?? 0, goal: (t) => `Make ${t.toLocaleString()} edge landings`, describe: (t) => `Touch down within the outer 12% of a red, blue, or green deck ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 800 },
+  { prefix: 'plane-green-strip', name: 'Green Runway', metric: (s) => s.arcade?.plane?.fastGreenFullStripLandings ?? 0, goal: (t) => `Make ${t.toLocaleString()} full-strip green landings`, describe: (t) => `Land fast near the start of a green deck and use almost the full landing strip ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1000 },
+
+  // Mines: play volume, safe picks, multiplier, and every full-board setup.
+  { prefix: 'mines-rounds', name: 'Mine Surveyor', metric: (s) => s.arcade?.mines?.rounds ?? 0, goal: (t) => `Play ${t.toLocaleString()} Mines rounds`, describe: (t) => `Start and settle ${t.toLocaleString()} Mines boards.`, start: 5, growth: 1.28 },
+  { prefix: 'mines-wins', name: 'Safe Exit', metric: (s) => s.arcade?.mines?.wins ?? 0, goal: (t) => `Cash out ${t.toLocaleString()} times`, describe: (t) => `Win or cash out safely from Mines ${t.toLocaleString()} times.`, start: 3, growth: 1.28 },
+  { prefix: 'mines-safe-tiles', name: 'Gem Digger', metric: (s) => s.arcade?.mines?.safeTiles ?? 0, goal: (t) => `Reveal ${t.toLocaleString()} safe tiles`, describe: (t) => `Reveal a lifetime total of ${t.toLocaleString()} safe Mines tiles.`, start: 12, growth: 1.3, roundTo: 5 },
+  { prefix: 'mines-best-mult', name: 'Deep Cashout', metric: (s) => s.arcade?.mines?.bestMultiplier ?? 0, goal: (t) => `Reach ${t.toFixed(1)}x in Mines`, describe: (t) => `Reach a ${t.toFixed(1)}x Mines multiplier in one round.`, start: 1.3, growth: 1.07, roundTo: 0.1, rewardBase: 700 },
+  { prefix: 'mines-3x3-3', name: 'Nine Cell Inferno', metric: (s) => s.arcade?.mines?.clears3x3ThreeBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 3x3 / 3-bomb boards`, describe: (t) => `Reveal every safe tile on a 3x3 board with three bombs ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 900 },
+  { prefix: 'mines-5x5-1', name: 'Wide Sweep', metric: (s) => s.arcade?.mines?.clears5x5OneBomb ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 1-bomb boards`, describe: (t) => `Fully clear a 5x5 board with one bomb ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 750 },
+  { prefix: 'mines-5x5-2', name: 'Double Hazard', metric: (s) => s.arcade?.mines?.clears5x5TwoBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 2-bomb boards`, describe: (t) => `Fully clear a 5x5 board with two bombs ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 900 },
+  { prefix: 'mines-5x5-3', name: 'Full Minefield', metric: (s) => s.arcade?.mines?.clears5x5ThreeBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 3-bomb boards`, describe: (t) => `Fully clear a 5x5 board with three bombs ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1100 },
+
+  // Number Guessing: one family per speed threshold, plus persistence.
+  { prefix: 'guess-rounds', name: 'Number Hunter', metric: (s) => s.arcade?.guessing?.rounds ?? 0, goal: (t) => `Play ${t.toLocaleString()} guessing rounds`, describe: (t) => `Settle ${t.toLocaleString()} Number Guessing rounds.`, start: 5, growth: 1.28 },
+  { prefix: 'guess-under-1', name: 'First Try', metric: (s) => s.arcade?.guessing?.winsUnder1 ?? 0, goal: (t) => `Win first-try ${t.toLocaleString()} times`, describe: (t) => `Guess the exact number on the first try ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 1600 },
+  { prefix: 'guess-under-2', name: 'Two Guesses', metric: (s) => s.arcade?.guessing?.winsUnder2 ?? 0, goal: (t) => `Win within 2 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within two guesses ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 1300 },
+  { prefix: 'guess-under-3', name: 'Three Guesses', metric: (s) => s.arcade?.guessing?.winsUnder3 ?? 0, goal: (t) => `Win within 3 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within three guesses ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 1100 },
+  { prefix: 'guess-under-4', name: 'Four Guesses', metric: (s) => s.arcade?.guessing?.winsUnder4 ?? 0, goal: (t) => `Win within 4 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within four guesses ${t.toLocaleString()} times.`, start: 1, growth: 1.3, rewardBase: 900 },
+  { prefix: 'guess-under-5', name: 'Five Guesses', metric: (s) => s.arcade?.guessing?.winsUnder5 ?? 0, goal: (t) => `Win within 5 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within five guesses ${t.toLocaleString()} times.`, start: 2, growth: 1.29, rewardBase: 750 },
+  { prefix: 'guess-under-6', name: 'Six Guesses', metric: (s) => s.arcade?.guessing?.winsUnder6 ?? 0, goal: (t) => `Win within 6 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within six guesses ${t.toLocaleString()} times.`, start: 3, growth: 1.28, rewardBase: 650 },
+  { prefix: 'guess-under-7', name: 'Seven Guesses', metric: (s) => s.arcade?.guessing?.winsUnder7 ?? 0, goal: (t) => `Finish within 7 guesses ${t.toLocaleString()} times`, describe: (t) => `Find the number within seven guesses ${t.toLocaleString()} times.`, start: 5, growth: 1.27 },
+
+  // Plinko: volume, profitable buckets, rare hits, and edge travel.
+  { prefix: 'plinko-drops', name: 'Chip Rain', metric: (s) => s.arcade?.plinko?.drops ?? 0, goal: (t) => `Drop ${t.toLocaleString()} chips`, describe: (t) => `Complete ${t.toLocaleString()} Plinko drops.`, start: 10, growth: 1.3, roundTo: 5 },
+  { prefix: 'plinko-wins', name: 'Soft Landing', metric: (s) => s.arcade?.plinko?.wins ?? 0, goal: (t) => `Hit ${t.toLocaleString()} non-losing buckets`, describe: (t) => `Land in 1x-or-better Plinko buckets ${t.toLocaleString()} times.`, start: 5, growth: 1.29 },
+  { prefix: 'plinko-profit', name: 'Green Bucket', metric: (s) => s.arcade?.plinko?.profitableHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} profitable buckets`, describe: (t) => `Land above 1x in Plinko ${t.toLocaleString()} times.`, start: 3, growth: 1.3 },
+  { prefix: 'plinko-high', name: 'High Pocket', metric: (s) => s.arcade?.plinko?.highHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 3x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 3x ${t.toLocaleString()} times.`, start: 1, growth: 1.31, rewardBase: 850 },
+  { prefix: 'plinko-jackpot', name: 'Jackpot Rail', metric: (s) => s.arcade?.plinko?.jackpotHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 7x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 7x ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1200 },
+  { prefix: 'plinko-edge', name: 'Outer Rail', metric: (s) => s.arcade?.plinko?.edgeHits ?? 0, goal: (t) => `Reach an outer bucket ${t.toLocaleString()} times`, describe: (t) => `Reach either outermost Plinko bucket ${t.toLocaleString()} times.`, start: 1, growth: 1.32, rewardBase: 1400 },
+  { prefix: 'plinko-payout', name: 'Bucket Treasury', metric: (s) => s.arcade?.plinko?.totalPayout ?? 0, goal: (t) => `Collect ${t.toLocaleString()}€ from Plinko`, describe: (t) => `Accumulate ${t.toLocaleString()}€ in gross Plinko payouts.`, start: 500, growth: 1.3, roundTo: 100 },
+  { prefix: 'plinko-best', name: 'Multiplier Rail', metric: (s) => s.arcade?.plinko?.bestMultiplier ?? 0, goal: (t) => `Hit ${t.toFixed(1)}x in Plinko`, describe: (t) => `Reach a ${t.toFixed(1)}x effective Plinko multiplier.`, start: 1.5, growth: 1.07, roundTo: 0.1, rewardBase: 850 },
+];
+
+const arcadeChestCatalog = arcadeChestFamilies.flatMap(buildArcadeChestFamily);
+
+// Core prediction chests plus 1,024 generated minigame-specific challenges.
 export const chestCatalog: ChestSpec[] = [
   ...buildChestFamily({
     prefix: 'upset', name: 'Upset Vault',
@@ -293,8 +372,8 @@ export const chestCatalog: ChestSpec[] = [
   ...buildChestFamily({
     prefix: 'treasury', name: 'Treasury',
     metric: (s) => s.maxBalance ?? 0,
-    goal: (t) => `Reach ${t.toLocaleString()} coins`,
-    describe: (t) => `Grow your balance to an all-time high of ${t.toLocaleString()} coins.`,
+    goal: (t) => `Reach ${t.toLocaleString()}€`,
+    describe: (t) => `Grow your balance to an all-time high of ${t.toLocaleString()}€.`,
     targets: [5000, 10000, 20000, 35000, 55000, 85000, 130000, 200000, 320000, 500000, 800000, 1250000],
     eloBase: 80, eloStep: 150, rewardBase: 800, rewardStep: 700,
   }),
@@ -357,11 +436,12 @@ export const chestCatalog: ChestSpec[] = [
   ...buildChestFamily({
     prefix: 'highroller', name: 'High Roller',
     metric: (s) => s.coinsWon,
-    goal: (t) => `Win ${t.toLocaleString()} coins`,
-    describe: (t) => `Win a lifetime total of ${t.toLocaleString()} coins from predictions.`,
+    goal: (t) => `Win ${t.toLocaleString()}€`,
+    describe: (t) => `Win a lifetime total of ${t.toLocaleString()}€ from predictions.`,
     targets: [5000, 15000, 40000, 80000, 150000, 300000],
     eloBase: 120, eloStep: 200, rewardBase: 1100, rewardStep: 1000,
   }),
+  ...arcadeChestCatalog,
 ];
 
 function dayKey(date = new Date()) {
@@ -457,7 +537,7 @@ export async function getChestDefinitions(user: UserProfile): Promise<ChestDefin
       collection(db, 'rewardClaims'),
       where('userId', '==', user.uid),
       where('type', '==', 'chest'),
-      limit(150),
+      limit(1500),
     ));
     const claimed = new Set(
       snap.docs
@@ -525,14 +605,14 @@ export async function claimChest(user: UserProfile, chestId: string) {
 }
 
 export const wheelRewards = [
-  { amount: 300, label: '+300' },
-  { amount: -80, label: '-80' },
-  { amount: 180, label: '+180' },
-  { amount: 0, label: '0' },
-  { amount: 120, label: '+120' },
-  { amount: -40, label: '-40' },
-  { amount: 50, label: '+50' },
-  { amount: 400, label: '+400' },
+  { amount: 350, label: '+350€' },
+  { amount: -70, label: '-70€' },
+  { amount: 210, label: '+210€' },
+  { amount: 0, label: '0€' },
+  { amount: 140, label: '+140€' },
+  { amount: -35, label: '-35€' },
+  { amount: 60, label: '+60€' },
+  { amount: 460, label: '+460€' },
 ];
 
 export async function spinWheel(user: UserProfile) {
@@ -572,6 +652,43 @@ export interface MinigameWinResult {
   ratingDelta: number;
 }
 
+export type MinigameAchievement =
+  | {
+      game: 'plane';
+      distanceKm: number;
+      stars: number;
+      specialStars: number;
+      landed: boolean;
+      boatColor?: 'red' | 'blue' | 'green';
+      edgeLanding?: boolean;
+      fastGreenFullStrip?: boolean;
+    }
+  | {
+      game: 'mines';
+      size: 3 | 5;
+      bombs: number;
+      safeReveals: number;
+      multiplier: number;
+      won: boolean;
+      cleared: boolean;
+    }
+  | {
+      game: 'guessing';
+      attempts: number;
+      won: boolean;
+    }
+  | {
+      game: 'plinko';
+      drops: number;
+      wins: number;
+      profitableHits: number;
+      highHits: number;
+      jackpotHits: number;
+      edgeHits: number;
+      totalPayout: number;
+      bestMultiplier: number;
+    };
+
 export type MinigameOutcomeContext = {
   game: 'mines' | 'plane' | 'guessing' | 'plinko';
   stake: number;
@@ -579,6 +696,7 @@ export type MinigameOutcomeContext = {
   balanceBefore?: number;
   riskLevel?: number;
   blunder?: boolean;
+  achievement?: MinigameAchievement;
 };
 
 function clamp01(value: number) {
@@ -594,6 +712,140 @@ export function minigameStakeShare(context: MinigameOutcomeContext) {
 export function minigameAffectsRating(context: MinigameOutcomeContext) {
   const stake = Math.max(0, context.stake);
   return stake >= 10 && minigameStakeShare(context) >= 0.08;
+}
+
+// Low-balance-percentage bets deliberately earn less profit; risking most of a
+// balance can lift the profit portion by up to 40%. The base stake is never
+// multiplied, so a nominal 1x outcome remains exactly 1x.
+export function minigameRewardMultiplier(baseMultiplier: number, stake: number, balanceBefore: number) {
+  if (baseMultiplier <= 1) return Math.max(0, baseMultiplier);
+  const share = clamp01(Math.max(0, stake) / Math.max(1, stake, balanceBefore));
+  const profitFactor = 0.82 + 0.58 * Math.pow(share, 0.65);
+  return 1 + (baseMultiplier - 1) * profitFactor;
+}
+
+function applyMinigameAchievement(stats: UserStats, achievement?: MinigameAchievement): UserStats {
+  if (!achievement) return stats;
+  const arcade = stats.arcade ?? {};
+
+  if (achievement.game === 'plane') {
+    const current = {
+      rounds: 0, landings: 0, totalDistanceKm: 0, bestDistanceKm: 0,
+      stars: 0, specialStars: 0, redLandings: 0, blueLandings: 0,
+      greenLandings: 0, edgeLandings: 0, fastGreenFullStripLandings: 0,
+      ...arcade.plane,
+    };
+    const colorKey = achievement.boatColor === 'red'
+      ? 'redLandings'
+      : achievement.boatColor === 'blue'
+        ? 'blueLandings'
+        : achievement.boatColor === 'green'
+          ? 'greenLandings'
+          : null;
+    return {
+      ...stats,
+      arcade: {
+        ...arcade,
+        plane: {
+          ...current,
+          rounds: current.rounds + 1,
+          landings: current.landings + (achievement.landed ? 1 : 0),
+          totalDistanceKm: Number((current.totalDistanceKm + achievement.distanceKm).toFixed(2)),
+          bestDistanceKm: Math.max(current.bestDistanceKm, achievement.distanceKm),
+          stars: current.stars + achievement.stars,
+          specialStars: current.specialStars + achievement.specialStars,
+          ...(colorKey ? { [colorKey]: current[colorKey] + 1 } : {}),
+          edgeLandings: current.edgeLandings + (achievement.edgeLanding ? 1 : 0),
+          fastGreenFullStripLandings: current.fastGreenFullStripLandings + (achievement.fastGreenFullStrip ? 1 : 0),
+        },
+      },
+    };
+  }
+
+  if (achievement.game === 'mines') {
+    const current = {
+      rounds: 0, wins: 0, safeTiles: 0, bestMultiplier: 0,
+      clears3x3ThreeBombs: 0, clears5x5OneBomb: 0,
+      clears5x5TwoBombs: 0, clears5x5ThreeBombs: 0,
+      ...arcade.mines,
+    };
+    const clearKey = achievement.cleared
+      ? achievement.size === 3 && achievement.bombs === 3
+        ? 'clears3x3ThreeBombs'
+        : achievement.size === 5 && achievement.bombs === 1
+          ? 'clears5x5OneBomb'
+          : achievement.size === 5 && achievement.bombs === 2
+            ? 'clears5x5TwoBombs'
+            : achievement.size === 5 && achievement.bombs === 3
+              ? 'clears5x5ThreeBombs'
+              : null
+      : null;
+    return {
+      ...stats,
+      arcade: {
+        ...arcade,
+        mines: {
+          ...current,
+          rounds: current.rounds + 1,
+          wins: current.wins + (achievement.won ? 1 : 0),
+          safeTiles: current.safeTiles + achievement.safeReveals,
+          bestMultiplier: Math.max(current.bestMultiplier, achievement.multiplier),
+          ...(clearKey ? { [clearKey]: current[clearKey] + 1 } : {}),
+        },
+      },
+    };
+  }
+
+  if (achievement.game === 'guessing') {
+    const current = {
+      rounds: 0, wins: 0, totalGuesses: 0,
+      winsUnder1: 0, winsUnder2: 0, winsUnder3: 0, winsUnder4: 0,
+      winsUnder5: 0, winsUnder6: 0, winsUnder7: 0,
+      ...arcade.guessing,
+    };
+    const won = achievement.won;
+    return {
+      ...stats,
+      arcade: {
+        ...arcade,
+        guessing: {
+          ...current,
+          rounds: current.rounds + 1,
+          wins: current.wins + (won ? 1 : 0),
+          totalGuesses: current.totalGuesses + achievement.attempts,
+          winsUnder1: current.winsUnder1 + (won && achievement.attempts <= 1 ? 1 : 0),
+          winsUnder2: current.winsUnder2 + (won && achievement.attempts <= 2 ? 1 : 0),
+          winsUnder3: current.winsUnder3 + (won && achievement.attempts <= 3 ? 1 : 0),
+          winsUnder4: current.winsUnder4 + (won && achievement.attempts <= 4 ? 1 : 0),
+          winsUnder5: current.winsUnder5 + (won && achievement.attempts <= 5 ? 1 : 0),
+          winsUnder6: current.winsUnder6 + (won && achievement.attempts <= 6 ? 1 : 0),
+          winsUnder7: current.winsUnder7 + (won && achievement.attempts <= 7 ? 1 : 0),
+        },
+      },
+    };
+  }
+
+  const current = {
+    drops: 0, wins: 0, profitableHits: 0, highHits: 0,
+    jackpotHits: 0, edgeHits: 0, totalPayout: 0, bestMultiplier: 0,
+    ...arcade.plinko,
+  };
+  return {
+    ...stats,
+    arcade: {
+      ...arcade,
+      plinko: {
+        drops: current.drops + achievement.drops,
+        wins: current.wins + achievement.wins,
+        profitableHits: current.profitableHits + achievement.profitableHits,
+        highHits: current.highHits + achievement.highHits,
+        jackpotHits: current.jackpotHits + achievement.jackpotHits,
+        edgeHits: current.edgeHits + achievement.edgeHits,
+        totalPayout: current.totalPayout + achievement.totalPayout,
+        bestMultiplier: Math.max(current.bestMultiplier, achievement.bestMultiplier),
+      },
+    },
+  };
 }
 
 async function notifyLeaderboardMoveForUser(
@@ -658,10 +910,10 @@ export function calculateMinigameWinDelta(context: MinigameOutcomeContext) {
   const multiplier = Math.max(0, (context.payout ?? stake) / stake);
   if (multiplier <= 1.02) return 0;
 
-  const shareScore = Math.pow(stakeShare, 0.62);
+  const shareScore = Math.pow(stakeShare, 0.72);
   const multiplierScore = clamp01((multiplier - 1) / 5);
-  const score = shareScore * 0.62 + gameRisk * 0.22 + multiplierScore * 0.16;
-  let delta = Math.round(1 + score * 9);
+  const quality = 0.5 + gameRisk * 0.25 + multiplierScore * 0.25;
+  const delta = Math.round(10 * shareScore * quality);
 
   const shareCap = stakeShare < 0.12
     ? 1
@@ -674,18 +926,15 @@ export function calculateMinigameWinDelta(context: MinigameOutcomeContext) {
           : stakeShare < 0.85
             ? 8
             : 10;
-  const stakeCap = stake < 20 ? 1 : stake < 50 ? 2 : stake < 100 ? 4 : stake < 250 ? 7 : 10;
-  return Math.max(0, Math.min(delta, shareCap, stakeCap));
+  return Math.max(1, Math.min(delta, shareCap));
 }
 
 export function calculateMinigameLossDelta(context: MinigameOutcomeContext) {
   if (!minigameAffectsRating(context)) return 0;
-  const stake = Math.max(1, context.stake);
   const stakeShare = minigameStakeShare(context);
-  let penalty = stakeShare >= 0.75 ? 3 : stakeShare >= 0.35 ? 2 : 1;
+  let penalty = stakeShare >= 0.9 ? 5 : stakeShare >= 0.7 ? 4 : stakeShare >= 0.4 ? 3 : stakeShare >= 0.2 ? 2 : 1;
   if (context.blunder && stakeShare >= 0.2) penalty += 1;
-  const stakeCap = stake < 50 ? 1 : stake < 100 ? 2 : 4;
-  return -Math.min(penalty, stakeCap);
+  return -Math.min(penalty, 5);
 }
 
 function minigameWinDelta(context: MinigameOutcomeContext) {
@@ -705,7 +954,7 @@ export async function chargeMinigameStake(user: UserProfile, stake: number) {
     const snap = await transaction.get(userRef);
     const current = snap.data() as UserProfile | undefined;
     if (!current) throw new Error('Profile not found.');
-    if (current.coinBalance < stake) throw new Error('Not enough coins for that stake.');
+    if (current.coinBalance < stake) throw new Error('Not enough euros for that stake.');
     // Deduct the stake but DON'T record a balance-history entry yet — the round's
     // outcome is logged once: as a net win, or (only if we lose) as the lost stake.
     setBalanceInTransaction(transaction, userRef, current, current.coinBalance - stake, 'Minigame stake', {}, false);
@@ -734,6 +983,7 @@ export async function recordMinigameLoss(
     transaction.update(userRef, {
       rating: nextRating,
       rank: rankForRating(nextRating),
+      stats: applyMinigameAchievement(current.stats, context.achievement),
       updatedAt: serverTimestamp(),
     });
     transaction.set(doc(collection(userRef, 'balanceHistory')), {
@@ -774,7 +1024,7 @@ export async function awardMinigameWin(
     setBalanceInTransaction(transaction, userRef, current, current.coinBalance + payout, 'Minigame payout', {
       ...(ratingDelta > 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
       stats: {
-        ...current.stats,
+        ...applyMinigameAchievement(current.stats, context.achievement),
         eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
         bestMinigameMult: Math.max(current.stats.bestMinigameMult ?? 0, mult),
       },
@@ -794,6 +1044,7 @@ export async function settleCustomMinigameResult(
     ratingDelta?: number;
     historyDelta?: number;
     reason?: string;
+    achievement?: MinigameAchievement;
   },
 ): Promise<MinigameWinResult> {
   const payout = Math.max(0, Math.round(params.payout));
@@ -824,7 +1075,7 @@ export async function settleCustomMinigameResult(
       {
         ...(ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
         stats: {
-          ...current.stats,
+          ...applyMinigameAchievement(current.stats, params.achievement),
           eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
         },
       },
@@ -853,12 +1104,13 @@ export async function settleCustomMinigameResult(
 // ONE balance-history entry, instead of reading/writing per chip.
 export async function settleMinigameSession(
   user: UserProfile,
-  params: { coinDelta: number; ratingDelta?: number; reason?: string; bestMult?: number },
+  params: { coinDelta: number; ratingDelta?: number; reason?: string; bestMult?: number; achievement?: MinigameAchievement },
 ): Promise<MinigameWinResult> {
   const coinDelta = Math.round(params.coinDelta);
   const ratingDelta = Math.round(params.ratingDelta ?? 0);
   const bestMult = Math.max(0, params.bestMult ?? 0);
-  if (coinDelta === 0 && ratingDelta === 0 && bestMult === 0) return { payout: 0, ratingDelta: 0 };
+  const hasAchievementProgress = params.achievement?.game === 'plinko' && params.achievement.drops > 0;
+  if (coinDelta === 0 && ratingDelta === 0 && bestMult === 0 && !hasAchievementProgress) return { payout: 0, ratingDelta: 0 };
 
   const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
   const userRef = doc(db, 'users', user.uid);
@@ -881,7 +1133,7 @@ export async function settleMinigameSession(
       {
         ...(ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
         stats: {
-          ...current.stats,
+          ...applyMinigameAchievement(current.stats, params.achievement),
           eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
           bestMinigameMult: Math.max(current.stats.bestMinigameMult ?? 0, bestMult),
         },
@@ -1089,7 +1341,7 @@ export async function postCompletedChallenge(params: {
       ],
     includeActor: true,
     title: `✅ ${params.challenge.title} - Completed!`,
-    body: `${params.user.displayName || params.user.username} completed the challenge and earned ${totalReward} coins!`,
+    body: `${params.user.displayName || params.user.username} completed the challenge and earned ${totalReward.toLocaleString()}€!`,
     url: '/#/challenges',
   });
   invalidateQueryCache('challenges:activities:');
@@ -1170,8 +1422,8 @@ export async function createWagerChallenge(params: {
   groups?: FriendGroup[];
   invitedUsernames?: string[];
 }) {
-  if (params.stake < 10) throw new Error('Minimum challenge stake is 10 coins.');
-  if (params.stake > params.user.coinBalance) throw new Error('Insufficient coins.');
+  if (params.stake < 10) throw new Error('Minimum challenge stake is 10€.');
+  if (params.stake > params.user.coinBalance) throw new Error('Insufficient euros.');
   const normalizedTarget = params.targetUsername?.trim().toLowerCase() || null;
   if (normalizedTarget === params.user.username) throw new Error('You cannot do your own dare.');
   if (params.deadline.getTime() < Date.now() + 7 * 24 * 60 * 60 * 1000) {
@@ -1186,7 +1438,7 @@ export async function createWagerChallenge(params: {
     const userRef = doc(db, 'users', params.user.uid);
     const userSnap = await transaction.get(userRef);
     const current = userSnap.data() as UserProfile | undefined;
-    if (!current || current.coinBalance < params.stake) throw new Error('Insufficient coins.');
+    if (!current || current.coinBalance < params.stake) throw new Error('Insufficient euros.');
     setBalanceInTransaction(transaction, userRef, current, current.coinBalance - params.stake, `Wager stake: ${params.title}`);
     transaction.set(doc(collection(db, 'challenges')), {
       type: 'wager',
@@ -1242,7 +1494,7 @@ export async function createWagerChallenge(params: {
     title: normalizedTarget
       ? `🎯 ${params.title.trim()} - You've been challenged!`
       : `🎮 ${params.title.trim()} - New wager posted!`,
-    body: `${params.user.displayName || params.user.username} posted a wager for ${params.stake} coins.${normalizedTarget ? ' You were targeted!' : ''}`,
+    body: `${params.user.displayName || params.user.username} posted a wager for ${params.stake.toLocaleString()}€.${normalizedTarget ? ' You were targeted!' : ''}`,
     url: '/#/challenges',
   });
 
@@ -1270,7 +1522,7 @@ export async function updateWagerChallenge(params: {
   if (!trimmedTitle) throw new Error('Wager title is required.');
   if (trimmedTitle.length > 160) throw new Error('Keep the wager title under 160 characters.');
   if ((body?.trim().length ?? 0) > 1000) throw new Error('Keep proof rules under 1000 characters.');
-  if (nextStake < 10) throw new Error('Minimum challenge stake is 10 coins.');
+  if (nextStake < 10) throw new Error('Minimum challenge stake is 10€.');
   if (Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) {
     throw new Error('Choose a future deadline.');
   }
@@ -1299,7 +1551,7 @@ export async function updateWagerChallenge(params: {
       throw new Error('This wager can no longer be edited.');
     }
     const balanceChange = (currentChallenge.stake ?? 0) - nextStake;
-    if (currentUser.coinBalance + balanceChange < 0) throw new Error('Insufficient coins.');
+    if (currentUser.coinBalance + balanceChange < 0) throw new Error('Insufficient euros.');
     setBalanceInTransaction(
       transaction,
       userRef,
@@ -1355,7 +1607,7 @@ export async function completeWagerChallenge(challenge: ChallengeActivity, user:
     actor: user,
     targetUids: [challenge.creatorId],
     title: `🏆 ${challenge.title} - Completed!`,
-    body: `${user.displayName || user.username} completed your wager and earned ${reward} coins!`,
+    body: `${user.displayName || user.username} completed your wager and earned ${reward.toLocaleString()}€!`,
     url: '/#/challenges',
   });
   invalidateQueryCache('challenges:activities:');

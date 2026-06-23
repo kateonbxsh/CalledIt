@@ -36,6 +36,7 @@ export const emptyStats: UserStats = {
   maxBalance: 1000,
   eloWon: 0,
   bestMinigameMult: 0,
+  arcade: {},
 };
 
 export async function createProfile(params: {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  BadgeDollarSign,
+  BadgeEuro,
   Bomb,
   Check,
   ChevronRight,
@@ -53,8 +53,8 @@ const WHEEL_SPIN_MS = 4400;
 const forecastCards = {
   safe: {
     title: 'Safe',
-    reward: <CoinAmount amount={120} className="text-2xs" />,
-    copy: <>Claim <CoinAmount amount={120} className="text-xs" /> now.</>,
+    reward: <CoinAmount amount={150} className="text-2xs" />,
+    copy: <>Claim <CoinAmount amount={150} className="text-xs" /> now.</>,
     Icon: ShieldCheck,
     shell: 'border-mint/25 bg-mint/10 hover:border-mint/40 hover:bg-mint/15',
     icon: 'bg-mint text-white',
@@ -62,8 +62,8 @@ const forecastCards = {
   },
   random: {
     title: 'Random',
-    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={20} className="text-2xs" /><span>to</span><CoinAmount amount={200} className="text-2xs" /></span>,
-    copy: <>Roll once for <CoinAmount amount={20} className="text-xs" /> to <CoinAmount amount={200} className="text-xs" />.</>,
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={25} className="text-2xs" /><span>to</span><CoinAmount amount={240} className="text-2xs" /></span>,
+    copy: <>Roll once for <CoinAmount amount={25} className="text-xs" /> to <CoinAmount amount={240} className="text-xs" />.</>,
     Icon: Dice5,
     shell: 'border-sky/25 bg-sky/10 hover:border-sky/40 hover:bg-sky/15',
     icon: 'bg-sky text-white',
@@ -71,8 +71,8 @@ const forecastCards = {
   },
   chaos: {
     title: 'Chaos',
-    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={-40} className="text-2xs text-coral" /><span>/</span><CoinAmount amount={10} className="text-2xs" /><span>/</span><CoinAmount amount={260} className="text-2xs" /></span>,
-    copy: <>Roll: <CoinAmount amount={-40} className="text-xs text-coral" />, <CoinAmount amount={10} className="text-xs" />, or <CoinAmount amount={260} className="text-xs" />.</>,
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={-40} className="text-2xs text-coral" /><span>/</span><CoinAmount amount={15} className="text-2xs" /><span>/</span><CoinAmount amount={320} className="text-2xs" /></span>,
+    copy: <>Roll: <CoinAmount amount={-40} className="text-xs text-coral" />, <CoinAmount amount={15} className="text-xs" />, or <CoinAmount amount={320} className="text-xs" />.</>,
     Icon: Zap,
     shell: 'border-coral/25 bg-coral/10 hover:border-coral/40 hover:bg-coral/15',
     icon: 'bg-coral text-white',
@@ -80,8 +80,8 @@ const forecastCards = {
   },
   spicy: {
     title: 'Spicy',
-    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={40} className="text-2xs" /><span>then</span><CoinAmount amount={240} className="text-2xs" /></span>,
-    copy: <>Claim <CoinAmount amount={40} className="text-xs" /> now; arm <CoinAmount amount={240} className="text-xs" /> if your next prediction wins.</>,
+    reward: <span className="inline-flex items-center gap-1"><CoinAmount amount={50} className="text-2xs" /><span>then</span><CoinAmount amount={300} className="text-2xs" /></span>,
+    copy: <>Claim <CoinAmount amount={50} className="text-xs" /> now; arm <CoinAmount amount={300} className="text-xs" /> if your next prediction wins.</>,
     Icon: Flame,
     shell: 'border-plum/25 bg-plum/10 hover:border-plum/40 hover:bg-plum/15',
     icon: 'bg-plum text-white',
@@ -126,7 +126,8 @@ function wheelSlicePath(index: number, total: number) {
 }
 
 function signedCoins(amount: number) {
-  return amount > 0 ? `+${amount} coins` : amount < 0 ? `${amount} coins` : '0 coins';
+  const formatted = Math.abs(amount).toLocaleString('en-US');
+  return amount > 0 ? `+${formatted}€` : amount < 0 ? `-${formatted}€` : '0€';
 }
 
 function progressPercent(current: number, target: number) {
@@ -142,7 +143,27 @@ type ChestDisplayItem = ChestDefinition & {
   mystery: boolean;
   sortBucket: number;
   closeness: number;
+  category: ChestCategory;
 };
+
+type ChestCategory = 'general' | 'plane' | 'mines' | 'guessing' | 'plinko';
+
+const CHEST_CATEGORY_ORDER: ChestCategory[] = ['general', 'plane', 'mines', 'guessing', 'plinko'];
+const CHEST_CATEGORY_META = {
+  general: { label: 'General', Icon: Gift, tone: 'classic', accent: 'text-ink/60', badge: 'bg-field', card: 'border-line bg-field/45', progress: 'bg-ink/55', button: 'border-ink bg-ink' },
+  plane: { label: 'Sky Landing', Icon: Plane, tone: 'plane', accent: 'text-sky', badge: 'bg-sky/10', card: 'border-sky/20 bg-sky/[0.06]', progress: 'bg-sky', button: 'border-sky bg-sky' },
+  mines: { label: 'Mines', Icon: Bomb, tone: 'mines', accent: 'text-coral', badge: 'bg-coral/10', card: 'border-coral/20 bg-coral/[0.06]', progress: 'bg-coral', button: 'border-coral bg-coral' },
+  guessing: { label: 'Number Guessing', Icon: Hash, tone: 'guessing', accent: 'text-plum', badge: 'bg-plum/10', card: 'border-plum/20 bg-plum/[0.06]', progress: 'bg-plum', button: 'border-plum bg-plum' },
+  plinko: { label: 'Plinko', Icon: CircleDot, tone: 'plinko', accent: 'text-mint', badge: 'bg-mint/10', card: 'border-mint/20 bg-mint/[0.06]', progress: 'bg-mint', button: 'border-mint bg-mint' },
+} as const;
+
+function chestCategory(chestId: string): ChestCategory {
+  if (chestId.startsWith('game-plane-')) return 'plane';
+  if (chestId.startsWith('game-mines-')) return 'mines';
+  if (chestId.startsWith('game-guess-')) return 'guessing';
+  if (chestId.startsWith('game-plinko-')) return 'plinko';
+  return 'general';
+}
 
 const MIN_VISIBLE_CHESTS = 10;
 const REVEALED_LOCKED_CHEST_PROGRESS = 0.7;
@@ -171,8 +192,8 @@ export function MinigamesPage() {
   const [dailyBonusProgress, setDailyBonusProgress] = useState<any>({
     totalClaimed: 0,
     bonuses: [],
-    potential: 270,
-    bonusAmounts: { bet: 100, challenge: 100, prediction: 50, comment: 20 },
+    potential: 3700,
+    bonusAmounts: { bet: 1200, challenge: 1200, prediction: 800, comment: 500 },
     claimedTypes: [],
   });
   const [testPushSending, setTestPushSending] = useState(false);
@@ -206,7 +227,7 @@ export function MinigamesPage() {
             : reveal
               ? 2
               : 3;
-      const displayChest = { ...chest, mystery: !reveal, sortBucket, closeness: bestRatio };
+      const displayChest = { ...chest, mystery: !reveal, sortBucket, closeness: bestRatio, category: chestCategory(chest.id) };
 
       if (reveal || mystery) visible.push(displayChest);
       else backupMysteries.push(displayChest);
@@ -225,6 +246,9 @@ export function MinigamesPage() {
   const activeChests = useMemo(() => visibleChests.filter((chest) => !chest.claimed), [visibleChests]);
   const openedChests = useMemo(() => visibleChests.filter((chest) => chest.claimed), [visibleChests]);
   const displayedChests = chestTab === 'opened' ? openedChests : activeChests;
+  const displayedChestGroups = useMemo(() => CHEST_CATEGORY_ORDER
+    .map((category) => ({ category, chests: displayedChests.filter((chest) => chest.category === category) }))
+    .filter((group) => group.chests.length > 0), [displayedChests]);
 
   useEffect(() => {
     if (chestTab === 'opened' && openedChests.length === 0) setChestTab('active');
@@ -238,8 +262,8 @@ export function MinigamesPage() {
       setDailyBonusProgress({
         totalClaimed: 0,
         bonuses: [],
-        potential: 270,
-        bonusAmounts: { bet: 100, challenge: 100, prediction: 50, comment: 20 },
+        potential: 3700,
+        bonusAmounts: { bet: 1200, challenge: 1200, prediction: 800, comment: 500 },
         claimedTypes: [],
       });
     });
@@ -261,10 +285,10 @@ export function MinigamesPage() {
       const reward = await claimDailyForecast(profile, mode);
       setForecastMode(mode);
       const messages: Record<DailyForecastMode, string> = {
-        safe: `Safe reward claimed: +${reward.amount} coins.`,
-        random: `Random reward claimed: +${reward.amount} coins.`,
-        chaos: reward.amount >= 0 ? `Chaos reward claimed: +${reward.amount} coins.` : `Chaos reward claimed: ${reward.amount} coins.`,
-        spicy: `Spicy reward claimed: +${reward.amount} now, +${reward.spicyBonus ?? 0} only if your next prediction wins.`,
+        safe: `Safe reward claimed: +${reward.amount.toLocaleString()}€.`,
+        random: `Random reward claimed: +${reward.amount.toLocaleString()}€.`,
+        chaos: `Chaos reward claimed: ${signedCoins(reward.amount)}.`,
+        spicy: `Spicy reward claimed: +${reward.amount.toLocaleString()}€ now, +${(reward.spicyBonus ?? 0).toLocaleString()}€ only if your next prediction wins.`,
       };
       setMessage(messages[mode]);
       setForecastOpen(false);
@@ -272,10 +296,10 @@ export function MinigamesPage() {
         title: `${mode[0].toUpperCase()}${mode.slice(1)} forecast`,
         amount: reward.amount,
         detail: mode === 'spicy'
-          ? `You got ${reward.amount} coins now. The ${reward.spicyBonus ?? 0} coin spicy bonus only pays if your next resolved prediction wins.`
+          ? `You got ${reward.amount.toLocaleString()}€ now. The ${(reward.spicyBonus ?? 0).toLocaleString()}€ spicy bonus only pays if your next resolved prediction wins.`
           : reward.amount < 0
-            ? 'Chaos took coins this time.'
-            : 'Coins were added to your balance.',
+            ? 'Chaos reduced your balance this time.'
+            : 'Euros were added to your balance.',
         variant: 'forecast',
       });
     } catch (err) {
@@ -293,7 +317,7 @@ export function MinigamesPage() {
     try {
       const reward = await claimChest(profile, chestId);
       setOpenedChestId(chestId);
-      setMessage(`Chest opened: +${reward.amount} coins.`);
+      setMessage(`Chest opened: +${reward.amount.toLocaleString()}€.`);
       setChestsOpen(false);
       setRewardPopup({
         title: `${reward.label} opened`,
@@ -321,11 +345,11 @@ export function MinigamesPage() {
       setWheelTurns((turns) => turns + 1);
       await new Promise((resolve) => window.setTimeout(resolve, WHEEL_SPIN_MS));
       setWheelRevealed(true);
-      setMessage(reward > 0 ? `Wheel landed on +${reward} coins.` : reward < 0 ? `Wheel landed on ${reward} coins.` : 'Wheel landed on 0. It resets tomorrow.');
+      setMessage(`Wheel landed on ${signedCoins(reward)}. It resets tomorrow.`);
       setRewardPopup({
         title: 'Wheel result',
         amount: reward,
-        detail: reward > 0 ? 'Wheel coins added to your balance.' : reward < 0 ? 'The wheel took coins this time.' : 'No coin change today.',
+        detail: reward > 0 ? 'Wheel reward added to your balance.' : reward < 0 ? 'The wheel reduced your balance this time.' : 'No balance change this time.',
         variant: 'wheel',
       });
     } catch (err) {
@@ -353,7 +377,7 @@ export function MinigamesPage() {
 
   return (
     <>
-      <PageHeader title="Minigames" description="Daily coin games, milestone chests, and little bits of chaos." />
+      <PageHeader title="Minigames" description="Daily arcade rewards, milestone chests, and little bits of chaos." />
       {message ? <p className="mb-4 rounded-2xl bg-mint/10 p-3 text-sm font-semibold text-mint">{message}</p> : null}
 
       <section className="mb-7">
@@ -446,7 +470,7 @@ export function MinigamesPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <Gift size={18} className="text-citrus" />
+                <Gift size={18} className="text-[#6f79d8]" />
                 <h3 className="font-black">Daily activity bonuses</h3>
               </div>
               <p className="mt-1 max-w-xl text-xs leading-5 text-ink/55">
@@ -454,12 +478,12 @@ export function MinigamesPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <div className="rounded-xl bg-mint/10 px-3 py-2">
-                <p className="text-2xs font-bold uppercase text-mint/70">Earned</p>
+              <div className="rounded-xl bg-[#6f79d8]/10 px-3 py-2">
+                <p className="text-2xs font-bold uppercase text-[#6f79d8]">Earned</p>
                 <CoinAmount amount={dailyBonusProgress.totalClaimed} className="text-sm" />
               </div>
-              <div className="rounded-xl bg-citrus/10 px-3 py-2">
-                <p className="text-2xs font-bold uppercase text-citrus/70">Left</p>
+              <div className="rounded-xl bg-[#6f79d8]/10 px-3 py-2">
+                <p className="text-2xs font-bold uppercase text-[#6f79d8]">Left</p>
                 <CoinAmount amount={dailyBonusProgress.potential} className="text-sm" />
               </div>
             </div>
@@ -500,8 +524,8 @@ export function MinigamesPage() {
             copy: 'Choose Safe, Random, Chaos, or Spicy.',
             status: forecastAvailable ? 'Available now' : 'Cooling down',
             statusClass: forecastAvailable ? 'bg-mint/10 text-mint' : 'bg-field text-ink/45',
-            Icon: BadgeDollarSign,
-            iconClass: 'bg-citrus/10 text-citrus',
+            Icon: BadgeEuro,
+            iconClass: 'bg-[#6f79d8]/10 text-[#6f79d8]',
             action: () => setForecastOpen(true),
           },
           {
@@ -667,7 +691,7 @@ export function MinigamesPage() {
                 </button>
               </div>
             </div>
-            <div data-sheet-scroll className="grid min-h-0 gap-3 overflow-y-auto px-4 py-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] sm:grid-cols-2 sm:px-5 sm:pb-5">
+            <div data-sheet-scroll className="min-h-0 overflow-y-auto px-4 py-4 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] sm:px-5 sm:pb-5">
               {chests.length === 0 ? (
                 <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-line bg-field px-4 text-center sm:col-span-2">
                   <div>
@@ -684,75 +708,73 @@ export function MinigamesPage() {
                     </p>
                   </div>
                 </div>
-              ) : displayedChests.map((chest) => {
-                const opening = busy === `chest-${chest.id}` || openedChestId === chest.id;
-                const eloProgress = progressPercent(chest.eloWon, chest.eloRequired);
-                const challengeProgress = progressPercent(chest.current, chest.target);
-                const canOpen = chest.unlocked && chest.completed && !chest.claimed;
-                const status = chest.mystery ? 'Mystery' : chest.claimed ? 'Opened' : canOpen ? 'Ready' : chest.unlocked ? 'Challenge' : 'Locked';
+              ) : displayedChestGroups.map((group) => {
+                const meta = CHEST_CATEGORY_META[group.category];
+                const CategoryIcon = meta.Icon;
                 return (
-                  <div
-                    key={chest.id}
-                    className={`rounded-xl border p-3 transition ${
-                      canOpen
-                        ? 'border-citrus/35 bg-citrus/10 shadow-soft'
-                        : chest.claimed
-                          ? 'border-line bg-field opacity-70'
-                          : chest.unlocked
-                            ? 'border-sky/20 bg-sky/5'
-                            : chest.mystery
-                              ? 'border-line bg-[repeating-linear-gradient(135deg,#f7f9f8_0,#f7f9f8_10px,#eef3f1_10px,#eef3f1_20px)]'
-                              : 'border-line bg-field'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <RewardChest open={opening} className="h-16 w-20 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate font-bold">{chest.title}</p>
-                            <p className={`mt-0.5 text-2xs font-black uppercase ${canOpen ? 'text-citrus' : chest.unlocked ? 'text-sky' : chest.mystery ? 'text-plum/60' : 'text-ink/35'}`}>
-                              {status}
-                            </p>
+                  <section key={group.category} className="mb-6 last:mb-0">
+                    <div className="mb-2.5 flex items-center justify-between gap-3">
+                      <div className={`inline-flex items-center gap-2 ${meta.accent}`}>
+                        <span className={`grid h-8 w-8 place-items-center rounded-lg ${meta.badge}`}><CategoryIcon size={16} /></span>
+                        <h3 className="text-sm font-black">{meta.label}</h3>
+                      </div>
+                      <span className="text-xs font-bold text-ink/35">{group.chests.length}</span>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {group.chests.map((chest) => {
+                        const opening = busy === `chest-${chest.id}` || openedChestId === chest.id;
+                        const eloProgress = progressPercent(chest.eloWon, chest.eloRequired);
+                        const challengeProgress = progressPercent(chest.current, chest.target);
+                        const canOpen = chest.unlocked && chest.completed && !chest.claimed;
+                        const status = chest.mystery ? 'Mystery' : chest.claimed ? 'Opened' : canOpen ? 'Ready' : chest.unlocked ? 'Challenge' : 'Locked';
+                        return (
+                          <div key={chest.id} className={`rounded-xl border p-3 transition ${meta.card} ${canOpen ? 'shadow-soft ring-1 ring-current/10' : ''} ${chest.claimed ? 'opacity-65' : ''}`}>
+                            <div className="flex items-center gap-3">
+                              <RewardChest open={opening} tone={meta.tone} className="h-16 w-20 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate font-bold">{chest.title}</p>
+                                    <p className={`mt-0.5 text-2xs font-black uppercase ${chest.unlocked || canOpen ? meta.accent : 'text-ink/35'}`}>{status}</p>
+                                  </div>
+                                  <CoinAmount amount={chest.reward} className="shrink-0 text-xs" />
+                                </div>
+                                <p className="mt-0.5 text-xs leading-5 text-ink/50">{chest.mystery ? '????' : chest.description}</p>
+                              </div>
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              <div>
+                                <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-black uppercase text-ink/40">
+                                  <span>Unlock ELO</span>
+                                  <span>{chest.mystery ? '?? / ??' : `${compactNumber(chest.eloWon)} / ${compactNumber(chest.eloRequired)}`}</span>
+                                </div>
+                                <div className="h-2 overflow-hidden rounded-full bg-white">
+                                  <div className={`h-full rounded-full transition-all ${chest.mystery ? 'bg-line' : meta.progress}`} style={{ width: `${chest.mystery ? 18 : eloProgress}%` }} />
+                                </div>
+                              </div>
+                              <div>
+                                <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-black uppercase text-ink/40">
+                                  <span className="truncate">{chest.mystery ? '????' : chest.goal}</span>
+                                  <span>{chest.mystery ? '?? / ??' : `${compactNumber(chest.current)} / ${compactNumber(chest.target)}`}</span>
+                                </div>
+                                <div className="h-2 overflow-hidden rounded-full bg-white">
+                                  <div className={`h-full rounded-full transition-all ${chest.mystery ? 'bg-line' : meta.progress}`} style={{ width: `${chest.mystery ? 18 : challengeProgress}%` }} />
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openChest(chest.id)}
+                              disabled={!canOpen || !!busy}
+                              className={`mt-3 w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition disabled:opacity-45 ${canOpen ? `${meta.button} text-white shadow-soft hover:shadow-lift` : 'border-line bg-white text-ink/60'}`}
+                            >
+                              {chest.mystery ? 'Keep playing' : chest.claimed ? 'Opened' : canOpen ? 'Open chest' : chest.unlocked ? 'Finish challenge' : 'Win more ELO'}
+                            </button>
                           </div>
-                          <CoinAmount amount={chest.reward} className="shrink-0 text-xs" />
-                        </div>
-                        <p className="mt-0.5 text-xs leading-5 text-ink/50">{chest.mystery ? '????' : chest.description}</p>
-                      </div>
+                        );
+                      })}
                     </div>
-                    <div className="mt-3 space-y-2">
-                      <div>
-                        <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-black uppercase text-ink/40">
-                          <span>Unlock ELO</span>
-                          <span>{chest.mystery ? '?? / ??' : `${compactNumber(chest.eloWon)} / ${compactNumber(chest.eloRequired)}`}</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-white">
-                          <div className={`h-full rounded-full transition-all ${chest.mystery ? 'bg-line' : 'bg-sky'}`} style={{ width: `${chest.mystery ? 18 : eloProgress}%` }} />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-black uppercase text-ink/40">
-                          <span className="truncate">{chest.mystery ? '????' : chest.goal}</span>
-                          <span>{chest.mystery ? '?? / ??' : `${compactNumber(chest.current)} / ${compactNumber(chest.target)}`}</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-white">
-                          <div className={`h-full rounded-full transition-all ${chest.mystery ? 'bg-line' : 'bg-sky'}`} style={{ width: `${chest.mystery ? 18 : challengeProgress}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openChest(chest.id)}
-                      disabled={!canOpen || !!busy}
-                      className={`mt-3 w-full rounded-lg border px-3 py-2.5 text-xs font-bold transition disabled:opacity-45 ${
-                        canOpen
-                          ? 'border-sky bg-sky text-white shadow-soft hover:shadow-lift'
-                          : 'border-line bg-white text-ink/60'
-                      }`}
-                    >
-                      {chest.mystery ? 'Keep playing' : chest.claimed ? 'Opened' : canOpen ? 'Open chest' : chest.unlocked ? 'Finish challenge' : 'Win more ELO'}
-                    </button>
-                  </div>
+                  </section>
                 );
               })}
             </div>
@@ -834,18 +856,22 @@ export function MinigamesPage() {
                       </g>
                     );
                   })}
-                  <circle cx="150" cy="150" r="45" fill="#141b26" stroke="rgba(255,255,255,.2)" strokeWidth="5" />
-                  <circle cx="150" cy="150" r="34" fill="#f7f8f4" />
-                  <text x="150" y="151" textAnchor="middle" dominantBaseline="middle" className="fill-[#121417] text-[12px] font-black">
-                    {wheelResult === null ? 'SPIN' : !wheelRevealed ? '...' : wheelResult > 0 ? `+${wheelResult}` : String(wheelResult)}
-                  </text>
                 </svg>
+                <button
+                  type="button"
+                  onClick={wheel}
+                  disabled={!!busy || !wheelAvailable}
+                  className="absolute left-1/2 top-1/2 z-30 grid h-[27%] w-[27%] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[5px] border-[#141b26] bg-[#f7f8f4] px-1 text-center text-xs font-black text-ink shadow-lift transition enabled:hover:scale-105 enabled:active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
+                  aria-label="Spin the wheel"
+                >
+                  {busy === 'wheel' ? '...' : wheelResult !== null && wheelRevealed ? signedCoins(wheelResult) : 'SPIN'}
+                </button>
               </div>
             </div>
             <div className="border-t border-white/10 bg-white/[0.04] px-5 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))] pt-4">
               <div className="mb-3 flex items-center justify-between text-xs text-white/45">
                 <span>Possible result</span>
-                <span>-80 to +400</span>
+                <span>-70€ to +460€</span>
               </div>
               <button
                 onClick={wheel}
@@ -865,13 +891,13 @@ export function MinigamesPage() {
             {rewardPopup.variant === 'chest' ? (
               <RewardChest open className="mx-auto mb-3 h-32 w-40" />
             ) : (
-              <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-citrus/10">
-                {rewardPopup.variant === 'wheel' ? <Sparkles size={34} className="text-citrus" /> : <BadgeDollarSign size={34} className="text-citrus" />}
+              <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-[#6f79d8]/10">
+                {rewardPopup.variant === 'wheel' ? <Sparkles size={34} className="text-[#6f79d8]" /> : <BadgeEuro size={34} className="text-[#6f79d8]" />}
               </div>
             )}
             <h2 className="text-xl font-black">{rewardPopup.title}</h2>
             <p className="mt-2 text-sm text-ink/60">{rewardPopup.detail}</p>
-            <p className={`mt-4 text-3xl font-black ${rewardPopup.amount < 0 ? 'text-rust' : 'text-citrus'}`}>
+            <p className={`mt-4 text-3xl font-black ${rewardPopup.amount < 0 ? 'text-rust' : 'text-[#6f79d8]'}`}>
               {signedCoins(rewardPopup.amount)}
             </p>
             <div className="mt-4 inline-flex rounded-md bg-field px-4 py-3">
@@ -892,8 +918,8 @@ export function MinigamesPage() {
           coins={profile.coinBalance}
           stakes={[1, 10, 50, 100, 250, 500]}
           onCharge={async (s) => { await chargePlaneStake(profile, s); return true; }}
-          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'plane', ...context, balanceBefore: profile.coinBalance })}
-          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'plane', stake: s, ...context, balanceBefore: profile.coinBalance })}
+          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'plane', ...context })}
+          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'plane', stake: s, ...context })}
           onClose={() => setShowPlane(false)}
         />
       ) : null}
@@ -903,8 +929,8 @@ export function MinigamesPage() {
           coins={profile.coinBalance}
           stakes={[1, 10, 50, 100, 250, 500]}
           onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
-          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context, balanceBefore: profile.coinBalance })}
-          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context, balanceBefore: profile.coinBalance })}
+          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'mines', ...context })}
+          onLose={async (s, context) => recordMinigameLoss(profile, { game: 'mines', stake: s, ...context })}
           onClose={() => setShowMines(false)}
         />
       ) : null}
@@ -924,7 +950,7 @@ export function MinigamesPage() {
         <PlinkoGame
           coins={profile.coinBalance}
           stakes={[1, 10, 50, 100, 250, 500]}
-          onSettle={async (coinDelta, ratingDelta, bestMult) => { await settleMinigameSession(profile, { coinDelta, ratingDelta, bestMult, reason: 'Plinko' }); }}
+          onSettle={async (coinDelta, ratingDelta, bestMult, achievement) => { await settleMinigameSession(profile, { coinDelta, ratingDelta, bestMult, achievement, reason: 'Plinko' }); }}
           onClose={() => setShowPlinko(false)}
         />
       ) : null}

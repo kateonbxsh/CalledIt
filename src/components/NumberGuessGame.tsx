@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowDown, ArrowUp, Hash, Minus, Plus, RotateCcw, Sparkles, X } from 'lucide-react';
 import type { MinigameWinResult } from '../services/rewardService';
-import { calculateMinigameLossDelta, calculateMinigameWinDelta } from '../services/rewardService';
+import { calculateMinigameLossDelta, calculateMinigameWinDelta, minigameRewardMultiplier, type MinigameAchievement } from '../services/rewardService';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 
 type Phase = 'setup' | 'playing' | 'won' | 'lost';
 type GuessFeedback = 'higher' | 'lower' | 'correct';
+type GuessingAchievement = Extract<MinigameAchievement, { game: 'guessing' }>;
 
 type GuessEntry = {
   value: number;
@@ -38,10 +39,10 @@ function midpoint(min: number, max: number) {
   return Math.floor((min + max) / 2);
 }
 
-function multiplierForAttempt(attempt: number, variance: number) {
-  const speed = clamp((OPTIMAL_GUESSES - attempt) / (OPTIMAL_GUESSES - 1), 0, 1);
-  const base = 1.04 + (speed ** 1.9) * 1.36;
-  return Math.max(1.02, Math.min(2.3, base * variance));
+function multiplierForAttempt(attempt: number, stake: number, balanceBefore: number) {
+  const baseByAttempt = [0, 10, 5, 2.8, 1.6, 1, 1, 0.15];
+  const base = baseByAttempt[attempt] ?? 0;
+  return minigameRewardMultiplier(base, stake, balanceBefore);
 }
 
 function refundRateForAttempts(attempts: number) {
@@ -91,7 +92,7 @@ export function NumberGuessGame({
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
   onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
-  onSettleCustom: (params: { payout: number; ratingDelta?: number; historyDelta?: number; reason?: string }) => Promise<MinigameWinResult>;
+  onSettleCustom: (params: { payout: number; ratingDelta?: number; historyDelta?: number; reason?: string; achievement?: GuessingAchievement }) => Promise<MinigameWinResult>;
   onClose: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>('setup');
@@ -103,7 +104,7 @@ export function NumberGuessGame({
   const [guessText, setGuessText] = useState('50');
   const [settlement, setSettlement] = useState<MinigameWinResult | null>(null);
   const [finalRefund, setFinalRefund] = useState(0);
-  const [roundVariance, setRoundVariance] = useState(1);
+  const balanceBeforeRef = useRef(coins);
   const knobDragRef = useRef<{ pointerId: number; angle: number } | null>(null);
   const knobRemainderRef = useRef(0);
 
@@ -119,9 +120,9 @@ export function NumberGuessGame({
   const canStart = stake >= 1 && stake <= coins;
   const attempts = guesses.length;
   const currentAttempt = attempts + 1;
-  const currentMultiplier = currentAttempt < OPTIMAL_GUESSES
-    ? multiplierForAttempt(currentAttempt, roundVariance)
-    : 1;
+  const currentMultiplier = currentAttempt <= OPTIMAL_GUESSES
+    ? multiplierForAttempt(currentAttempt, stake, balanceBeforeRef.current)
+    : 0;
 
   useEffect(() => {
     if (phase !== 'playing') return;
@@ -192,6 +193,7 @@ export function NumberGuessGame({
     setBusy(true);
     setError('');
     try {
+      balanceBeforeRef.current = coins;
       const charged = await onCharge(stake);
       if (!charged) return;
       setTarget(randomTarget());
@@ -199,7 +201,6 @@ export function NumberGuessGame({
       setSettlement(null);
       setFinalRefund(0);
       setGuessText('50');
-      setRoundVariance(0.94 + Math.random() * 0.14);
       setPhase('playing');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not start.');
@@ -214,13 +215,14 @@ export function NumberGuessGame({
     setBusy(true);
     try {
       if (finalAttempts < OPTIMAL_GUESSES) {
-        const multiplier = multiplierForAttempt(finalAttempts, roundVariance);
+        const multiplier = multiplierForAttempt(finalAttempts, stake, balanceBeforeRef.current);
         const payout = Math.round(stake * multiplier);
         const result = await onSettleCustom({
           payout,
-          ratingDelta: ratingDeltaForFastSolve(stake, finalAttempts, coins, payout),
+          ratingDelta: ratingDeltaForFastSolve(stake, finalAttempts, balanceBeforeRef.current, payout),
           historyDelta: payout,
           reason: 'Number guessing fast solve',
+          achievement: { game: 'guessing', attempts: finalAttempts, won: true },
         });
         setSettlement(result);
         setFinalRefund(result.payout);
@@ -229,12 +231,13 @@ export function NumberGuessGame({
       }
 
       if (finalAttempts === OPTIMAL_GUESSES) {
-        const payout = Math.round(stake * 0.5);
+        const payout = Math.round(stake * 0.15);
         const result = await onSettleCustom({
           payout,
           ratingDelta: 0,
           historyDelta: payout - stake,
           reason: 'Number guessing seven-guess finish',
+          achievement: { game: 'guessing', attempts: finalAttempts, won: true },
         });
         setSettlement(result);
         setFinalRefund(payout);
@@ -243,12 +246,13 @@ export function NumberGuessGame({
       }
 
       const refund = Math.round(stake * refundRateForAttempts(finalAttempts));
-      const ratingDelta = ratingDeltaForSlowSolve(stake, finalAttempts, coins);
+      const ratingDelta = ratingDeltaForSlowSolve(stake, finalAttempts, balanceBeforeRef.current);
       const result = await onSettleCustom({
         payout: refund,
         ratingDelta,
         historyDelta: refund - stake,
         reason: 'Number guessing overflow',
+        achievement: { game: 'guessing', attempts: finalAttempts, won: false },
       });
       setSettlement(result);
       setFinalRefund(refund);
@@ -377,7 +381,7 @@ export function NumberGuessGame({
               <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-center">
                 <p className="text-2xs font-black uppercase text-white/40">Current multiplier</p>
                 <p className="mt-0.5 text-sm font-black sm:text-base">
-                  {currentAttempt < OPTIMAL_GUESSES ? `${currentMultiplier.toFixed(2)}x` : currentAttempt === OPTIMAL_GUESSES ? 'Half back' : currentAttempt >= MAX_GUESSES ? 'Auto bust' : 'Bust'}
+                  {currentAttempt <= OPTIMAL_GUESSES ? `${Number(currentMultiplier.toFixed(2))}x` : currentAttempt >= MAX_GUESSES ? 'Auto bust' : 'Bust'}
                 </p>
               </div>
             </div>

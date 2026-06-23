@@ -59,7 +59,7 @@ export function GiftsPage() {
     try {
       await claimCoinGift(profile, gift);
       setIncomingGifts((current) => current.filter((item) => item.id !== gift.id));
-      setMessage(`Claimed ${gift.amount.toLocaleString('en-US')} coins from ${gift.senderDisplayName || gift.senderUsername}.`);
+      setMessage(`Claimed ${gift.amount.toLocaleString('en-US')}€ from ${gift.senderDisplayName || gift.senderUsername}.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not claim the gift.');
     } finally {
@@ -77,7 +77,7 @@ export function GiftsPage() {
             <h2 className="font-black">Incoming gifts</h2>
           </div>
           <p className="mt-1 text-sm text-ink/55">
-            Claim coins sent to you by friends.
+            Claim euros sent to you by friends.
           </p>
           <div className="mt-4 space-y-3">
             {incomingGifts.length ? incomingGifts.map((gift) => (
@@ -109,10 +109,10 @@ export function GiftsPage() {
         <aside className="rounded-md border border-line bg-white p-4 shadow-soft sm:p-5">
           <div className="flex items-center gap-2">
             <Send size={17} className="text-sky" />
-            <h2 className="font-black">Send coins</h2>
+            <h2 className="font-black">Send euros</h2>
           </div>
           <p className="mt-1 text-sm text-ink/55">
-            Send coins directly to a friend by username.
+            Send euros directly to a friend by username.
           </p>
           <form onSubmit={submitGift} className="mt-4 space-y-3">
             <UsernamePicker

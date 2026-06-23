@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Bomb, Gem, ShieldCheck, Sparkles, X } from 'lucide-react';
 import type { MinigameWinResult } from '../services/rewardService';
+import { minigameRewardMultiplier, type MinigameAchievement } from '../services/rewardService';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
 
 type Phase = 'setup' | 'playing' | 'won' | 'lost';
+type MinesAchievement = Extract<MinigameAchievement, { game: 'mines' }>;
+type MinesOutcomeContext = { stake: number; balanceBefore: number; riskLevel: number; achievement: MinesAchievement };
 
 function shuffledBombs(total: number, count: number) {
   const cells = Array.from({ length: total }, (_, index) => index);
@@ -35,8 +38,8 @@ export function MinesGame({
   coins: number;
   stakes: number[];
   onCharge: (stake: number) => Promise<boolean>;
-  onWin: (payout: number, context: { stake: number; riskLevel: number }) => Promise<MinigameWinResult>;
-  onLose: (stake: number, context: { riskLevel: number; blunder: boolean }) => Promise<MinigameWinResult | void> | void;
+  onWin: (payout: number, context: MinesOutcomeContext) => Promise<MinigameWinResult>;
+  onLose: (stake: number, context: Omit<MinesOutcomeContext, 'stake'> & { blunder: boolean }) => Promise<MinigameWinResult | void> | void;
   onClose: () => void;
 }) {
   const [size, setSize] = useState<3 | 5>(5);
@@ -49,10 +52,11 @@ export function MinesGame({
   const [error, setError] = useState('');
   const [settlement, setSettlement] = useState<MinigameWinResult | null>(null);
   const [lastCashout, setLastCashout] = useState(0);
+  const balanceBeforeRef = useRef(coins);
 
   const total = size * size;
   const safeTotal = total - bombCount;
-  const multiplier = payoutMultiplier(total, bombCount, revealed.size);
+  const multiplier = minigameRewardMultiplier(payoutMultiplier(total, bombCount, revealed.size), stake, phase === 'setup' ? coins : balanceBeforeRef.current);
   const payout = Math.round(stake * multiplier);
   const canStart = stake >= 1 && stake <= coins;
 
@@ -63,6 +67,7 @@ export function MinesGame({
     setBusy(true);
     setError('');
     try {
+      balanceBeforeRef.current = coins;
       const charged = await onCharge(stake);
       if (!charged) return;
       setBombs(shuffledBombs(total, bombCount));
@@ -76,13 +81,19 @@ export function MinesGame({
     }
   }
 
-  async function settleWin(finalPayout: number) {
+  async function settleWin(finalPayout: number, safeReveals = revealed.size, cleared = false) {
     setBusy(true);
     setPhase('won');
     try {
+      const finalMultiplier = stake > 0 ? finalPayout / stake : 0;
       setSettlement(await onWin(finalPayout, {
         stake,
-        riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + revealed.size / Math.max(1, safeTotal * 1.4)),
+        balanceBefore: balanceBeforeRef.current,
+        riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + safeReveals / Math.max(1, safeTotal * 1.4)),
+        achievement: {
+          game: 'mines', size, bombs: bombCount, safeReveals,
+          multiplier: finalMultiplier, won: true, cleared,
+        },
       }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The win could not be credited.');
@@ -94,12 +105,18 @@ export function MinesGame({
   function revealCell(index: number) {
     if (phase !== 'playing' || revealed.has(index) || busy) return;
     if (bombs.has(index)) {
-      setLastCashout(Math.round(stake * payoutMultiplier(total, bombCount, revealed.size)));
+      const finalMultiplier = minigameRewardMultiplier(payoutMultiplier(total, bombCount, revealed.size), stake, balanceBeforeRef.current);
+      setLastCashout(Math.round(stake * finalMultiplier));
       setRevealed(new Set([...revealed, index]));
       setPhase('lost');
       Promise.resolve(onLose(stake, {
+        balanceBefore: balanceBeforeRef.current,
         riskLevel: Math.min(1, bombCount / Math.max(1, size === 3 ? 3 : 5) + revealed.size / Math.max(1, safeTotal * 1.4)),
         blunder: revealed.size <= 1,
+        achievement: {
+          game: 'mines', size, bombs: bombCount, safeReveals: revealed.size,
+          multiplier: finalMultiplier, won: false, cleared: false,
+        },
       })).then((result) => {
         if (result) setSettlement(result);
       }).catch(() => {});
@@ -110,7 +127,8 @@ export function MinesGame({
     next.add(index);
     setRevealed(next);
     if (next.size === safeTotal) {
-      void settleWin(Math.round(stake * payoutMultiplier(total, bombCount, next.size)));
+      const finalMultiplier = minigameRewardMultiplier(payoutMultiplier(total, bombCount, next.size), stake, balanceBeforeRef.current);
+      void settleWin(Math.round(stake * finalMultiplier), next.size, true);
     }
   }
 
@@ -305,7 +323,7 @@ export function MinesGame({
             </div>
             <h2 className="mt-4 text-2xl font-black">{phase === 'won' ? 'Cashed out' : 'Mine hit'}</h2>
             <p className={`mt-2 text-4xl font-black ${phase === 'won' ? 'text-mint' : 'text-coral'}`}>
-              {phase === 'won' ? <CoinAmount amount={settlement?.payout ?? payout} className="text-4xl" /> : <>-{stake}</>}
+              <CoinAmount amount={phase === 'won' ? (settlement?.payout ?? payout) : -stake} className="text-4xl" />
             </p>
             <p className="mt-2 text-sm text-white/55">
               {phase === 'won' ? `${revealed.size} safe tiles at ${multiplier.toFixed(2)}x.` : 'The stake is gone. The next board is freshly shuffled.'}

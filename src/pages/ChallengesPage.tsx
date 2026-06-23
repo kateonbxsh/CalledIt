@@ -903,8 +903,8 @@ export function ChallengesPage() {
                   ? activity.status === 'failed' ? 'bg-coral/12 text-coral' : 'bg-citrus/12 text-citrus'
                   : 'bg-mint/12 text-mint';
                 const coinsLabel = activity.type === 'wager'
-                  ? activity.status === 'failed' ? 'Refunded' : 'Coins earned'
-                  : 'Coins earned';
+                  ? activity.status === 'failed' ? 'Refunded' : 'Euros earned'
+                  : 'Euros earned';
                 const coinsAmount = activity.type === 'wager'
                   ? activity.status === 'failed' ? (activity.creatorRefund ?? 0) : (activity.stake ?? 0) + (activity.bonus ?? 0)
                   : (activity.reward ?? 0) + (activity.chestReward ?? 0);

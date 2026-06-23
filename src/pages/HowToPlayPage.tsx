@@ -21,11 +21,11 @@ export function HowToPlayPage() {
       <div className="space-y-6">
         <Section title="The concept">
           <p>
-            <strong className="text-ink">Called it</strong> is a prediction game played with fictional coins.
+            <strong className="text-ink">Called it</strong> is a prediction game played with fictional euros.
             No real money, ever. You and your friends predict sports results, personal challenges, world events,
             random bets, and anything else worth calling early.
           </p>
-          <p>The goal is to make correct predictions, build coin momentum, and climb the ELO ranks.</p>
+          <p>The goal is to make correct predictions, build your balance, and climb the ELO ranks.</p>
         </Section>
 
         <Section title="Creating a bet">
@@ -50,21 +50,21 @@ export function HowToPlayPage() {
         </Section>
 
         <Section title="Predicting">
-          <p>Open any bet, pick your outcome, and set your stake. The minimum stake is 10 coins.</p>
-          <p>You can update an open prediction before the deadline. Changes cost a small coin fee, and repeated switches reduce the extra skill reward you can earn.</p>
+          <p>Open any bet, pick your outcome, and set your stake. The minimum stake is 10€.</p>
+          <p>You can update an open prediction before the deadline. Changes cost a small fee, and repeated switches reduce the extra skill reward you can earn.</p>
           <p>For Closest Number and Closest Date bets, individual guesses are hidden from others until resolution.</p>
         </Section>
 
         <Section title="Payouts">
           <p>Winners get their active stake back, split the loser pool, and can earn a minted skill reward.</p>
-          <p>Coins gained are no longer limited to the losing pool. If the losing pool is empty, correct predictors can still earn coins for being right.</p>
+          <p>Rewards are no longer limited to the losing pool. If the losing pool is empty, correct predictors can still earn euros for being right.</p>
           <p>The skill reward is bigger for harder calls, earlier calls, higher conviction, and fewer prediction changes. Late crowd-chasing still works, but pays less.</p>
           <p>For Closest bets, the nearest guess wins. Ties are split proportionally by stake, with a small skill reward added.</p>
         </Section>
 
         <Section title="Displayed odds">
           <p>
-            The percentage shown on each option is a weighted mix: 62% from user count, 23% from coins staked,
+            The percentage shown on each option is a weighted mix: 62% from user count, 23% from euros staked,
             and 15% from the rating signal of the predictors on that option.
           </p>
           <p>Odds update live as people join or change predictions.</p>
@@ -76,7 +76,7 @@ export function HowToPlayPage() {
             The formula rewards contrarian accuracy, so being right when the odds were against you earns more.
           </p>
           <p>Timing matters too. Early conviction can earn more ELO, while changing predictions many times reduces the final swing.</p>
-          <p>Your starting ELO is 1000. It has no effect on coins; it is a separate skill score.</p>
+          <p>Your starting ELO is 1000. It has no effect on your balance; it is a separate skill score.</p>
         </Section>
 
         <Section title="Feed tabs">
@@ -86,18 +86,17 @@ export function HowToPlayPage() {
 
         <Section title="Minigames">
           <p>The Minigames page contains forecast refills, chests, and the wheel.</p>
-          <p><strong className="text-ink">Safe</strong> gives 60 coins immediately.</p>
-          <p><strong className="text-ink">Random</strong> gives a random positive amount from 10 to 100 coins.</p>
-          <p><strong className="text-ink">Chaos</strong> gives -20, +5, or +130 coins.</p>
-          <p><strong className="text-ink">Spicy</strong> gives 20 coins immediately and arms a 120 coin bonus only if your next resolved prediction wins. If that next prediction loses, the bonus is voided.</p>
+          <p><strong className="text-ink">Safe</strong> gives a fixed euro reward immediately.</p>
+          <p><strong className="text-ink">Random</strong> gives a random positive euro reward.</p>
+          <p><strong className="text-ink">Chaos</strong> can increase or reduce your balance.</p>
+          <p><strong className="text-ink">Spicy</strong> pays part now and arms another reward only if your next resolved prediction wins.</p>
           <p><strong className="text-ink">Chests</strong> are one-time reward boxes you open from Minigames. They unlock from simple quests, challenge progress, and strong prediction moments.</p>
-          <p>Opening a chest plays the chest reveal popup, gives the listed coin reward once, and marks that chest as claimed.</p>
-          <p>Weekly challenges can also give bonus chest coins immediately after completion. That bonus is separate from the normal challenge reward and is shown with the same chest-style reveal.</p>
-          <p>The wheel can be spun once per day in a popup. It has bonuses and maluses written on the wheel, so it can give coins or take some away.</p>
+          <p>Opening a chest plays the reveal popup, gives the listed euro reward once, and marks that chest as claimed.</p>
+          <p>The wheel can increase or reduce your balance, with every result written directly on it.</p>
         </Section>
 
         <Section title="Challenges">
-          <p>Each user gets ten deterministic weekly real-life challenges from the system. Open one in a popup, upload a proof photo, and choose where to post it to earn coins and bonus chest coins.</p>
+          <p>Each user gets deterministic weekly real-life challenges from the system. Open one, upload proof, and choose where to post it to earn euros.</p>
           <p>When completing a system challenge, choose whether the proof post is public or posted into a friend group.</p>
           <p>You can also create a wager challenge publicly or in a group. You cannot complete your own dare. The deadline must be at least one week away.</p>
           <p>If someone else completes it with proof, they get your stake plus a bonus. If no one does it by the deadline, you can close the wager and receive your stake plus 50%.</p>

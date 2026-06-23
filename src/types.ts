@@ -61,6 +61,55 @@ export interface UserStats {
   eloWon?: number;
   // Best single-round multiplier reached across the arcade minigames.
   bestMinigameMult?: number;
+  arcade?: ArcadeStats;
+}
+
+export interface ArcadeStats {
+  plane?: {
+    rounds: number;
+    landings: number;
+    totalDistanceKm: number;
+    bestDistanceKm: number;
+    stars: number;
+    specialStars: number;
+    redLandings: number;
+    blueLandings: number;
+    greenLandings: number;
+    edgeLandings: number;
+    fastGreenFullStripLandings: number;
+  };
+  mines?: {
+    rounds: number;
+    wins: number;
+    safeTiles: number;
+    bestMultiplier: number;
+    clears3x3ThreeBombs: number;
+    clears5x5OneBomb: number;
+    clears5x5TwoBombs: number;
+    clears5x5ThreeBombs: number;
+  };
+  guessing?: {
+    rounds: number;
+    wins: number;
+    totalGuesses: number;
+    winsUnder1: number;
+    winsUnder2: number;
+    winsUnder3: number;
+    winsUnder4: number;
+    winsUnder5: number;
+    winsUnder6: number;
+    winsUnder7: number;
+  };
+  plinko?: {
+    drops: number;
+    wins: number;
+    profitableHits: number;
+    highHits: number;
+    jackpotHits: number;
+    edgeHits: number;
+    totalPayout: number;
+    bestMultiplier: number;
+  };
 }
 
 export interface BalanceSnapshot {

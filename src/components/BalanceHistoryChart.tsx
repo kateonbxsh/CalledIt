@@ -119,7 +119,7 @@ export function BalanceHistoryChart({
                   <p className="text-xs font-semibold text-ink/45">
                     {new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(point.date)}
                   </p>
-                  <p className="mt-1 text-base font-black text-mint">{point.balance.toLocaleString()} coins</p>
+                  <p className="mt-1 text-base font-black text-[#6f79d8]">{point.balance.toLocaleString()}€</p>
                 </div>
               );
             }}
