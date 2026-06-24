@@ -5,6 +5,10 @@ const WIDTH = 960;
 const HEIGHT = 540;
 const MAX_OUTPUT_CHARS = 520_000;
 
+// Crests come through the worker's crest proxy. An <img src> to the raw crest
+// would *display* fine without CORS, but compositing it onto a canvas we then
+// export/upload needs the bytes served with CORS headers — which the provider's
+// CDN doesn't send and the proxy does. Hence the proxy (not a direct fetch).
 function loadCrest(url: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -13,10 +17,6 @@ function loadCrest(url: string) {
     image.onerror = () => reject(new Error('Could not load team crest.'));
     image.src = footballCrestProxyUrl(url);
   });
-}
-
-function teamLabel(team: FootballTeamLink) {
-  return team.shortName || team.name;
 }
 
 function teamInitials(team: FootballTeamLink) {
@@ -92,14 +92,6 @@ export async function createFootballMatchCover(match: FootballMatchLink) {
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillText('VS', WIDTH / 2, HEIGHT / 2 + 1);
-
-  context.fillStyle = '#192538';
-  context.font = '800 28px Inter, sans-serif';
-  context.fillText(teamLabel(match.homeTeam), 250, 454, 340);
-  context.fillText(teamLabel(match.awayTeam), 710, 454, 340);
-  context.fillStyle = 'rgba(25,37,56,.55)';
-  context.font = '700 17px Inter, sans-serif';
-  context.fillText(match.competitionName, WIDTH / 2, 505, 620);
 
   for (const quality of [0.82, 0.72, 0.62, 0.52]) {
     const dataUrl = canvas.toDataURL('image/jpeg', quality);

@@ -450,13 +450,32 @@ function withinRateLimit(request) {
   return current.count <= requestLimit;
 }
 
+// Production frontends are always allowed, even if ALLOWED_ORIGINS is misconfigured
+// on the host — this is what was returning 403 on https://calledit.qzz.io.
+const ALWAYS_ALLOWED_ORIGINS = [
+  'https://calledit.qzz.io',
+  'https://kateonbxsh.github.io',
+];
+
+function originAllowed(origin) {
+  if (ALWAYS_ALLOWED_ORIGINS.includes(origin)) return true;
+  // Any localhost / 127.0.0.1 port for local dev.
+  if (/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) return true;
+  return allowedOrigins.some((allowed) => {
+    if (allowed === origin) return true;
+    // Support "*.domain.tld" wildcard entries in ALLOWED_ORIGINS.
+    if (allowed.startsWith('*.')) {
+      try { return new URL(origin).hostname.endsWith(allowed.slice(1)); } catch { return false; }
+    }
+    return false;
+  });
+}
+
 function corsOrigin(request) {
   const origin = String(request.headers.origin || '').replace(/\/$/, '');
   if (allowedOrigins.includes('*')) return '*';
-  if (!origin) return allowedOrigins[0] || '*';
-  const localDevEnabled = allowedOrigins.some((allowed) => /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(allowed));
-  if (localDevEnabled && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) return origin;
-  return allowedOrigins.includes(origin) ? origin : '';
+  if (!origin) return allowedOrigins[0] || ALWAYS_ALLOWED_ORIGINS[0];
+  return originAllowed(origin) ? origin : '';
 }
 
 function sendJson(response, status, body, origin, cacheControl = 'no-store') {

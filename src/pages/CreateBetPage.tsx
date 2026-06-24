@@ -4,10 +4,11 @@ import { PageHeader } from '../components/PageHeader';
 import { FootballMatchPicker } from '../components/FootballMatchPicker';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
-import { createBet } from '../services/betService';
+import { createBet, listBetCategories } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
 import type { BetOption, BetType, BetVisibility, FootballMatchLink, FriendGroup } from '../types';
 import { betTypeOptions } from '../utils/betTypes';
+import { categoryKey, cleanCategory, type CategoryGroup } from '../utils/categories';
 import { createFootballMatchCover } from '../lib/footballCover';
 import { downscaleBetImage } from '../utils/image';
 
@@ -43,6 +44,7 @@ export function CreateBetPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
+  const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [deadline, setDeadline] = useState('');
   const [visibility, setVisibility] = useState<BetVisibility>('public');
   const [invited, setInvited] = useState<string[]>([]);
@@ -72,6 +74,20 @@ export function CreateBetPage() {
       listMyFriendGroups(profile).then(setGroups).catch(() => {});
     }
   }, [profile]);
+
+  useEffect(() => {
+    listBetCategories().then(setCategoryGroups).catch(() => {});
+  }, []);
+
+  // Existing categories to suggest: match what's typed, hide an exact match, and
+  // keep the most-used ones. Grouping already collapsed close spellings.
+  const categorySuggestions = useMemo(() => {
+    const typed = cleanCategory(category);
+    const typedKey = categoryKey(typed);
+    return categoryGroups
+      .filter((group) => group.key !== typedKey && (!typed || group.label.toLowerCase().includes(typed.toLowerCase())))
+      .slice(0, 8);
+  }, [categoryGroups, category]);
 
   const groupUsernames = useMemo(() => {
     const group = groups.find((g) => g.id === selectedGroupId);
@@ -241,7 +257,8 @@ export function CreateBetPage() {
       away: estimate.away * 100,
     } : { home: 100 / 3, draw: 100 / 3, away: 100 / 3 });
     setTitle(`Who will win: ${home} vs ${away}?`);
-    setCategory('Football');
+    // The competition is the category (e.g. "Premier League", "FIFA World Cup").
+    setCategory(cleanCategory(match.competitionName || 'Football'));
     setDescription([
       match.competitionName,
       match.matchday ? `Matchday ${match.matchday}` : '',
@@ -318,6 +335,21 @@ export function CreateBetPage() {
               Category
               <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Sports, travel, jokes…" />
               <span className="mt-1 block text-xs text-ink/50">Used for scanning the feed</span>
+              {categorySuggestions.length ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {categorySuggestions.map((group) => (
+                    <button
+                      key={group.key}
+                      type="button"
+                      onClick={() => setCategory(group.label)}
+                      className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-xs font-semibold text-ink/60 transition hover:border-mint hover:text-mint"
+                    >
+                      {group.label}
+                      <span className="text-ink/30">{group.count}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </label>
             <label className="block text-sm font-medium">
               Deadline

@@ -12,6 +12,7 @@ import { autoBetDeadline, sampleAutoBetIdeas, type AutoBetAccent, type AutoBetId
 import { createBet, getBetsByIds, listFeedBets, listMyPredictions, lockExpiredBet, placePrediction } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
 import type { Bet, FriendGroup, Prediction } from '../types';
+import { categoryKey, groupCategories, WORLD_CUP_KEY, WORLD_CUP_LABEL, worldCupIsTrending } from '../utils/categories';
 
 type FeedTab = 'all' | 'private' | string;
 type AutoAudience = 'public' | 'manual' | string;
@@ -43,6 +44,7 @@ export function FeedPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [groups, setGroups] = useState<FriendGroup[]>([]);
   const [activeTab, setActiveTab] = useState<FeedTab>('all');
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -120,7 +122,17 @@ export function FeedPage() {
     return bet.groupId === activeTab;
   });
 
-  const visibleBets = tabFilteredBets.filter((bet) => {
+  // Categories across all loaded bets (not the active tab), so picking a group
+  // never makes the category chips disappear.
+  const categoryGroups = groupCategories(bets.map((bet) => bet.category).filter(Boolean) as string[]);
+  const hasWorldCup = categoryGroups.some((group) => group.key === WORLD_CUP_KEY);
+  const otherCategories = categoryGroups.filter((group) => group.key !== WORLD_CUP_KEY);
+
+  const categoryFilteredBets = activeCategory
+    ? tabFilteredBets.filter((bet) => categoryKey(bet.category ?? '') === activeCategory)
+    : tabFilteredBets;
+
+  const visibleBets = categoryFilteredBets.filter((bet) => {
     const normalized = search.trim().toLowerCase();
     if (!normalized) return true;
     return [bet.title, bet.description, bet.category, bet.creatorUsername]
@@ -133,12 +145,6 @@ export function FeedPage() {
   const visibleAutoIdeas = autoIdeas.filter((idea) => (
     !normalizedAutoSearch || [idea.title, idea.description, idea.category, idea.type].join(' ').toLowerCase().includes(normalizedAutoSearch)
   ));
-
-  const tabs: { id: string; label: string; group?: FriendGroup }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'private', label: 'Private' },
-    ...groups.map((group) => ({ id: group.id, label: group.name, group })),
-  ];
 
   function openAutoIdea(idea: AutoBetIdea) {
     setShowAutoIdeas(true);
@@ -261,17 +267,58 @@ export function FeedPage() {
       />
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-        {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full py-1.5 text-sm font-semibold transition ${tab.group?.photoURL ? 'pl-1.5 pr-3.5' : 'px-4'} ${
-                activeTab === tab.id ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
-              }`}
-            >
-              {tab.group?.photoURL ? <img src={tab.group.photoURL} alt="" className="h-5 w-5 rounded-full object-cover" /> : null}
-              {tab.label}
-            </button>
+        {/* All · categories · Private · groups — one row, one style */}
+        <button
+          onClick={() => { setActiveTab('all'); setActiveCategory(null); }}
+          className={`inline-flex shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+            activeTab === 'all' && activeCategory === null ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
+          }`}
+        >
+          All
+        </button>
+        {(hasWorldCup || worldCupIsTrending()) ? (
+          <button
+            onClick={() => setActiveCategory(activeCategory === WORLD_CUP_KEY ? null : WORLD_CUP_KEY)}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-bold transition ${
+              activeCategory === WORLD_CUP_KEY
+                ? 'border border-citrus bg-citrus text-white shadow-soft'
+                : 'border border-citrus/40 bg-citrus/10 text-citrus'
+            }`}
+          >
+            <img src={`${import.meta.env.BASE_URL}icons/world-cup.svg`} alt="" className="h-[18px] w-[18px] shrink-0 object-contain" />
+            {WORLD_CUP_LABEL}
+          </button>
+        ) : null}
+        {otherCategories.map((group) => (
+          <button
+            key={group.key}
+            onClick={() => setActiveCategory(activeCategory === group.key ? null : group.key)}
+            className={`inline-flex shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+              activeCategory === group.key ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
+            }`}
+          >
+            {group.label}
+          </button>
+        ))}
+        <button
+          onClick={() => setActiveTab('private')}
+          className={`inline-flex shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+            activeTab === 'private' ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
+          }`}
+        >
+          Private
+        </button>
+        {groups.map((group) => (
+          <button
+            key={group.id}
+            onClick={() => setActiveTab(group.id)}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full py-1.5 text-sm font-semibold transition ${group.photoURL ? 'pl-1.5 pr-3.5' : 'px-4'} ${
+              activeTab === group.id ? 'bg-ink text-white' : 'bg-white text-ink/70 border border-line'
+            }`}
+          >
+            {group.photoURL ? <img src={group.photoURL} alt="" className="h-5 w-5 rounded-full object-cover" /> : null}
+            {group.name}
+          </button>
         ))}
       </div>
 

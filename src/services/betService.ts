@@ -55,6 +55,7 @@ import {
   resolveClosestNumber,
 } from '../utils/closestGuess';
 import { isClosestType } from '../utils/betTypes';
+import { groupCategories } from '../utils/categories';
 import { buildStatsAfterResolution, getFreshLeaderboard } from './userService';
 import { setBalanceInTransaction } from './balanceService';
 import { footballMatchIsFinished, getFootballLiveMatchOnce } from './footballService';
@@ -281,6 +282,19 @@ export async function listFeedBets(scope: 'public' | 'private', user: UserProfil
       ...createdSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Bet),
       ...invitedSnap.docs.map((item) => ({ id: item.id, ...item.data() }) as Bet),
     ]).slice(0, 80);
+  });
+}
+
+// Distinct categories across recent public bets, grouped so close spellings
+// (and any "World Cup" variants) collapse together. Used for create-bet
+// suggestions and the feed category browser.
+export async function listBetCategories() {
+  return readThroughCache('bets:categories', 60_000, async () => {
+    const snap = await getDocs(query(collection(db, 'bets'), where('visibility', '==', 'public'), limit(120)));
+    const names = snap.docs
+      .map((item) => (item.data() as Bet).category)
+      .filter((value): value is string => Boolean(value && value.trim()));
+    return groupCategories(names);
   });
 }
 

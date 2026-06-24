@@ -10,6 +10,7 @@ import { betTypeMeta, betTypeLabel, isClosestType } from '../utils/betTypes';
 import { closestDateGuessLabel, closestHourGuessLabel } from '../utils/closestGuess';
 import { percent, relativeTime } from '../utils/format';
 import { displayChanceSummary } from '../utils/probability';
+import { categoryKey, cleanCategory, WORLD_CUP_KEY, WORLD_CUP_LABEL } from '../utils/categories';
 import { applyLiveFootballChances } from '../utils/footballChances';
 
 const optionColors = [
@@ -82,7 +83,7 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
 
           {/* Title + meta */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-xs text-ink/40 mb-0.5">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink/40 mb-0.5">
               <span className="font-semibold">{betTypeLabel(bet.type)}</span>
               {bet.footballMatch ? <><span>-</span><span>ends at full time</span></> : bet.deadline ? <><span>-</span><span>{relativeTime(bet.deadline)}</span></> : null}
               {bet.visibility === 'private' ? <Lock size={10} /> : null}
@@ -90,7 +91,19 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
             <p className="line-clamp-2 text-sm font-black leading-snug sm:text-base">{bet.title}</p>
           </div>
 
-          {/* Status badge */}
+          {/* Category (colored text) + status badge */}
+          {bet.category ? (
+            <span className={`shrink-0 self-start inline-flex items-center gap-1 py-0.5 text-xs font-bold ${
+              categoryKey(bet.category) === WORLD_CUP_KEY ? 'text-citrus' : 'text-ink/40'
+            }`}>
+              {categoryKey(bet.category) === WORLD_CUP_KEY ? (
+                <>
+                  <img src={`${import.meta.env.BASE_URL}icons/world-cup.svg`} alt="" className="h-3.5 w-3.5 object-contain" />
+                  {WORLD_CUP_LABEL}
+                </>
+              ) : cleanCategory(bet.category)}
+            </span>
+          ) : null}
           <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-black ${
             isOpen ? 'bg-mint/12 text-mint' : isAwaitingResolve ? 'bg-citrus/12 text-citrus' : 'bg-line text-ink/45'
           }`}>
