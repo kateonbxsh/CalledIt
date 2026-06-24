@@ -162,6 +162,25 @@ export interface FootballMatchLink {
   competitionEmblem: string | null;
   homeTeam: FootballTeamLink;
   awayTeam: FootballTeamLink;
+  estimatedChances?: {
+    home: number;
+    draw: number;
+    away: number;
+  } | null;
+  chanceSource?: 'competition_standings' | null;
+}
+
+export interface FootballLiveMatch extends FootballMatchLink {
+  minute: number | null;
+  score: {
+    home: number | null;
+    away: number | null;
+    halfTimeHome: number | null;
+    halfTimeAway: number | null;
+  };
+  lastUpdated: string | null;
+  endedAt: string | null;
+  expectedEnd: string;
 }
 
 export interface ChanceOptionSummary {

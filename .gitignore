@@ -49,6 +49,8 @@ public/firebase-config.json
 # Notification worker secrets
 notification-worker/.env
 notification-worker/service-account*.json
+football-worker/.env
+football-worker/service-account*.json
 
 # Vite
 .vite

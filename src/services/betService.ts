@@ -44,6 +44,7 @@ import {
   projectChanceSummaryOverTime,
 } from '../utils/probability';
 import { applyRatingDelta, calculateRatingDelta } from '../utils/rating';
+import { applyLiveFootballChances } from '../utils/footballChances';
 import { rankForRating } from '../utils/ranks';
 import { calculateSportsScoreBonus } from '../utils/sportsBonus';
 import type { ScoreBonusResult } from '../utils/sportsBonus';
@@ -56,6 +57,7 @@ import {
 import { isClosestType } from '../utils/betTypes';
 import { buildStatsAfterResolution, getFreshLeaderboard } from './userService';
 import { setBalanceInTransaction } from './balanceService';
+import { footballMatchIsFinished, getFootballLiveMatchOnce } from './footballService';
 import {
   ALL_ENABLED_TARGET_UID,
   createNotification,
@@ -415,6 +417,10 @@ export async function updateBetComment(commentId: string, body: string) {
 }
 
 export async function placePrediction(input: PredictionInput) {
+  const liveFootballMatch = input.bet.footballMatch
+    ? await getFootballLiveMatchOnce(input.bet.footballMatch.matchId).catch(() => null)
+    : null;
+  if (footballMatchIsFinished(liveFootballMatch)) throw new Error('This match has finished.');
   const predictionRef = doc(db, 'predictions', `${input.bet.id}_${input.user.uid}`);
   const betRef = doc(db, 'bets', input.bet.id);
   const userRef = doc(db, 'users', input.user.uid);
@@ -563,7 +569,7 @@ export async function placePrediction(input: PredictionInput) {
       }).find((guess) => guess.value === value)?.chance ?? 1 / predictionsForChance.length;
     };
     const chanceForOptionIds = (ids: string[]) => {
-      const displayed = displayChanceSummary({
+      const displayed = applyLiveFootballChances(bet, displayChanceSummary({
         options: nextOptions,
         summary: bet.chanceSummary,
         initialSummary: bet.initialChanceSummary,
@@ -573,7 +579,7 @@ export async function placePrediction(input: PredictionInput) {
         targetDateMs,
         nowMs: nowMsForChance,
         status: bet.status,
-      });
+      }), liveFootballMatch);
       return ids.reduce((sum, id) => sum + chanceForOption(displayed, id), 0)
         || 1 / Math.max(1, nextOptions.length);
     };

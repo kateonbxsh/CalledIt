@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { FootballMatchPicker } from '../components/FootballMatchPicker';
 import { UsernamePicker } from '../components/UsernamePicker';
@@ -8,6 +8,7 @@ import { createBet } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
 import type { BetOption, BetType, BetVisibility, FootballMatchLink, FriendGroup } from '../types';
 import { betTypeOptions } from '../utils/betTypes';
+import { createFootballMatchCover } from '../lib/footballCover';
 import { downscaleBetImage } from '../utils/image';
 
 function optionId(label: string, index: number) {
@@ -35,7 +36,10 @@ function datetimeLocalValue(date: Date) {
 export function CreateBetPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
-  const [type, setType] = useState<BetType>('binary');
+  const [searchParams] = useSearchParams();
+  const [type, setType] = useState<BetType>(() => (
+    searchParams.get('type') === 'sports' ? 'sports' : 'binary'
+  ));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -61,6 +65,7 @@ export function CreateBetPage() {
   const [busy, setBusy] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const [initialChances, setInitialChances] = useState<Record<string, number>>({});
+  const footballImageRequestRef = useRef(0);
 
   useEffect(() => {
     if (profile) {
@@ -163,13 +168,20 @@ export function CreateBetPage() {
         throw new Error('Initial chances need a positive total.');
       }
       const maskedSet = new Set(masked.map((username) => username.trim().toLowerCase()));
+      const effectiveDeadline = footballMatch
+        ? new Date(new Date(footballMatch.kickoff).getTime() + 4 * 60 * 60 * 1000)
+        : type === 'closestHour'
+          ? endOfLocalDay(targetDate)
+          : deadline
+            ? new Date(deadline)
+            : undefined;
       await createBet(
         {
           type,
           title,
           description: description || undefined,
           category,
-          deadline: type === 'closestHour' ? endOfLocalDay(targetDate) : deadline ? new Date(deadline) : undefined,
+          deadline: effectiveDeadline,
           targetDate: (type === 'date' || type === 'closestHour') && targetDate
             ? localDateFromInput(targetDate) ?? undefined
             : undefined,
@@ -201,6 +213,7 @@ export function CreateBetPage() {
 
   async function onImageChange(file?: File) {
     if (!file) return;
+    footballImageRequestRef.current += 1;
     setImageBusy(true);
     setError('');
     try {
@@ -209,6 +222,42 @@ export function CreateBetPage() {
       setError(err instanceof Error ? err.message : 'Could not process image.');
     } finally {
       setImageBusy(false);
+    }
+  }
+
+  async function selectFootballMatch(match: FootballMatchLink) {
+    const imageRequest = ++footballImageRequestRef.current;
+    setError('');
+    const home = match.homeTeam.shortName || match.homeTeam.name;
+    const away = match.awayTeam.shortName || match.awayTeam.name;
+    setFootballMatch(match);
+    setHomeTeam(home);
+    setAwayTeam(away);
+    setAllowDraw(true);
+    const estimate = match.estimatedChances;
+    setInitialChances(estimate ? {
+      home: estimate.home * 100,
+      draw: estimate.draw * 100,
+      away: estimate.away * 100,
+    } : { home: 100 / 3, draw: 100 / 3, away: 100 / 3 });
+    setTitle(`Who will win: ${home} vs ${away}?`);
+    setCategory('Football');
+    setDescription([
+      match.competitionName,
+      match.matchday ? `Matchday ${match.matchday}` : '',
+    ].filter(Boolean).join(' · '));
+    // The worker locks linked bets as soon as the provider reports full time.
+    setDeadline(datetimeLocalValue(new Date(new Date(match.kickoff).getTime() + 4 * 60 * 60 * 1000)));
+    setImageBusy(true);
+    try {
+      const cover = await createFootballMatchCover(match);
+      if (footballImageRequestRef.current === imageRequest) setImageUrl(cover);
+    } catch (err) {
+      if (footballImageRequestRef.current === imageRequest) {
+        setError(err instanceof Error ? err.message : 'Could not create the match image.');
+      }
+    } finally {
+      if (footballImageRequestRef.current === imageRequest) setImageBusy(false);
     }
   }
 
@@ -234,6 +283,12 @@ export function CreateBetPage() {
               </button>
             ))}
           </div>
+          {type === 'sports' ? (
+            <FootballMatchPicker
+              selectedMatchId={footballMatch?.matchId}
+              onSelect={selectFootballMatch}
+            />
+          ) : null}
           <label className="block text-sm font-medium">
             Title
             <input className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2" value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -335,24 +390,6 @@ export function CreateBetPage() {
           ) : null}
           {type === 'sports' ? (
             <div className="space-y-3">
-              <FootballMatchPicker
-                selectedMatchId={footballMatch?.matchId}
-                onSelect={(match) => {
-                  const home = match.homeTeam.shortName || match.homeTeam.name;
-                  const away = match.awayTeam.shortName || match.awayTeam.name;
-                  setFootballMatch(match);
-                  setHomeTeam(home);
-                  setAwayTeam(away);
-                  setAllowDraw(true);
-                  setTitle(`Who will win: ${home} vs ${away}?`);
-                  setCategory((current) => current || 'Football');
-                  setDescription((current) => current || [
-                    match.competitionName,
-                    match.matchday ? `Matchday ${match.matchday}` : '',
-                  ].filter(Boolean).join(' · '));
-                  setDeadline(datetimeLocalValue(new Date(match.kickoff)));
-                }}
-              />
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm font-medium">
                   Team/Player 1
@@ -427,7 +464,11 @@ export function CreateBetPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-black">Initial chances</p>
-                  <p className="mt-0.5 text-xs text-ink/50">These are the starting odds. Crowd predictions gradually take over.</p>
+                  <p className="mt-0.5 text-xs text-ink/50">
+                    {type === 'sports' && footballMatch?.chanceSource === 'competition_standings'
+                      ? 'Estimated from competition standings. Adjust them if needed.'
+                      : 'These are the starting odds. Crowd predictions gradually take over.'}
+                  </p>
                 </div>
                 <button type="button" onClick={resetInitialChances} className="shrink-0 rounded-md bg-white px-3 py-1.5 text-xs font-bold text-ink/60">
                   Equal

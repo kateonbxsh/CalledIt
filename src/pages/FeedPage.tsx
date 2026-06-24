@@ -242,12 +242,21 @@ export function FeedPage() {
       <PageHeader
         title="Bets"
         action={
-          <Link
-            to="/create"
-            className="btn-special inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold"
-          >
-            <Plus size={17} /> Create Bet
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/create?type=sports"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-sky/25 bg-sky/10 px-3 py-2 text-sm font-bold text-sky transition hover:bg-sky/15"
+            >
+              <img src={`${import.meta.env.BASE_URL}icons/football.svg`} alt="" className="h-[18px] w-[18px] object-contain" />
+              Football bet
+            </Link>
+            <Link
+              to="/create"
+              className="btn-special inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold"
+            >
+              <Plus size={17} /> Create Bet
+            </Link>
+          </div>
         }
       />
 

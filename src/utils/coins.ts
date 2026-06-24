@@ -69,29 +69,32 @@ export function calculatePredictionChangeFee(params: {
   betCreatedAtMs?: number;
   deadlineMs?: number | null;
   nowMs?: number;
-  // The current chance of the prediction the user is leaving. The whole point of
-  // the heavy fee: stop people from cheaply bailing out once their pick is losing.
+  // Current displayed chance of the prediction the user is leaving.
   currentChanceOfExistingPick?: number;
 }) {
   const nowMs = params.nowMs ?? Date.now();
-  const movedStake = Math.abs(params.nextStake - params.previousStake);
-  const totalWindow = params.deadlineMs && params.betCreatedAtMs
-    ? Math.max(1, params.deadlineMs - params.betCreatedAtMs)
-    : 7 * 24 * 60 * 60 * 1000;
-  const elapsed = params.betCreatedAtMs ? Math.max(0, nowMs - params.betCreatedAtMs) : totalWindow * 0.25;
-  const latePressure = clamp(elapsed / totalWindow, 0, 1);
-  const revisionPressure = Math.min(3, params.revisionCount) * 2;
+  const hasDeadlineWindow = Boolean(
+    params.deadlineMs
+    && params.betCreatedAtMs
+    && params.deadlineMs > params.betCreatedAtMs,
+  );
+  const latePressure = hasDeadlineWindow
+    ? clamp(
+        (nowMs - (params.betCreatedAtMs as number))
+          / ((params.deadlineMs as number) - (params.betCreatedAtMs as number)),
+        0,
+        1,
+      )
+    : 0;
+  const oldChance = clamp(params.currentChanceOfExistingPick ?? 0.5, 0, 1);
 
-  // Bailout penalty: the lower the current pick's chance, the more it costs to
-  // abandon it — and lateness amplifies it. Above ~35% chance there is no penalty.
-  const oldChance = clamp(params.currentChanceOfExistingPick ?? 1, 0.01, 1);
-  const LOW_CHANCE = 0.35;
-  const lowness = clamp((LOW_CHANCE - oldChance) / LOW_CHANCE, 0, 1);
-  const bailoutFee = Math.round(params.previousStake * lowness * (0.5 + 1.5 * latePressure));
-
-  return Math.max(
-    1,
-    Math.round(3 + movedStake * (0.02 + latePressure * 0.08) + revisionPressure + bailoutFee),
+  // Early edits cost the old stake weighted by how unlikely that pick currently
+  // is. As the deadline approaches, every edit converges to the full old stake.
+  const deadlineCurve = Math.pow(latePressure, 1.5);
+  const feeShare = (1 - oldChance) + oldChance * deadlineCurve;
+  return Math.min(
+    Math.max(0, Math.round(params.previousStake)),
+    Math.max(1, Math.round(params.previousStake * feeShare)),
   );
 }
 

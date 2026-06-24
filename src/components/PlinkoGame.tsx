@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { CoinAmount } from './CoinAmount';
 import { StakeInput } from './StakeInput';
-import { calculateMinigameLossDelta, calculateMinigameWinDelta, minigameRewardMultiplier, type MinigameAchievement } from '../services/rewardService';
+import { calculateMinigameLossDelta, calculateMinigameWinDelta, type MinigameAchievement } from '../services/rewardService';
 
 // 16 peg rows -> 17 buckets. Symmetric multipliers: a wide losing centre, modest
 // wins, rare big edges. The whole simulation runs in a FIXED virtual board and is
@@ -11,7 +11,7 @@ import { calculateMinigameLossDelta, calculateMinigameWinDelta, minigameRewardMu
 const ROWS = 16;
 const BUCKETS = ROWS + 1;
 const FIRST_ROW = 3; // drop the narrow top rows so the chip free-falls first
-const BASE_MULTIPLIERS = [16, 8, 4, 2, 1.5, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 1, 1.5, 2, 4, 8, 16];
+const BASE_MULTIPLIERS = [14, 7, 3, 1.6, 1, 0.6, 0.4, 0.3, 0.2, 0.3, 0.4, 0.6, 1, 1.6, 3, 7, 14];
 
 // Wider-than-tall virtual board so it fills the width on mobile and the multiplier
 // docks come out wide & short instead of long & thin.
@@ -48,7 +48,9 @@ type PlinkoAchievement = Extract<MinigameAchievement, { game: 'plinko' }>;
 function bucketColor(m: number) { return m >= 4 ? '#7b5aa6' : m >= 2 ? '#3b75af' : m >= 1 ? '#2f7d63' : 'rgba(255,255,255,0.10)'; }
 
 function plinkoMultiplier(base: number, stake: number, balanceBefore: number) {
-  return Math.max(0, Math.round(minigameRewardMultiplier(base, stake, balanceBefore) * 2) / 2);
+  void stake;
+  void balanceBefore;
+  return base;
 }
 
 function plinkoRiskLevel(m: number) {

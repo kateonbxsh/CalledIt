@@ -2,11 +2,15 @@ import { CheckCircle2, Lock, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CoinAmount } from './CoinAmount';
 import { FootballMatchCrests } from './FootballMatchCrests';
+import { FootballLiveScore } from './FootballLiveScore';
+import { useFootballLiveMatch } from '../hooks/useFootballLiveMatch';
+import { footballMatchIsFinished } from '../services/footballService';
 import type { Bet, Prediction } from '../types';
 import { betTypeMeta, betTypeLabel, isClosestType } from '../utils/betTypes';
 import { closestDateGuessLabel, closestHourGuessLabel } from '../utils/closestGuess';
 import { percent, relativeTime } from '../utils/format';
 import { displayChanceSummary } from '../utils/probability';
+import { applyLiveFootballChances } from '../utils/footballChances';
 
 const optionColors = [
   { text: 'text-mint',   tile: 'bg-mint/10'   },
@@ -22,17 +26,20 @@ function resolvedWinnerIds(bet: Bet) {
     : [bet.resolution?.winningOptionId]).filter((id): id is string => Boolean(id));
 }
 
-function statusLabel(bet: Bet) {
+function statusLabel(bet: Bet, matchFinished: boolean) {
+  if (matchFinished && bet.status === 'open') return 'Awaiting resolve';
   if (bet.status === 'locked') return 'Awaiting resolve';
   return bet.status === 'open' ? 'Open' : 'Resolved';
 }
 
 export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Bet; prediction?: Prediction; groupName?: string; groupPhotoURL?: string }) {
-  const isOpen = bet.status === 'open';
-  const isAwaitingResolve = bet.status === 'locked';
+  const liveMatch = useFootballLiveMatch(bet.footballMatch?.matchId);
+  const matchFinished = footballMatchIsFinished(liveMatch);
+  const isOpen = bet.status === 'open' && !matchFinished;
+  const isAwaitingResolve = bet.status === 'locked' || (bet.status === 'open' && matchFinished);
   const meta = betTypeMeta[bet.type];
   const TypeIcon = meta.icon;
-  const projectedSummary = displayChanceSummary({
+  const projectedSummary = applyLiveFootballChances(bet, displayChanceSummary({
     options: bet.options,
     summary: bet.chanceSummary,
     initialSummary: bet.initialChanceSummary,
@@ -41,7 +48,7 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
     deadlineMs: bet.deadline?.toMillis?.() ?? null,
     targetDateMs: bet.targetDate?.toMillis?.() ?? null,
     status: bet.status,
-  });
+  }), liveMatch);
 
   const sortedChances = [...projectedSummary].sort((a, b) => b.chance - a.chance);
   const displayOptions = sortedChances.slice(0, 3);
@@ -77,7 +84,7 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-xs text-ink/40 mb-0.5">
               <span className="font-semibold">{betTypeLabel(bet.type)}</span>
-              {bet.deadline ? <><span>-</span><span>{relativeTime(bet.deadline)}</span></> : null}
+              {bet.footballMatch ? <><span>-</span><span>ends at full time</span></> : bet.deadline ? <><span>-</span><span>{relativeTime(bet.deadline)}</span></> : null}
               {bet.visibility === 'private' ? <Lock size={10} /> : null}
             </div>
             <p className="line-clamp-2 text-sm font-black leading-snug sm:text-base">{bet.title}</p>
@@ -85,11 +92,17 @@ export function BetCard({ bet, prediction, groupName, groupPhotoURL }: { bet: Be
 
           {/* Status badge */}
           <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-black ${
-            isOpen ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-line text-ink/45'
+            isOpen ? 'bg-mint/12 text-mint' : isAwaitingResolve ? 'bg-citrus/12 text-citrus' : 'bg-line text-ink/45'
           }`}>
-            {statusLabel(bet)}
+            {statusLabel(bet, matchFinished)}
           </span>
         </div>
+
+        {bet.footballMatch && liveMatch ? (
+          <div className="mt-3">
+            <FootballLiveScore match={bet.footballMatch} live={liveMatch} compact />
+          </div>
+        ) : null}
 
         {/* Options / chances */}
         <div className="mt-3">

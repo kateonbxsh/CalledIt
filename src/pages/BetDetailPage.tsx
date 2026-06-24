@@ -1,17 +1,19 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { Activity, BadgeEuro, Check, ChevronDown, ChevronLeft, Pencil, Reply, RotateCcw, Trash2, Users, X } from 'lucide-react';
+import { Activity, Check, ChevronDown, ChevronLeft, Pencil, Reply, RotateCcw, Trash2, Users, X } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { ChanceChart } from '../components/ChanceChart';
 import { ClosestDistributionChart } from '../components/ClosestDistributionChart';
 import { CoinAmount } from '../components/CoinAmount';
 import { EmptyState } from '../components/EmptyState';
 import { FootballMatchCrests } from '../components/FootballMatchCrests';
+import { FootballLiveScore } from '../components/FootballLiveScore';
 import { ZoomableImage } from '../components/Lightbox';
 import { StakeInput } from '../components/StakeInput';
 import { UsernamePicker } from '../components/UsernamePicker';
 import { useAuth } from '../contexts/AuthContext';
+import { useFootballLiveMatch } from '../hooks/useFootballLiveMatch';
 import { db } from '../lib/firebase';
 import {
   addBetComment,
@@ -30,6 +32,7 @@ import {
   updateBetMetadata,
 } from '../services/betService';
 import { listMyFriendGroups } from '../services/friendGroupService';
+import { footballMatchIsFinished } from '../services/footballService';
 import type { Bet, BetComment, BetResolution, BetVisibility, ChanceSnapshot, CommentReplyPreview, FriendGroup, Prediction } from '../types';
 import { isClosestType } from '../utils/betTypes';
 import { calculatePredictionChangeFee } from '../utils/coins';
@@ -45,6 +48,7 @@ import { buildCommentThreads } from '../utils/commentThreads';
 import { percent, relativeTime } from '../utils/format';
 import { downscaleBetImage } from '../utils/image';
 import { chanceForOption, displayChanceSummary } from '../utils/probability';
+import { applyLiveFootballChances } from '../utils/footballChances';
 
 function datetimeLocalValue(date?: Date | null) {
   if (!date) return '';
@@ -169,6 +173,7 @@ export function BetDetailPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [bet, setBet] = useState<Bet | null>(null);
+  const liveMatch = useFootballLiveMatch(bet?.footballMatch?.matchId);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [snapshots, setSnapshots] = useState<ChanceSnapshot[]>([]);
   const [snapshotOpen, setSnapshotOpen] = useState(false);
@@ -311,7 +316,17 @@ export function BetDetailPage() {
   const projectedChangeFee = useMemo(() => {
     if (!bet || !myPrediction) return 0;
     const oldIds = myPrediction.optionIds?.length ? myPrediction.optionIds : [myPrediction.optionId];
-    const oldChance = oldIds.reduce((sum, id) => sum + chanceForOption(bet.chanceSummary, id), 0);
+    const currentSummary = applyLiveFootballChances(bet, displayChanceSummary({
+      options: bet.options,
+      summary: bet.chanceSummary,
+      initialSummary: bet.initialChanceSummary,
+      type: bet.type,
+      createdAtMs: bet.createdAt?.toMillis?.() ?? Date.now(),
+      deadlineMs: bet.deadline?.toMillis?.() ?? null,
+      targetDateMs: bet.targetDate?.toMillis?.() ?? null,
+      status: bet.status,
+    }), liveMatch);
+    const oldChance = oldIds.reduce((sum, id) => sum + chanceForOption(currentSummary, id), 0);
     return calculatePredictionChangeFee({
       previousStake: myPrediction.stake,
       nextStake: stake,
@@ -319,14 +334,17 @@ export function BetDetailPage() {
       betCreatedAtMs: bet.createdAt?.toMillis?.(),
       deadlineMs: bet.deadline?.toMillis?.() ?? null,
       nowMs: Date.now(),
-      currentChanceOfExistingPick: closest ? undefined : oldChance,
+      currentChanceOfExistingPick: closest
+        ? (myPrediction.displayedChanceAtBetTime ?? oldChance)
+        : oldChance,
     });
-  }, [bet, myPrediction, stake, closest]);
+  }, [bet, myPrediction, stake, closest, liveMatch]);
   const multiWinner = bet ? supportsMultipleWinners(bet) : false;
   const multiPrediction = bet ? supportsMultipleChoices(bet) : false;
-  const canPredict = bet?.status === 'open';
+  const matchFinished = footballMatchIsFinished(liveMatch);
+  const canPredict = bet?.status === 'open' && !matchFinished;
   const projectedChanceSummary = bet
-    ? displayChanceSummary({
+    ? applyLiveFootballChances(bet, displayChanceSummary({
         options: bet.options,
         summary: bet.chanceSummary,
         initialSummary: bet.initialChanceSummary,
@@ -335,7 +353,7 @@ export function BetDetailPage() {
         deadlineMs: bet.deadline?.toMillis?.() ?? null,
         targetDateMs: bet.targetDate?.toMillis?.() ?? null,
         status: bet.status,
-      })
+      }), liveMatch)
     : [];
   const canResolve = !!profile && !!bet;
   const selectedChance = bet && !closest
@@ -857,9 +875,9 @@ export function BetDetailPage() {
               </Link>
               <span className="rounded-full bg-field px-2.5 py-1 text-xs font-black text-ink/65">{bet.category || 'General'}</span>
               <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
-                bet.status === 'open' ? 'bg-mint/12 text-mint' : bet.status === 'locked' ? 'bg-citrus/12 text-citrus' : 'bg-coral/12 text-coral'
+                bet.status === 'open' && !matchFinished ? 'bg-mint/12 text-mint' : (bet.status === 'locked' || matchFinished) ? 'bg-citrus/12 text-citrus' : 'bg-coral/12 text-coral'
               }`}>
-                {betStatusLabel(bet)}
+                {matchFinished && bet.status === 'open' ? 'Awaiting resolve' : betStatusLabel(bet)}
               </span>
               {bet.groupId ? (
                 <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-field px-2.5 py-1 text-xs font-semibold text-ink/45">
@@ -867,7 +885,9 @@ export function BetDetailPage() {
                   {linkedGroup?.name ?? 'Group'}
                 </span>
               ) : null}
-              <span className="text-sm font-semibold text-ink/45">{bet.deadline ? `deadline ${relativeTime(bet.deadline)}` : 'no deadline'}</span>
+              <span className="text-sm font-semibold text-ink/45">
+                {bet.footballMatch ? 'deadline: full time' : bet.deadline ? `deadline ${relativeTime(bet.deadline)}` : 'no deadline'}
+              </span>
             </div>
           </div>
         </div>
@@ -894,6 +914,12 @@ export function BetDetailPage() {
           ) : null}
         </div>
       </header>
+
+      {bet.footballMatch && liveMatch ? (
+        <div className="mb-4 max-w-xl">
+          <FootballLiveScore match={bet.footballMatch} live={liveMatch} />
+        </div>
+      ) : null}
 
       {error ? <p className="mb-4 rounded-md bg-coral/10 p-3 text-sm text-coral">{error}</p> : null}
       {bet.visibility === 'private' && (!bet.groupId || (bet.maskedUsernames ?? []).length > 0) ? (
@@ -1151,10 +1177,6 @@ export function BetDetailPage() {
                       <CoinAmount amount={myPredictionEstimate.profit} className="text-xs" />
                     </div>
                     <div className="mt-1 flex items-center justify-between">
-                      <span>Total return</span>
-                      <CoinAmount amount={myPredictionEstimate.totalReturn} className="text-xs" />
-                    </div>
-                    <div className="mt-1 flex items-center justify-between">
                       <span>Skill reward</span>
                       <CoinAmount amount={myPredictionEstimate.skillReward} className="text-xs" />
                     </div>
@@ -1408,25 +1430,26 @@ export function BetDetailPage() {
                       <CoinAmount amount={pendingEstimate.profit} className="text-xs" />
                     </div>
                     <div className="mt-1 flex items-center justify-between text-ink/45">
-                      <span>Total return</span>
-                      <CoinAmount amount={pendingEstimate.totalReturn} className="text-xs" />
-                    </div>
-                    <div className="mt-1 flex items-center justify-between text-ink/45">
                       <span>Skill reward</span>
                       <CoinAmount amount={pendingEstimate.skillReward} className="text-xs" />
                     </div>
-                    {myPrediction ? (
-                      <div className="mt-1 flex items-center justify-between text-ink/45">
-                        <span>Update fee</span>
-                        <CoinAmount amount={projectedChangeFee} className="text-xs" />
-                      </div>
-                    ) : null}
                     <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
                       <span className="inline-flex items-center gap-1.5 text-base font-black text-ink">
-                        To win <BadgeEuro size={18} className="text-[#3f9473]" aria-hidden="true" />
+                        To win
+                        <img
+                          src={`${import.meta.env.BASE_URL}icons/money.png`}
+                          alt=""
+                          className="h-5 w-5 object-contain"
+                        />
                       </span>
                       <CoinAmount amount={pendingEstimate.totalReturn} tone="green" className="text-2xl font-black" />
                     </div>
+                    {myPrediction ? (
+                      <div className="mt-2 flex items-center justify-between text-coral">
+                        <span>Update fee</span>
+                        <CoinAmount amount={-projectedChangeFee} tone="red" className="text-xs" />
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 

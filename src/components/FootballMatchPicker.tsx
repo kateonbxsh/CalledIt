@@ -38,20 +38,15 @@ export function FootballMatchPicker({
 
   useEffect(() => {
     if (!footballAutocompleteConfigured()) return;
-    const controller = new AbortController();
     let active = true;
     setLoading(true);
-    listUpcomingFootballMatches(controller.signal)
+    listUpcomingFootballMatches()
       .then((items) => { if (active) setMatches(items); })
       .catch((reason) => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return;
         if (active) setError(reason instanceof Error ? reason.message : 'Could not load football matches.');
       })
       .finally(() => { if (active) setLoading(false); });
-    return () => {
-      active = false;
-      controller.abort();
-    };
+    return () => { active = false; };
   }, []);
 
   const visibleMatches = useMemo(() => {

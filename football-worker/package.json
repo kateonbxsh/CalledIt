@@ -11,7 +11,7 @@
     "pm2:logs": "pm2 logs called-it-football"
   },
   "dependencies": {
+    "firebase-admin": "^13.4.0",
     "pm2": "^5.4.3"
   }
 }
-
