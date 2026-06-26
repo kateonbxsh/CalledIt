@@ -6,8 +6,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { Bet, ChanceSnapshot } from '../types';
+import type { Bet, ChanceSnapshot, FootballLiveMatch } from '../types';
+import { footballMatchIsLive } from '../services/footballService';
 import { isClosestType } from '../utils/betTypes';
+import { applyLiveFootballChances } from '../utils/footballChances';
 import { asDate } from '../utils/format';
 import { displayChanceSummary } from '../utils/probability';
 
@@ -26,15 +28,46 @@ function compactDate(ms: number) {
   });
 }
 
-export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSnapshot[] }) {
+function LiveEndpointDot({
+  cx,
+  cy,
+  payload,
+  stroke,
+}: {
+  cx?: number;
+  cy?: number;
+  payload?: { isLiveEndpoint?: boolean };
+  stroke?: string;
+}) {
+  if (!payload?.isLiveEndpoint || cx === undefined || cy === undefined) return null;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={7} fill={stroke} opacity={0.18} className="animate-pulse" />
+      <circle cx={cx} cy={cy} r={3.5} fill={stroke} stroke="#fff" strokeWidth={1.5} />
+    </g>
+  );
+}
+
+export function ChanceChart({
+  bet,
+  snapshots,
+  liveMatch = null,
+}: {
+  bet: Bet;
+  snapshots: ChanceSnapshot[];
+  liveMatch?: FootballLiveMatch | null;
+}) {
   if (isClosestType(bet.type)) return null;
 
   const sortedSnapshots = [...snapshots].sort((left, right) => asDate(left.createdAt).getTime() - asDate(right.createdAt).getTime());
   const createdAtMs = asDate(bet.createdAt).getTime();
   const deadlineMs = bet.deadline ? asDate(bet.deadline).getTime() : null;
   const targetDateMs = bet.targetDate ? asDate(bet.targetDate).getTime() : null;
+  const isLive = footballMatchIsLive(liveMatch);
   const startMs = startOfDayMs(createdAtMs);
-  const naturalEnd = bet.status === 'resolved' && bet.resolvedAt
+  const naturalEnd = isLive
+    ? Date.now()
+    : bet.status === 'resolved' && bet.resolvedAt
     ? asDate(bet.resolvedAt).getTime()
     : Math.min(
         Date.now(),
@@ -46,13 +79,29 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
   // equals the option breakdown rendered on the page.
   const lastMs = Math.max(startMs + 1, naturalEnd);
   const neutral = bet.options.map((option) => ({ optionId: option.id, users: 0, coins: 0, chance: 1 / Math.max(1, bet.options.length) }));
+  const liveEndSummary = isLive && liveMatch
+    ? applyLiveFootballChances(bet, displayChanceSummary({
+        options: bet.options,
+        summary: bet.chanceSummary,
+        initialSummary: bet.initialChanceSummary,
+        type: bet.type,
+        createdAtMs,
+        deadlineMs,
+        targetDateMs,
+        nowMs: lastMs,
+        status: bet.status,
+      }), liveMatch)
+    : null;
 
   // Anchors the curve passes through: every snapshot (including manual ones), plus a
   // final anchor at "now" set to the live crowd chance — so manual/old points smoothly
   // ease toward the people/coins/ELO-weighted chance instead of stepping.
   const anchors = sortedSnapshots.map((snapshot) => ({ ms: asDate(snapshot.createdAt).getTime(), summary: snapshot.summary }));
-  if (anchors.length > 0 && lastMs > anchors[anchors.length - 1].ms) {
-    anchors.push({ ms: lastMs, summary: bet.chanceSummary });
+  if (anchors.length === 0) {
+    anchors.push({ ms: createdAtMs, summary: bet.initialChanceSummary ?? bet.chanceSummary ?? neutral });
+  }
+  if (lastMs > anchors[anchors.length - 1].ms) {
+    anchors.push({ ms: lastMs, summary: liveEndSummary ?? bet.chanceSummary });
   }
   function interpAt(t: number) {
     if (anchors.length === 0) return neutral;
@@ -80,7 +129,9 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
   const data = [];
   for (const t of sampleTimes) {
     const resolved = bet.status === 'resolved' && bet.resolvedAt && asDate(bet.resolvedAt).getTime() <= t;
-    const displayed = displayChanceSummary({
+    const displayed = liveEndSummary && t === lastMs
+      ? liveEndSummary
+      : displayChanceSummary({
       options: bet.options,
       summary: interpAt(t),
       initialSummary: bet.initialChanceSummary,
@@ -91,7 +142,7 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
       nowMs: t,
       status: resolved ? 'resolved' : 'open',
     });
-    const point: Record<string, number> = { t };
+    const point: Record<string, number | boolean> = { t, isLiveEndpoint: Boolean(liveEndSummary && t === lastMs) };
     bet.options.forEach((option) => {
       const summary = displayed.find((item) => item.optionId === option.id);
       point[option.id] = Math.round((summary?.chance ?? 0) * 100);
@@ -99,7 +150,7 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
     data.push(point);
   }
 
-  if (data.length < 2 || sortedSnapshots.length === 0) {
+  if (data.length < 2 || (sortedSnapshots.length === 0 && !isLive)) {
     return (
       <div className="grid h-48 place-items-center rounded-md border border-line bg-field text-sm text-ink/60">
         Chance history appears after more predictions arrive.
@@ -109,7 +160,7 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
 
   // Zoom the Y axis around the actual min/max so tiny movements are visible
   // instead of being lost in empty space above and below.
-  const allValues = data.flatMap((point) => bet.options.map((option) => point[option.id]));
+  const allValues = data.flatMap((point) => bet.options.map((option) => Number(point[option.id])));
   const dataMin = Math.min(...allValues);
   const dataMax = Math.max(...allValues);
   const pad = Math.max(2, Math.round((dataMax - dataMin) * 0.2));
@@ -154,7 +205,7 @@ export function ChanceChart({ bet, snapshots }: { bet: Bet; snapshots: ChanceSna
               name={option.label}
               stroke={colors[index % colors.length]}
               strokeWidth={2}
-              dot={false}
+              dot={(dotProps) => <LiveEndpointDot {...dotProps} />}
             />
           ))}
         </LineChart>

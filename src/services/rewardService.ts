@@ -233,7 +233,7 @@ export function weeklyChallengesForUser(user: UserProfile, weekKey = currentWeek
     const boostedReward = Math.ceil(((challenge.reward + challenge.chestReward) * 1.35) / 5) * 5;
     return {
       ...challenge,
-      reward: boostedReward * REWARD_MULTIPLIER,
+      reward: boostedReward * REWARD_MULTIPLIER * 20,
       chestReward: 0,
     };
   });
@@ -321,8 +321,8 @@ function buildArcadeChestFamily(family: ArcadeChestFamily): ChestSpec[] {
 
 const arcadeChestFamilies: ArcadeChestFamily[] = [
   // Sky Landing: distance, stars, boat color, precision, and landing style.
-  { prefix: 'plane-total-km', name: 'Frequent Flyer', metric: (s) => s.arcade?.plane?.totalDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km total`, describe: (t) => `Accumulate ${t.toLocaleString()} kilometers in Sky Landing.`, start: 25, growth: 1.3, roundTo: 5, rewardBase: 60 },
-  { prefix: 'plane-best-km', name: 'Long Haul', metric: (s) => s.arcade?.plane?.bestDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km in one run`, describe: (t) => `Reach ${t.toLocaleString()} kilometers in a single flight.`, start: 3, growth: 1.18, roundTo: 1, rewardBase: 125 },
+  { prefix: 'plane-total-km', name: 'Frequent Flyer', metric: (s) => s.arcade?.plane?.totalDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km total`, describe: (t) => `Accumulate ${t.toLocaleString()} kilometers in Sky Landing.`, start: 2.5, growth: 1.3, roundTo: 0.5, rewardBase: 60 },
+  { prefix: 'plane-best-km', name: 'Long Haul', metric: (s) => s.arcade?.plane?.bestDistanceKm ?? 0, goal: (t) => `Fly ${t.toLocaleString()} km in one run`, describe: (t) => `Reach ${t.toLocaleString()} kilometers in a single flight.`, start: 0.3, growth: 1.18, roundTo: 0.1, rewardBase: 125 },
   { prefix: 'plane-stars', name: 'Star Cargo', metric: (s) => s.arcade?.plane?.stars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} stars`, describe: (t) => `Collect ${t.toLocaleString()} regular and special star points.`, start: 25, growth: 1.3, roundTo: 5, rewardBase: 60 },
   { prefix: 'plane-special-stars', name: 'Rainbow Pilot', metric: (s) => s.arcade?.plane?.specialStars ?? 0, goal: (t) => `Collect ${t.toLocaleString()} special stars`, describe: (t) => `Catch ${t.toLocaleString()} rare rainbow stars.`, start: 2, growth: 1.3, rewardBase: 175 },
   { prefix: 'plane-landings', name: 'Deck Regular', metric: (s) => s.arcade?.plane?.landings ?? 0, goal: (t) => `Land ${t.toLocaleString()} flights`, describe: (t) => `Complete ${t.toLocaleString()} successful boat landings.`, start: 10, growth: 1.28, roundTo: 2, rewardBase: 75 },
@@ -337,25 +337,36 @@ const arcadeChestFamilies: ArcadeChestFamily[] = [
   { prefix: 'mines-5x5-2', name: 'Double Hazard', metric: (s) => s.arcade?.mines?.clears5x5TwoBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 2-bomb boards`, describe: (t) => `Fully clear a 5x5 board with two bombs ${t.toLocaleString()} times.`, start: 2, growth: 1.33, rewardBase: 225 },
   { prefix: 'mines-5x5-3', name: 'Full Minefield', metric: (s) => s.arcade?.mines?.clears5x5ThreeBombs ?? 0, goal: (t) => `Clear ${t.toLocaleString()} 5x5 / 3-bomb boards`, describe: (t) => `Fully clear a 5x5 board with three bombs ${t.toLocaleString()} times.`, start: 2, growth: 1.34, rewardBase: 275 },
 
-  // Number Guessing only rewards genuinely fast solves. Routine play and safe
-  // finishes already have their game payout and should not pay a second bonus.
-  { prefix: 'guess-under-1', name: 'First Try', metric: (s) => s.arcade?.guessing?.winsUnder1 ?? 0, goal: (t) => `Win first-try ${t.toLocaleString()} times`, describe: (t) => `Guess the exact number on the first try ${t.toLocaleString()} times.`, start: 1, growth: 1.34, rewardBase: 500 },
-  { prefix: 'guess-under-2', name: 'Two Guesses', metric: (s) => s.arcade?.guessing?.winsUnder2 ?? 0, goal: (t) => `Win within 2 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within two guesses ${t.toLocaleString()} times.`, start: 2, growth: 1.34, rewardBase: 350 },
-  { prefix: 'guess-under-3', name: 'Three Guesses', metric: (s) => s.arcade?.guessing?.winsUnder3 ?? 0, goal: (t) => `Win within 3 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within three guesses ${t.toLocaleString()} times.`, start: 3, growth: 1.34, rewardBase: 250 },
-  { prefix: 'guess-under-4', name: 'Four Guesses', metric: (s) => s.arcade?.guessing?.winsUnder4 ?? 0, goal: (t) => `Win within 4 guesses ${t.toLocaleString()} times`, describe: (t) => `Solve Number Guessing within four guesses ${t.toLocaleString()} times.`, start: 5, growth: 1.34, rewardBase: 175 },
-
-  // Plinko chests are reserved for uncommon buckets. Drop count, ordinary wins,
-  // profitable hits, and gross turnover are deliberately excluded.
-  { prefix: 'plinko-high', name: 'High Pocket', metric: (s) => s.arcade?.plinko?.highHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 3x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 3x ${t.toLocaleString()} times.`, start: 3, growth: 1.34, rewardBase: 150 },
-  { prefix: 'plinko-jackpot', name: 'Jackpot Rail', metric: (s) => s.arcade?.plinko?.jackpotHits ?? 0, goal: (t) => `Hit ${t.toLocaleString()} 7x+ buckets`, describe: (t) => `Land on a Plinko multiplier of at least 7x ${t.toLocaleString()} times.`, start: 2, growth: 1.35, rewardBase: 250 },
-  { prefix: 'plinko-edge', name: 'Outer Rail', metric: (s) => s.arcade?.plinko?.edgeHits ?? 0, goal: (t) => `Reach an outer bucket ${t.toLocaleString()} times`, describe: (t) => `Reach either outermost Plinko bucket ${t.toLocaleString()} times.`, start: 2, growth: 1.35, rewardBase: 300 },
-  { prefix: 'plinko-best', name: 'Multiplier Rail', metric: (s) => s.arcade?.plinko?.bestMultiplier ?? 0, goal: (t) => `Hit ${t.toFixed(1)}x in Plinko`, describe: (t) => `Reach a ${t.toFixed(1)}x effective Plinko multiplier.`, start: 3.5, growth: 1.075, roundTo: 0.5, rewardBase: 150 },
 ];
 
 const arcadeChestCatalog = arcadeChestFamilies.flatMap(buildArcadeChestFamily);
 
 // Core prediction chests plus hundreds of generated minigame challenges.
 export const chestCatalog: ChestSpec[] = [
+  ...buildChestFamily({
+    prefix: 'game-plane-marathon',
+    name: 'Marathon Flight',
+    metric: (stats) => stats.arcade?.plane?.totalDistanceKm ?? 0,
+    goal: (target) => `Fly ${target.toLocaleString()} km total`,
+    describe: (target) => `Accumulate ${target.toLocaleString()} kilometers across Sky Landing flights.`,
+    targets: [100, 250, 500, 1_000, 2_500, 5_000],
+    eloBase: 350,
+    eloStep: 225,
+    rewardBase: 750,
+    rewardStep: 650,
+  }),
+  ...buildChestFamily({
+    prefix: 'game-plane-expedition',
+    name: 'Sky Expedition',
+    metric: (stats) => stats.arcade?.plane?.bestDistanceKm ?? 0,
+    goal: (target) => `Fly ${target.toLocaleString()} km in one run`,
+    describe: (target) => `Reach ${target.toLocaleString()} kilometers before landing in a single Sky Landing flight.`,
+    targets: [5, 10, 20, 35, 50],
+    eloBase: 450,
+    eloStep: 275,
+    rewardBase: 1_200,
+    rewardStep: 900,
+  }),
   ...buildChestFamily({
     prefix: 'upset', name: 'Upset Vault',
     metric: (s) => s.bestUpsetWin,
@@ -682,8 +693,7 @@ export interface MinigameWinResult {
   ratingDelta: number;
 }
 
-export type MinigameAchievement =
-  | {
+export type MinigameAchievement = {
       game: 'plane';
       distanceKm: number;
       stars: number;
@@ -701,26 +711,10 @@ export type MinigameAchievement =
       multiplier: number;
       won: boolean;
       cleared: boolean;
-    }
-  | {
-      game: 'guessing';
-      attempts: number;
-      won: boolean;
-    }
-  | {
-      game: 'plinko';
-      drops: number;
-      wins: number;
-      profitableHits: number;
-      highHits: number;
-      jackpotHits: number;
-      edgeHits: number;
-      totalPayout: number;
-      bestMultiplier: number;
     };
 
 export type MinigameOutcomeContext = {
-  game: 'mines' | 'plane' | 'guessing' | 'plinko';
+  game: 'mines' | 'plane';
   stake: number;
   payout?: number;
   balanceBefore?: number;
@@ -826,56 +820,7 @@ function applyMinigameAchievement(stats: UserStats, achievement?: MinigameAchiev
     };
   }
 
-  if (achievement.game === 'guessing') {
-    const current = {
-      rounds: 0, wins: 0, totalGuesses: 0,
-      winsUnder1: 0, winsUnder2: 0, winsUnder3: 0, winsUnder4: 0,
-      winsUnder5: 0, winsUnder6: 0, winsUnder7: 0,
-      ...arcade.guessing,
-    };
-    const won = achievement.won;
-    return {
-      ...stats,
-      arcade: {
-        ...arcade,
-        guessing: {
-          ...current,
-          rounds: current.rounds + 1,
-          wins: current.wins + (won ? 1 : 0),
-          totalGuesses: current.totalGuesses + achievement.attempts,
-          winsUnder1: current.winsUnder1 + (won && achievement.attempts <= 1 ? 1 : 0),
-          winsUnder2: current.winsUnder2 + (won && achievement.attempts <= 2 ? 1 : 0),
-          winsUnder3: current.winsUnder3 + (won && achievement.attempts <= 3 ? 1 : 0),
-          winsUnder4: current.winsUnder4 + (won && achievement.attempts <= 4 ? 1 : 0),
-          winsUnder5: current.winsUnder5 + (won && achievement.attempts <= 5 ? 1 : 0),
-          winsUnder6: current.winsUnder6 + (won && achievement.attempts <= 6 ? 1 : 0),
-          winsUnder7: current.winsUnder7 + (won && achievement.attempts <= 7 ? 1 : 0),
-        },
-      },
-    };
-  }
-
-  const current = {
-    drops: 0, wins: 0, profitableHits: 0, highHits: 0,
-    jackpotHits: 0, edgeHits: 0, totalPayout: 0, bestMultiplier: 0,
-    ...arcade.plinko,
-  };
-  return {
-    ...stats,
-    arcade: {
-      ...arcade,
-      plinko: {
-        drops: current.drops + achievement.drops,
-        wins: current.wins + achievement.wins,
-        profitableHits: current.profitableHits + achievement.profitableHits,
-        highHits: current.highHits + achievement.highHits,
-        jackpotHits: current.jackpotHits + achievement.jackpotHits,
-        edgeHits: current.edgeHits + achievement.edgeHits,
-        totalPayout: current.totalPayout + achievement.totalPayout,
-        bestMultiplier: Math.max(current.bestMultiplier, achievement.bestMultiplier),
-      },
-    },
-  };
+  return stats;
 }
 
 async function notifyLeaderboardMoveForUser(
@@ -1065,127 +1010,6 @@ export async function awardMinigameWin(
     await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
   }
   return { payout, ratingDelta };
-}
-
-export async function settleCustomMinigameResult(
-  user: UserProfile,
-  params: {
-    payout: number;
-    ratingDelta?: number;
-    historyDelta?: number;
-    reason?: string;
-    achievement?: MinigameAchievement;
-  },
-): Promise<MinigameWinResult> {
-  const payout = Math.max(0, Math.round(params.payout));
-  const ratingDelta = Math.round(params.ratingDelta ?? 0);
-  const historyDelta = Math.round(params.historyDelta ?? payout);
-  if (payout === 0 && ratingDelta === 0 && historyDelta === 0) {
-    return { payout: 0, ratingDelta: 0 };
-  }
-
-  const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
-  const userRef = doc(db, 'users', user.uid);
-  let committedRating = Math.max(0, user.rating + ratingDelta);
-  let committedBalance = user.coinBalance + payout;
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(userRef);
-    const current = snap.data() as UserProfile | undefined;
-    if (!current) throw new Error('Profile not found.');
-    const nextRating = Math.max(0, current.rating + ratingDelta);
-    const nextBalance = current.coinBalance + payout;
-    committedRating = nextRating;
-    committedBalance = nextBalance;
-    setBalanceInTransaction(
-      transaction,
-      userRef,
-      current,
-      nextBalance,
-      params.reason ?? 'Minigame result',
-      {
-        ...(ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
-        stats: {
-          ...applyMinigameAchievement(current.stats, params.achievement),
-          eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
-        },
-      },
-      false,
-    );
-    if (historyDelta !== 0) {
-      transaction.set(doc(collection(userRef, 'balanceHistory')), {
-        userId: user.uid,
-        balance: Math.max(0, Math.round(nextBalance)),
-        delta: historyDelta,
-        reason: params.reason ?? 'Minigame result',
-        createdAt: serverTimestamp(),
-      });
-    }
-  });
-
-  if (ratingDelta !== 0) {
-    invalidateQueryCache('users:leaderboard');
-    await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
-  }
-  return { payout, ratingDelta };
-}
-
-// Batched settlement for fast arcade games (Plinko): the client accumulates the
-// net coin + ELO swing across many drops and flushes it in ONE transaction +
-// ONE balance-history entry, instead of reading/writing per chip.
-export async function settleMinigameSession(
-  user: UserProfile,
-  params: { coinDelta: number; ratingDelta?: number; reason?: string; bestMult?: number; achievement?: MinigameAchievement },
-): Promise<MinigameWinResult> {
-  const coinDelta = Math.round(params.coinDelta);
-  const ratingDelta = Math.round(params.ratingDelta ?? 0);
-  const bestMult = Math.max(0, params.bestMult ?? 0);
-  const hasAchievementProgress = params.achievement?.game === 'plinko' && params.achievement.drops > 0;
-  if (coinDelta === 0 && ratingDelta === 0 && bestMult === 0 && !hasAchievementProgress) return { payout: 0, ratingDelta: 0 };
-
-  const beforeLeaderboard = ratingDelta !== 0 ? await getFreshLeaderboard() : [];
-  const userRef = doc(db, 'users', user.uid);
-  let committedRating = Math.max(0, user.rating + ratingDelta);
-  let committedBalance = Math.max(0, user.coinBalance + coinDelta);
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(userRef);
-    const current = snap.data() as UserProfile | undefined;
-    if (!current) throw new Error('Profile not found.');
-    const nextRating = Math.max(0, current.rating + ratingDelta);
-    const nextBalance = Math.max(0, current.coinBalance + coinDelta);
-    committedRating = nextRating;
-    committedBalance = nextBalance;
-    setBalanceInTransaction(
-      transaction,
-      userRef,
-      current,
-      nextBalance,
-      params.reason ?? 'Plinko session',
-      {
-        ...(ratingDelta !== 0 ? { rating: nextRating, rank: rankForRating(nextRating) } : {}),
-        stats: {
-          ...applyMinigameAchievement(current.stats, params.achievement),
-          eloWon: (current.stats.eloWon ?? 0) + Math.max(0, ratingDelta),
-          bestMinigameMult: Math.max(current.stats.bestMinigameMult ?? 0, bestMult),
-        },
-      },
-      false,
-    );
-    if (coinDelta !== 0) {
-      transaction.set(doc(collection(userRef, 'balanceHistory')), {
-        userId: user.uid,
-        balance: Math.max(0, Math.round(nextBalance)),
-        delta: coinDelta,
-        reason: params.reason ?? 'Plinko session',
-        createdAt: serverTimestamp(),
-      });
-    }
-  });
-
-  if (ratingDelta !== 0) {
-    invalidateQueryCache('users:leaderboard');
-    await notifyLeaderboardMoveForUser(user, committedRating, beforeLeaderboard, committedBalance);
-  }
-  return { payout: Math.max(0, coinDelta), ratingDelta };
 }
 
 export async function chargePlaneStake(user: UserProfile, stake: number) {

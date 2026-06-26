@@ -5,14 +5,12 @@ export function RewardChest({
 }: {
   open?: boolean;
   className?: string;
-  tone?: 'classic' | 'plane' | 'mines' | 'guessing' | 'plinko';
+  tone?: 'classic' | 'plane' | 'mines';
 }) {
   const shell = {
     classic: 'bg-[radial-gradient(circle_at_45%_20%,#ffe48f,#d49a25_50%,#8a5b32)]',
     plane: 'bg-[radial-gradient(circle_at_45%_20%,#d8f2ff,#3b75af_52%,#244c78)]',
     mines: 'bg-[radial-gradient(circle_at_45%_20%,#ffd9d0,#d95f46_52%,#843529)]',
-    guessing: 'bg-[radial-gradient(circle_at_45%_20%,#eadfff,#7b5aa6_52%,#493366)]',
-    plinko: 'bg-[radial-gradient(circle_at_45%_20%,#d9f7e9,#2f7d63_52%,#1d5140)]',
   }[tone];
   return (
     <div

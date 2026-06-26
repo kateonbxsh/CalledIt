@@ -88,28 +88,6 @@ export interface ArcadeStats {
     clears5x5TwoBombs: number;
     clears5x5ThreeBombs: number;
   };
-  guessing?: {
-    rounds: number;
-    wins: number;
-    totalGuesses: number;
-    winsUnder1: number;
-    winsUnder2: number;
-    winsUnder3: number;
-    winsUnder4: number;
-    winsUnder5: number;
-    winsUnder6: number;
-    winsUnder7: number;
-  };
-  plinko?: {
-    drops: number;
-    wins: number;
-    profitableHits: number;
-    highHits: number;
-    jackpotHits: number;
-    edgeHits: number;
-    totalPayout: number;
-    bestMultiplier: number;
-  };
 }
 
 export interface BalanceSnapshot {

@@ -10,8 +10,8 @@ const V0 = 480;
 const GRAV = 120, VDRAG = 1.8, HDRAG = 0.015, DECEL = 360, MAXVY = 260;
 const ANGLE_MIN = 20, ANGLE_MAX = 80;
 const CAM_OFF = 0.22;
-// Distance starts close to linear, then tapers gently on very long flights.
-const KM_PER_WORLD_UNIT = 0.001, MULT_PER_KM = 0.74, DISTANCE_DECEL_KM = 12, STAR_MULT = 0.14;
+// Distance starts close to linear, then tapers decisively on longer flights.
+const KM_PER_WORLD_UNIT = 0.001, MULT_PER_KM = 0.74, DISTANCE_DECEL_KM = 6, STAR_MULT = 0.14;
 const STAR_BOOST = 230, MISSILE_PUSH = 230, MISSILE_MULT_PENALTY = 0.015, FIRST_BOAT = 340;
 // Rare rainbow star: bigger lift, a speed burst, and a short missile-immunity window.
 const RAINBOW_CHANCE = 0.08, RAINBOW_LIFT = 430, RAINBOW_SPEED = 1.5, BUFF_DURATION = 3.6;

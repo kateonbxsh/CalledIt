@@ -8,11 +8,9 @@ import {
   Dice5,
   Flame,
   Gift,
-  Hash,
   MessageCircle,
   Plane,
   PlusCircle,
-  CircleDot,
   ShieldCheck,
   Sparkles,
   Target,
@@ -22,10 +20,8 @@ import {
 } from 'lucide-react';
 import { CoinAmount } from '../components/CoinAmount';
 import { MinesGame } from '../components/MinesGame';
-import { NumberGuessGame } from '../components/NumberGuessGame';
 import { PageHeader } from '../components/PageHeader';
 import { PlaneGame } from '../components/PlaneGame';
-import { PlinkoGame } from '../components/PlinkoGame';
 import { RewardChest } from '../components/RewardChest';
 import { useAuth } from '../contexts/AuthContext';
 import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
@@ -34,8 +30,6 @@ import {
   chargeMinigameStake,
   chargePlaneStake,
   recordMinigameLoss,
-  settleCustomMinigameResult,
-  settleMinigameSession,
   claimAllChests,
   claimChest,
   claimDailyForecast,
@@ -147,23 +141,19 @@ type ChestDisplayItem = ChestDefinition & {
   category: ChestCategory;
 };
 
-type ChestCategory = 'general' | 'plane' | 'mines' | 'guessing' | 'plinko';
+type ChestCategory = 'general' | 'plane' | 'mines';
 type ChestStage = 'ready' | 'progress' | 'locked';
 
-const CHEST_CATEGORY_ORDER: ChestCategory[] = ['general', 'plane', 'mines', 'guessing', 'plinko'];
+const CHEST_CATEGORY_ORDER: ChestCategory[] = ['general', 'plane', 'mines'];
 const CHEST_CATEGORY_META = {
   general: { label: 'General', Icon: Gift, tone: 'classic', accent: 'text-ink/60', badge: 'bg-field', card: 'border-line bg-field/45', progress: 'bg-ink/55', button: 'border-ink bg-ink' },
   plane: { label: 'Sky Landing', Icon: Plane, tone: 'plane', accent: 'text-sky', badge: 'bg-sky/10', card: 'border-sky/20 bg-sky/[0.06]', progress: 'bg-sky', button: 'border-sky bg-sky' },
   mines: { label: 'Mines', Icon: Bomb, tone: 'mines', accent: 'text-coral', badge: 'bg-coral/10', card: 'border-coral/20 bg-coral/[0.06]', progress: 'bg-coral', button: 'border-coral bg-coral' },
-  guessing: { label: 'Number Guessing', Icon: Hash, tone: 'guessing', accent: 'text-plum', badge: 'bg-plum/10', card: 'border-plum/20 bg-plum/[0.06]', progress: 'bg-plum', button: 'border-plum bg-plum' },
-  plinko: { label: 'Plinko', Icon: CircleDot, tone: 'plinko', accent: 'text-mint', badge: 'bg-mint/10', card: 'border-mint/20 bg-mint/[0.06]', progress: 'bg-mint', button: 'border-mint bg-mint' },
 } as const;
 
 function chestCategory(chestId: string): ChestCategory {
   if (chestId.startsWith('game-plane-')) return 'plane';
   if (chestId.startsWith('game-mines-')) return 'mines';
-  if (chestId.startsWith('game-guess-')) return 'guessing';
-  if (chestId.startsWith('game-plinko-')) return 'plinko';
   return 'general';
 }
 
@@ -209,8 +199,6 @@ export function MinigamesPage() {
   const [testPushSending, setTestPushSending] = useState(false);
   const [showPlane, setShowPlane] = useState(false);
   const [showMines, setShowMines] = useState(false);
-  const [showGuessing, setShowGuessing] = useState(false);
-  const [showPlinko, setShowPlinko] = useState(false);
   const forecastSheet = useSwipeToDismiss(() => setForecastOpen(false), forecastOpen);
   const chestsSheet = useSwipeToDismiss(() => setChestsOpen(false), chestsOpen);
   const wheelSheet = useSwipeToDismiss(() => setWheelOpen(false), wheelOpen);
@@ -479,35 +467,6 @@ export function MinigamesPage() {
             </div>
           </button>
 
-          <button
-            onClick={() => setShowGuessing(true)}
-            disabled={!profile}
-            className="group flex min-h-36 items-center gap-4 rounded-2xl border border-plum/20 bg-gradient-to-br from-plum/15 via-white to-sky/10 p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-plum/45 hover:shadow-lift active:scale-[.99] disabled:opacity-60"
-          >
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-plum text-white shadow-soft transition group-hover:rotate-[-6deg] group-hover:scale-105">
-              <Hash size={25} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-lg font-black">Number Guessing</h3>
-              <p className="mt-1 text-sm leading-5 text-ink/60">Chase the hidden number with higher or lower hints. Beat seven guesses to cash in, or bleed stake if you take too long.</p>
-              <span className="mt-3 inline-flex rounded-lg bg-plum px-3 py-1.5 text-xs font-black text-white">Play</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setShowPlinko(true)}
-            disabled={!profile}
-            className="group flex min-h-36 items-center gap-4 rounded-2xl border border-plum/20 bg-gradient-to-br from-plum/15 via-white to-mint/10 p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-plum/45 hover:shadow-lift active:scale-[.99] disabled:opacity-60"
-          >
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-plum to-sky text-white shadow-soft transition group-hover:rotate-6 group-hover:scale-105">
-              <CircleDot size={25} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-lg font-black">Plinko Drop</h3>
-              <p className="mt-1 text-sm leading-5 text-ink/60">Drop chips through the board and chase rare edge buckets while the middle trims the stake.</p>
-              <span className="mt-3 inline-flex rounded-lg bg-gradient-to-br from-plum to-sky px-3 py-1.5 text-xs font-black text-white">Play</span>
-            </div>
-          </button>
         </div>
       </section>
 
@@ -1047,25 +1006,6 @@ export function MinigamesPage() {
         />
       ) : null}
 
-      {showGuessing && profile ? (
-        <NumberGuessGame
-          coins={profile.coinBalance}
-          stakes={[1, 10, 50, 100, 250, 500]}
-          onCharge={async (s) => { await chargeMinigameStake(profile, s); return true; }}
-          onWin={async (p, context) => awardMinigameWin(profile, p, { game: 'guessing', ...context, balanceBefore: profile.coinBalance })}
-          onSettleCustom={async (params) => settleCustomMinigameResult(profile, params)}
-          onClose={() => setShowGuessing(false)}
-        />
-      ) : null}
-
-      {showPlinko && profile ? (
-        <PlinkoGame
-          coins={profile.coinBalance}
-          stakes={[1, 10, 50, 100, 250, 500]}
-          onSettle={async (coinDelta, ratingDelta, bestMult, achievement) => { await settleMinigameSession(profile, { coinDelta, ratingDelta, bestMult, achievement, reason: 'Plinko' }); }}
-          onClose={() => setShowPlinko(false)}
-        />
-      ) : null}
     </>
   );
 }
